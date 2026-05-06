@@ -1738,6 +1738,44 @@ jobs:
         with:
           name: frida-gadget-android-${{ matrix.arch }}
           path: ${{ env.FRIDA_PREFIX }}/lib/frida-1.0/64/frida-gadget.so
+      - name: Package Android native artifacts
+        run: |
+          set -euxo pipefail
+          OUT="frida-android-${{ matrix.arch }}"
+          mkdir -p "$OUT"
+          cp -a "$FRIDA_PREFIX/bin/frida-server" "$OUT/"
+          cp -a "$FRIDA_PREFIX/bin/frida-portal" "$OUT/"
+          cp -a "$FRIDA_PREFIX/bin/frida-inject" "$OUT/"
+          if [[ "${{ matrix.arch }}" == *64* ]]; then
+            cp -a "$FRIDA_PREFIX/lib/frida-1.0/64/frida-gadget.so" "$OUT/"
+          else
+            cp -a "$FRIDA_PREFIX/lib/frida-1.0/32/frida-gadget.so" "$OUT/"
+          fi
+          tar -cJf "${OUT}.tar.xz" "$OUT"
+      - name: Import signing key
+        if: ${{ secrets.ANDROID_ARTIFACT_SIGNING_KEY != '' && secrets.ANDROID_ARTIFACT_SIGNING_KEY_ID != '' }}
+        run: |
+          set -euxo pipefail
+          echo "${{ secrets.ANDROID_ARTIFACT_SIGNING_KEY }}" | gpg --batch --import
+      - name: Sign Android native package
+        if: ${{ secrets.ANDROID_ARTIFACT_SIGNING_KEY != '' && secrets.ANDROID_ARTIFACT_SIGNING_KEY_ID != '' }}
+        run: |
+          set -euxo pipefail
+          PKG="frida-android-${{ matrix.arch }}.tar.xz"
+          gpg --batch --yes --armor --detach-sign \
+            --local-user "${{ secrets.ANDROID_ARTIFACT_SIGNING_KEY_ID }}" \
+            "$PKG"
+      - name: Upload Android native package
+        uses: actions/upload-artifact@v4
+        with:
+          name: frida-android-package-${{ matrix.arch }}
+          path: frida-android-${{ matrix.arch }}.tar.xz
+      - name: Upload Android native package signature
+        if: ${{ secrets.ANDROID_ARTIFACT_SIGNING_KEY != '' && secrets.ANDROID_ARTIFACT_SIGNING_KEY_ID != '' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: frida-android-package-signature-${{ matrix.arch }}
+          path: frida-android-${{ matrix.arch }}.tar.xz.asc
 
   frida-qnx:
     runs-on: ubuntu-latest
