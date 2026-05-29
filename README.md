@@ -26,6 +26,11 @@ Run:
 You may also invoke `./configure` first if you want to specify a `--prefix`, or
 any other options.
 
+For constrained target experiments, an opt-in freestanding diagnostic profile is
+available through `-Dfreestanding_profile=true`; see
+[`docs/freestanding-profile.md`](docs/freestanding-profile.md) for the supported
+contract and validation loop.
+
 ### CLI tools
 
 For running the Frida CLI tools, e.g. `frida`, `frida-ls-devices`, `frida-ps`,

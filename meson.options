@@ -1,3 +1,15 @@
+option('freestanding_profile',
+  type: 'boolean',
+  value: false,
+  description: 'Enable the experimental freestanding diagnostic profile: compile with freestanding intent, disable hosted wrappers, and turn GumJS off to avoid GC-backed runtime layers.',
+)
+
+option('debugger_class_a',
+  type: 'boolean',
+  value: false,
+  description: 'Expose FRIDA_DEBUGGER_CLASS_A=1 so downstream code can enable strict debugger diagnostics without changing the default desktop build.',
+)
+
 option('frida_tools',
   type: 'feature',
   value: 'auto',
