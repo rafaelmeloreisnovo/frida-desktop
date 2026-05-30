@@ -31,6 +31,19 @@ available through `-Dfreestanding_profile=true`; see
 [`docs/freestanding-profile.md`](docs/freestanding-profile.md) for the supported
 contract and validation loop.
 
+Standalone ChipQuantum basic-command diagnostics are also available through
+[`tools/chipquantum-basic-commands.c`](tools/chipquantum-basic-commands.c),
+[`tools/chipquantum-benchmark.c`](tools/chipquantum-benchmark.c), and
+[`tools/chipquantum-repo-sensors.py`](tools/chipquantum-repo-sensors.py), with
+their contract documented in
+[`docs/chipquantum-basic-commands.md`](docs/chipquantum-basic-commands.md).
+
+Debugger Class A autotuning diagnostics are available through
+[`tools/frida-debugger-class-a-autotune.c`](tools/frida-debugger-class-a-autotune.c)
+and [`tools/frida-debugger-class-a-autotune.h`](tools/frida-debugger-class-a-autotune.h),
+with FAILSAFE/FAILOVER/ROLLBACK semantics documented in
+[`docs/debugger-class-a-autotune.md`](docs/debugger-class-a-autotune.md).
+
 ### CLI tools
 
 For running the Frida CLI tools, e.g. `frida`, `frida-ls-devices`, `frida-ps`,
