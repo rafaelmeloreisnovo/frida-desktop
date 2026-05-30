@@ -23,6 +23,12 @@ The separate `debugger_class_a` option defines `FRIDA_DEBUGGER_CLASS_A=1`.  It i
 kept independent so strict debugger diagnostics can be enabled without changing
 the default desktop build or forcing the freestanding profile.
 
+A matching standalone route-planning module is available in
+`tools/frida-debugger-class-a-autotune.c`.  It keeps the same opt-in stance: the
+source can be compiled by target diagnostics that need branchless, no-heap
+FAILSAFE/FAILOVER/ROLLBACK decisions, but it is not wired into the default
+desktop build.
+
 ## Scope and non-goals
 
 This profile does not claim that every transitive subproject is already
