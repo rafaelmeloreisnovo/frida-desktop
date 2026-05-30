@@ -15,6 +15,8 @@ REQUIRED_SOURCE = [
     "frida_dca_plan",
     "frida_dca_failover",
     "frida_dca_rollback",
+    "frida_dca_mitigate",
+    "frida_dca_known_good_route",
     "FRIDA_DCA_AUTOTUNE_SELFTEST",
     "frida_dca_route_score_generic",
     "frida_dca_route_score_arm32_neon",
@@ -29,6 +31,11 @@ REQUIRED_HEADER = [
     "FRIDA_DCA_ROUTE_ROLLBACK",
     "FRIDA_DCA_FAULT_UNSTABLE",
     "FRIDA_DCA_DECISION_FAILSAFE",
+    "FRIDA_DCA_FAULT_ENTROPY",
+    "FRIDA_DCA_FAULT_LOW_CONFIDENCE",
+    "FRIDA_DCA_FAULT_DISALLOWED_ROUTE",
+    "struct frida_dca_risk_policy",
+    "struct frida_dca_mitigation",
     "struct frida_dca_signal",
     "struct frida_dca_decision",
 ]
@@ -55,6 +62,8 @@ REQUIRED_DOC = [
     "no heap",
     "branchless",
     "morph-on-runtime",
+    "risk policy",
+    "known-good route",
 ]
 
 

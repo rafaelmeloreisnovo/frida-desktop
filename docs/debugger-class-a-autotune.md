@@ -19,7 +19,9 @@ The core planner is designed for constrained runtimes:
 - FAILSAFE, FAILOVER, and ROLLBACK outputs represented as decision flags rather
   than hidden side effects;
 - deterministic rollback token so a caller can correlate the previous route and
-  the selected route without allocating state.
+  the selected route without allocating state;
+- a risk policy layer that clamps unstable or disallowed decisions to a
+  known-good route with explicit FAILSAFE, FAILOVER, and ROLLBACK flags.
 
 ## Signals
 
@@ -62,6 +64,21 @@ submodules:
 ```sh
 python3 tools/validate-debugger-class-a-autotune.py
 ```
+
+## Risk mitigation policy
+
+`struct frida_dca_risk_policy` is the explicit enterprise guardrail around the
+planner.  It defines minimum stability, minimum accuracy, maximum friction,
+maximum entropy, maximum overhead, minimum confidence, allowed route bits, and a
+known-good route.  `frida_dca_mitigate()` evaluates that policy without heap
+allocation and returns both the selected decision and the risk bits that forced
+mitigation.
+
+The mitigation path is intentionally conservative: when a policy risk is active,
+the decision is clamped to the known-good route, FAILSAFE/FAILOVER/ROLLBACK are
+set together, and the rollback token is mixed with the previous decision token.
+This gives callers a deterministic rollback handshake without hidden state,
+locks, syscalls, or garbage collection.
 
 ## Failure semantics
 

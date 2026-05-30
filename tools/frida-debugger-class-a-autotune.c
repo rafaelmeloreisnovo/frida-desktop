@@ -51,6 +51,25 @@ frida_dca_saturating_add_q16(uint32_t left, uint32_t right)
   return (uint16_t) frida_dca_select_u32(overflow_mask, FRIDA_DCA_Q16_ONE, sum);
 }
 
+
+static uint32_t
+frida_dca_route_bit(uint32_t route)
+{
+  uint32_t route_mask = frida_dca_mask_if_ge_u32(FRIDA_DCA_ROUTE_COUNT - 1u,
+      route);
+  uint32_t shift = route & 3u;
+  return (1u << shift) & route_mask;
+}
+
+static uint32_t
+frida_dca_known_good_route(const struct frida_dca_risk_policy *policy)
+{
+  uint32_t route_mask = frida_dca_mask_if_ge_u32(FRIDA_DCA_ROUTE_COUNT - 1u,
+      policy->known_good_route);
+  return frida_dca_select_u32(route_mask, policy->known_good_route,
+      FRIDA_DCA_ROUTE_GENERIC);
+}
+
 static uint16_t
 frida_dca_q16_average(uint16_t left, uint16_t right)
 {
@@ -253,6 +272,66 @@ frida_dca_rollback(struct frida_dca_decision previous, uint32_t known_good_route
   return previous;
 }
 
+
+struct frida_dca_mitigation
+frida_dca_mitigate(const struct frida_dca_signal *signal,
+    const struct frida_dca_risk_policy *policy,
+    struct frida_dca_decision previous)
+{
+  struct frida_dca_mitigation result;
+  struct frida_dca_decision planned = frida_dca_plan(signal);
+  uint32_t unstable_mask = frida_dca_mask_if_ge_u32(policy->min_stability_q16,
+      signal->stability_q16 + 1u);
+  uint32_t inaccurate_mask = frida_dca_mask_if_ge_u32(policy->min_accuracy_q16,
+      signal->accuracy_q16 + 1u);
+  uint32_t friction_mask = frida_dca_mask_if_ge_u32(signal->friction_q16,
+      policy->max_friction_q16 + 1u);
+  uint32_t entropy_mask = frida_dca_mask_if_ge_u32(signal->entropy_q16,
+      policy->max_entropy_q16 + 1u);
+  uint32_t overhead_mask = frida_dca_mask_if_ge_u32(signal->overhead_q16,
+      policy->max_overhead_q16 + 1u);
+  uint32_t confidence_mask = frida_dca_mask_if_ge_u32(
+      policy->min_confidence_q16, planned.confidence_q16 + 1u);
+  uint32_t allowed_bit = frida_dca_route_bit(planned.route) &
+      policy->allowed_routes_mask;
+  uint32_t disallowed_mask = ~frida_dca_mask_if_nonzero(allowed_bit);
+  uint32_t risk_mask = 0u;
+  uint32_t active_risk_mask;
+  uint32_t safe_route = frida_dca_known_good_route(policy);
+  uint16_t rollback_token = (uint16_t) (previous.rollback_token ^
+      planned.rollback_token ^ (0x5A00u | (safe_route & 0xffu)));
+
+  risk_mask |= unstable_mask & FRIDA_DCA_FAULT_UNSTABLE;
+  risk_mask |= inaccurate_mask & FRIDA_DCA_FAULT_INACCURATE;
+  risk_mask |= friction_mask & FRIDA_DCA_FAULT_FRICTION;
+  risk_mask |= entropy_mask & FRIDA_DCA_FAULT_ENTROPY;
+  risk_mask |= overhead_mask & FRIDA_DCA_FAULT_OVERHEAD;
+  risk_mask |= confidence_mask & FRIDA_DCA_FAULT_LOW_CONFIDENCE;
+  risk_mask |= disallowed_mask & FRIDA_DCA_FAULT_DISALLOWED_ROUTE;
+  risk_mask |= signal->fault_flags;
+  active_risk_mask = frida_dca_mask_if_nonzero(risk_mask);
+
+  result.decision = planned;
+  result.decision.route = frida_dca_select_u32(active_risk_mask, safe_route,
+      planned.route);
+  result.decision.flags = planned.flags |
+      (active_risk_mask & (FRIDA_DCA_DECISION_FAILSAFE |
+          FRIDA_DCA_DECISION_FAILOVER | FRIDA_DCA_DECISION_ROLLBACK));
+  result.decision.confidence_q16 = frida_dca_select_u16(active_risk_mask,
+      frida_dca_smooth_q16(planned.confidence_q16, FRIDA_DCA_Q16_ONE),
+      planned.confidence_q16);
+  result.decision.rollback_token = frida_dca_select_u16(active_risk_mask,
+      rollback_token, planned.rollback_token);
+  result.decision.mitigation_mask = (uint16_t) (planned.mitigation_mask |
+      (risk_mask & 0xffffu));
+  result.risk_mask = risk_mask;
+  result.applied_flags = result.decision.flags &
+      (FRIDA_DCA_DECISION_FAILSAFE | FRIDA_DCA_DECISION_FAILOVER |
+          FRIDA_DCA_DECISION_ROLLBACK);
+
+  return result;
+}
+
 #ifdef FRIDA_DCA_AUTOTUNE_SELFTEST
 #include <stdio.h>
 
@@ -275,6 +354,8 @@ main(void)
   struct frida_dca_decision stable_decision;
   struct frida_dca_decision failover_decision;
   struct frida_dca_decision rollback_decision;
+  struct frida_dca_risk_policy strict_policy;
+  struct frida_dca_mitigation mitigation;
   int failures = 0;
 
   stable_signal.stability_q16 = 62000u;
@@ -297,10 +378,21 @@ main(void)
   fault_signal.cycle_budget = 320u;
   fault_signal.last_route = FRIDA_DCA_ROUTE_ARM32_NEON;
 
+  strict_policy.min_stability_q16 = 32768u;
+  strict_policy.min_accuracy_q16 = 32768u;
+  strict_policy.max_friction_q16 = 49152u;
+  strict_policy.max_entropy_q16 = 49152u;
+  strict_policy.max_overhead_q16 = 49152u;
+  strict_policy.min_confidence_q16 = 50000u;
+  strict_policy.allowed_routes_mask = 1u << FRIDA_DCA_ROUTE_GENERIC;
+  strict_policy.known_good_route = FRIDA_DCA_ROUTE_GENERIC;
+
   stable_decision = frida_dca_plan(&stable_signal);
   failover_decision = frida_dca_failover(&fault_signal, stable_decision);
   rollback_decision = frida_dca_rollback(failover_decision,
       FRIDA_DCA_ROUTE_GENERIC);
+  mitigation = frida_dca_mitigate(&fault_signal, &strict_policy,
+      stable_decision);
 
   failures += frida_dca_expect_u32("stable route", stable_decision.route,
       FRIDA_DCA_ROUTE_ARM32_NEON);
@@ -316,6 +408,19 @@ main(void)
   failures += frida_dca_expect_u32("rollback flag",
       rollback_decision.flags & FRIDA_DCA_DECISION_ROLLBACK,
       FRIDA_DCA_DECISION_ROLLBACK);
+  failures += frida_dca_expect_u32("mitigation route",
+      mitigation.decision.route, FRIDA_DCA_ROUTE_GENERIC);
+  failures += frida_dca_expect_u32("mitigation applied",
+      mitigation.applied_flags, FRIDA_DCA_DECISION_FAILSAFE |
+      FRIDA_DCA_DECISION_FAILOVER | FRIDA_DCA_DECISION_ROLLBACK);
+  failures += frida_dca_expect_u32("mitigation risks",
+      mitigation.risk_mask & (FRIDA_DCA_FAULT_UNSTABLE |
+      FRIDA_DCA_FAULT_INACCURATE | FRIDA_DCA_FAULT_FRICTION |
+      FRIDA_DCA_FAULT_OVERHEAD | FRIDA_DCA_FAULT_ENTROPY |
+      FRIDA_DCA_FAULT_DISALLOWED_ROUTE),
+      FRIDA_DCA_FAULT_UNSTABLE | FRIDA_DCA_FAULT_INACCURATE |
+      FRIDA_DCA_FAULT_FRICTION | FRIDA_DCA_FAULT_OVERHEAD |
+      FRIDA_DCA_FAULT_ENTROPY | FRIDA_DCA_FAULT_DISALLOWED_ROUTE);
 
   if (failures != 0)
     return 1;
