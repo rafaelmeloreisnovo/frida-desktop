@@ -1,0 +1,107 @@
+{
+  "schema": 1,
+  "profile": "runtime-debugger-arm-safety",
+  "intent": "Opt-in contract for ARMv7/ARM64 in-runtime debugger diagnostics that prefer bounded, freestanding, fail-safe behavior over hosted convenience layers.",
+  "architectures": [
+    {
+      "name": "arm32",
+      "meson_cpu_families": ["arm"],
+      "pointer_bits": 32,
+      "mode": "aapcs-eabi",
+      "required_guards": [
+        "fixed_capacity_tables",
+        "no_heap_on_probe_path",
+        "bounded_stack_frames",
+        "atomic_snapshot_commit",
+        "rollback_journal_before_patch"
+      ]
+    },
+    {
+      "name": "arm64",
+      "meson_cpu_families": ["aarch64"],
+      "pointer_bits": 64,
+      "mode": "aapcs64",
+      "required_guards": [
+        "fixed_capacity_tables",
+        "no_heap_on_probe_path",
+        "bounded_stack_frames",
+        "atomic_snapshot_commit",
+        "rollback_journal_before_patch"
+      ]
+    }
+  ],
+  "modules": [
+    {
+      "name": "learn",
+      "purpose": "Collect target facts before mutation: CPU family, page size, cache line assumptions, syscall availability, and debugger capabilities.",
+      "fail_safe": "If any required fact is unknown, keep the target read-only and mark evidence as SKIPPED instead of PASS.",
+      "tests": ["schema", "capability_snapshot", "unknown_fact_is_skipped"]
+    },
+    {
+      "name": "setup",
+      "purpose": "Prepare deterministic fixed-size state, seed material, watchdog slots, and rollback journal capacity.",
+      "fail_safe": "If fixed capacity is exceeded, refuse activation rather than allocating dynamically.",
+      "tests": ["fixed_capacity", "no_malloc_contract", "seed_integrity"]
+    },
+    {
+      "name": "probe",
+      "purpose": "Inspect runtime state with branch-minimized hot paths and without changing target memory.",
+      "fail_safe": "On inconsistent reads or cache-miss amplification, downgrade to cold-path debugger sampling.",
+      "tests": ["read_only_probe", "bounded_latency", "cache_miss_budget"]
+    },
+    {
+      "name": "patch",
+      "purpose": "Apply debugger/instrumentation changes only after journaling the previous bytes and metadata needed for rollback.",
+      "fail_safe": "Patch commit is all-or-nothing; incomplete journal or verification mismatch aborts before write.",
+      "tests": ["journal_before_write", "atomic_commit", "verify_after_write"]
+    },
+    {
+      "name": "watchdog",
+      "purpose": "Observe heartbeat, trap density, syscall rate, and rollback deadlines from an isolated control path.",
+      "fail_safe": "If heartbeat expires, trigger rollback and disable further mutation for the epoch.",
+      "tests": ["heartbeat_timeout", "epoch_lockout", "watchdog_reentry"]
+    },
+    {
+      "name": "failover",
+      "purpose": "Switch from active instrumentation to passive debugger observation when a guard trips.",
+      "fail_safe": "Failover never escalates privilege and never enables hosted/GC layers in a freestanding profile.",
+      "tests": ["passive_mode", "no_privilege_escalation", "hosted_layers_stay_disabled"]
+    },
+    {
+      "name": "rollback",
+      "purpose": "Restore original bytes, permissions, and debugger state using the journal created before mutation.",
+      "fail_safe": "If rollback verification fails, freeze further writes and emit explicit FAIL evidence.",
+      "tests": ["restore_original_bytes", "restore_permissions", "rollback_verification"]
+    },
+    {
+      "name": "evidence",
+      "purpose": "Emit PASS/FAIL/SKIPPED facts for allocator, syscall, branch, cache, watchdog, failover, and rollback checks.",
+      "fail_safe": "Missing measurements are SKIPPED; contradictory measurements are FAIL.",
+      "tests": ["tri_state_results", "no_false_pass", "merkle_evidence_chain"]
+    }
+  ],
+  "seed_policy": {
+    "allowed_uses": [
+      "deterministic test vectors",
+      "rollback journal identifiers",
+      "watchdog epoch tags",
+      "evidence-chain nonces"
+    ],
+    "forbidden_uses": [
+      "cryptographic key generation without platform CSPRNG",
+      "security claims based only on geometric or quantum metaphors",
+      "silent mutation of target state"
+    ],
+    "integrity": ["fnv1a64", "crc32c", "merkle_root"]
+  },
+  "test_result_states": ["PASS", "FAIL", "SKIPPED"],
+  "rollback_order": [
+    "stop_new_mutations",
+    "quiesce_watchdog_epoch",
+    "restore_original_bytes",
+    "restore_page_permissions",
+    "flush_instruction_cache",
+    "verify_snapshot",
+    "emit_evidence"
+  ]
+}
