@@ -1,0 +1,90 @@
+{
+  "schema": 1,
+  "profile": "runtime-stability-recorder",
+  "extends": "runtime-debugger-arm-safety",
+  "intent": "Opt-in Frida runtime stability sensor that stores only instability metadata and never stores payload bytes.",
+  "claim_allowed": false,
+  "architectures": ["arm32", "arm64"],
+  "silicon_binding": {
+    "mode": "profile-tag",
+    "fields": [
+      "architecture flags",
+      "pointer width",
+      "page size",
+      "cache-line size",
+      "HWCAP words",
+      "implementation identifier"
+    ],
+    "security_boundary": "The tag selects an expected measured profile. It is not a secret, unique hardware identity, attestation result, or cryptographic root of trust.",
+    "mismatch_action": "FAILSAFE"
+  },
+  "hot_path": {
+    "heap": false,
+    "recursion": false,
+    "syscalls": false,
+    "hosted_layers": false,
+    "event_capacity": 256,
+    "storage": "fixed circular record bank",
+    "integrity": "FNV-1a 64 chained records"
+  },
+  "privacy": {
+    "payload_bytes": "forbidden",
+    "plaintext": "forbidden",
+    "credentials": "forbidden",
+    "headers": "forbidden",
+    "peer_identifier": "caller-provided non-reversible tag",
+    "stored_fields": [
+      "monotonic time",
+      "process and thread identifiers",
+      "descriptor",
+      "operation kind",
+      "byte count",
+      "latency",
+      "runtime flags",
+      "stability values",
+      "integrity-chain hash"
+    ]
+  },
+  "event_kinds": [
+    "NET_READ",
+    "NET_WRITE",
+    "GC_BEGIN",
+    "GC_END",
+    "ALLOC_PRESSURE",
+    "WEB_ENTER",
+    "WEB_EXIT",
+    "IPC_READ",
+    "IPC_WRITE",
+    "DYNAMIC_LOAD"
+  ],
+  "stability": {
+    "number_format": "Q16",
+    "default_delta_trigger": 11796,
+    "default_delta_trigger_approx": 0.18,
+    "default_min_trigger_events": 2,
+    "components": [
+      "read-write alternation",
+      "short-interval burst pressure",
+      "caller-observed GC pressure",
+      "operation latency",
+      "web, IPC, dynamic-loader and I/O-error boundaries"
+    ],
+    "stable_events_persisted": false,
+    "unstable_events_persisted": true
+  },
+  "network_semantics": {
+    "tcp": "Records read/write operations and byte counts; it does not claim that one call equals one IP packet.",
+    "udp": "A caller may preserve datagram boundaries, but payload remains forbidden.",
+    "cross_process": "Requires one authorized Frida session per process plus an external metadata correlator. One agent cannot infer another process internally."
+  },
+  "debugger_class_a_mapping": {
+    "stability": "recorder stability",
+    "accuracy": "inverse distance from rolling baseline",
+    "friction": "burst pressure",
+    "entropy": "direction alternation",
+    "overhead": "GC pressure",
+    "unstable_fault": "delta greater than or equal to the configured trigger"
+  },
+  "result_states": ["STABLE", "OBSERVE", "DUMP", "FAILSAFE"],
+  "runtime_execution": "TOKEN_VAZIO"
+}
