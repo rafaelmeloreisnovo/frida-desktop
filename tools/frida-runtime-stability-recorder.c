@@ -284,9 +284,10 @@ frida_rs_observe(struct frida_rs_state *state,
   if (state->last_delta_q16 >= delta_trigger) {
     state->unstable_run++;
     decision = FRIDA_RS_DECISION_OBSERVE;
-  } else if (state->last_delta_q16 <= release_delta) {
+  } else {
     state->unstable_run = 0u;
-    state->dump_run = 0u;
+    if (state->last_delta_q16 <= release_delta)
+      state->dump_run = 0u;
   }
 
   if (state->unstable_run >= min_events && state->dump_run < max_events) {
