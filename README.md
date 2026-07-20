@@ -44,6 +44,13 @@ and [`tools/frida-debugger-class-a-autotune.h`](tools/frida-debugger-class-a-aut
 with FAILSAFE/FAILOVER/ROLLBACK semantics documented in
 [`docs/debugger-class-a-autotune.md`](docs/debugger-class-a-autotune.md).
 
+An opt-in runtime stability recorder extends that debugger contract with a
+silicon-profile gate, Q16 `delta ~= 0.18` trigger, fixed-capacity metadata bank,
+and instability-only dumps. It never stores network payload or decrypted
+content. See
+[`docs/runtime-stability-recorder.md`](docs/runtime-stability-recorder.md) and
+[`profiles/runtime-stability-recorder.json`](profiles/runtime-stability-recorder.json).
+
 ### CLI tools
 
 For running the Frida CLI tools, e.g. `frida`, `frida-ls-devices`, `frida-ps`,
