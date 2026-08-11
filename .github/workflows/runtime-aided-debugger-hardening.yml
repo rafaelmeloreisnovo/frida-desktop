@@ -1,0 +1,53 @@
+name: runtime-aided-debugger-hardening
+
+on:
+  pull_request:
+    paths:
+      - 'tools/frida-runtime-aided-adapter.c'
+      - 'tools/frida-runtime-aided-adapter.h'
+      - 'tools/frida-runtime-aided-adapter-selftest.c'
+      - 'tools/frida-runtime-stability-recorder.h'
+      - '.github/workflows/runtime-aided-debugger-hardening.yml'
+  push:
+    branches:
+      - main
+    paths:
+      - 'tools/frida-runtime-aided-adapter.c'
+      - 'tools/frida-runtime-aided-adapter.h'
+      - 'tools/frida-runtime-aided-adapter-selftest.c'
+      - 'tools/frida-runtime-stability-recorder.h'
+
+permissions:
+  contents: read
+
+jobs:
+  structural-gate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Hosted C11 self-test
+        run: |
+          set -eux
+          cc -std=c11 -Wall -Wextra -Werror -pedantic \
+            tools/frida-runtime-aided-adapter.c \
+            tools/frida-runtime-aided-adapter-selftest.c \
+            -Itools -o /tmp/frida-raa-selftest
+          /tmp/frida-raa-selftest
+
+      - name: Freestanding compile gate
+        run: |
+          set -eux
+          cc -std=c11 -Wall -Wextra -Werror -ffreestanding -fno-builtin \
+            -Itools -c tools/frida-runtime-aided-adapter.c \
+            -o /tmp/frida-raa.o
+
+      - name: Sanitizer self-test
+        run: |
+          set -eux
+          cc -std=c11 -Wall -Wextra -Werror -pedantic \
+            -fsanitize=address,undefined -fno-omit-frame-pointer \
+            tools/frida-runtime-aided-adapter.c \
+            tools/frida-runtime-aided-adapter-selftest.c \
+            -Itools -o /tmp/frida-raa-sanitize
+          /tmp/frida-raa-sanitize
