@@ -1,53 +1,67 @@
-name: runtime-aided-debugger-hardening
+name: Runtime-Aided Debugger Hardening
 
 on:
   pull_request:
     paths:
-      - 'tools/frida-runtime-aided-adapter.c'
-      - 'tools/frida-runtime-aided-adapter.h'
-      - 'tools/frida-runtime-aided-adapter-selftest.c'
-      - 'tools/frida-runtime-stability-recorder.h'
-      - '.github/workflows/runtime-aided-debugger-hardening.yml'
+      - "tools/frida-runtime-aided-adapter.c"
+      - "tools/frida-runtime-aided-adapter.h"
+      - "tools/frida-runtime-aided-adapter-selftest.c"
+      - "tools/frida-runtime-stability-recorder.h"
+      - ".github/scripts/rafaelia/runtime-aided-hardening.sh"
+      - ".github/scripts/rafaelia/ci-common.sh"
+      - ".github/workflows/runtime-aided-debugger-hardening.yml"
   push:
     branches:
       - main
     paths:
-      - 'tools/frida-runtime-aided-adapter.c'
-      - 'tools/frida-runtime-aided-adapter.h'
-      - 'tools/frida-runtime-aided-adapter-selftest.c'
-      - 'tools/frida-runtime-stability-recorder.h'
+      - "tools/frida-runtime-aided-adapter.c"
+      - "tools/frida-runtime-aided-adapter.h"
+      - "tools/frida-runtime-aided-adapter-selftest.c"
+      - "tools/frida-runtime-stability-recorder.h"
+      - ".github/scripts/rafaelia/runtime-aided-hardening.sh"
+      - ".github/scripts/rafaelia/ci-common.sh"
+      - ".github/workflows/runtime-aided-debugger-hardening.yml"
+  workflow_dispatch:
 
 permissions:
   contents: read
 
+concurrency:
+  group: runtime-aided-hardening-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+defaults:
+  run:
+    shell: bash
+
 jobs:
   structural-gate:
+    name: Hosted + freestanding + sanitizer gate
     runs-on: ubuntu-latest
+    timeout-minutes: 15
+
     steps:
-      - uses: actions/checkout@v4
+      - name: Check out repository
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
 
       - name: Hosted C11 self-test
-        run: |
-          set -eux
-          cc -std=c11 -Wall -Wextra -Werror -pedantic \
-            tools/frida-runtime-aided-adapter.c \
-            tools/frida-runtime-aided-adapter-selftest.c \
-            -Itools -o /tmp/frida-raa-selftest
-          /tmp/frida-raa-selftest
+        run: bash .github/scripts/rafaelia/runtime-aided-hardening.sh hosted
 
       - name: Freestanding compile gate
-        run: |
-          set -eux
-          cc -std=c11 -Wall -Wextra -Werror -ffreestanding -fno-builtin \
-            -Itools -c tools/frida-runtime-aided-adapter.c \
-            -o /tmp/frida-raa.o
+        run: bash .github/scripts/rafaelia/runtime-aided-hardening.sh freestanding
 
-      - name: Sanitizer self-test
-        run: |
-          set -eux
-          cc -std=c11 -Wall -Wextra -Werror -pedantic \
-            -fsanitize=address,undefined -fno-omit-frame-pointer \
-            tools/frida-runtime-aided-adapter.c \
-            tools/frida-runtime-aided-adapter-selftest.c \
-            -Itools -o /tmp/frida-raa-sanitize
-          /tmp/frida-raa-sanitize
+      - name: ASan + UBSan self-test
+        run: bash .github/scripts/rafaelia/runtime-aided-hardening.sh sanitizers
+
+      - name: Emit source identity + receipt
+        run: bash .github/scripts/rafaelia/runtime-aided-hardening.sh evidence
+
+      - name: Upload runtime-aided hardening evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: runtime-aided-hardening-${{ github.run_id }}
+          path: evidence/runtime-aided-hardening/
+          if-no-files-found: error
+          retention-days: 14
