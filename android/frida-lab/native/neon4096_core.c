@@ -13,7 +13,9 @@
 #define RAFAELIA_NEON4096_HAS_NEON_CODE 0
 #endif
 
+#if defined(__arm__) && !defined(__aarch64__)
 static atomic_int g_neon_runtime_available = ATOMIC_VAR_INIT(-1);
+#endif
 
 static uint32_t n4k_crc32c_update(uint32_t crc, const void *data, size_t size) {
     const uint8_t *p = (const uint8_t *)data;
@@ -51,6 +53,7 @@ static void n4k_fold128_neon(const uint8_t *data, size_t size, uint8_t out[16]) 
 }
 #endif
 
+#if defined(__arm__) && !defined(__aarch64__)
 static int n4k_has_token(const char *data, size_t size, const char token[4]) {
     if (!data || size < 4u) return 0;
     for (size_t i = 0u; i + 4u <= size; ++i) {
@@ -60,10 +63,12 @@ static int n4k_has_token(const char *data, size_t size, const char token[4]) {
     }
     return 0;
 }
+#endif
 
+#if RAFAELIA_NEON4096_HAS_NEON_CODE
 static int n4k_detect_neon_runtime(void) {
 #if defined(__aarch64__)
-    /* Advanced SIMD is part of the AArch64 base execution environment. */
+    /* Advanced SIMD is baseline in the AArch64 execution state. */
     return 1;
 #elif defined(__arm__)
     int cached = atomic_load_explicit(&g_neon_runtime_available, memory_order_acquire);
@@ -83,6 +88,7 @@ static int n4k_detect_neon_runtime(void) {
     return 0;
 #endif
 }
+#endif
 
 void rafaelia_neon4096_fold128(const void *data, size_t size, uint8_t out[16]) {
     const uint8_t *p = (const uint8_t *)data;
@@ -139,6 +145,16 @@ static uint32_t n4k_page_crc32c(const RafaeliaNeon4096PageV1 *page) {
     return ~crc;
 }
 
+static void n4k_fold_page_payload(const RafaeliaNeon4096PageV1 *page, uint8_t out[16]) {
+    uint8_t hot[16];
+    uint8_t buffer[16];
+    uint8_t storage[16];
+    rafaelia_neon4096_fold128(page->hot_l1, sizeof(page->hot_l1), hot);
+    rafaelia_neon4096_fold128(page->buffer_l2, sizeof(page->buffer_l2), buffer);
+    rafaelia_neon4096_fold128(page->storage, sizeof(page->storage), storage);
+    for (uint32_t i = 0u; i < 16u; ++i) out[i] = hot[i] ^ buffer[i] ^ storage[i];
+}
+
 int rafaelia_neon4096_seal(RafaeliaNeon4096PageV1 *page,
                            uint64_t sequence,
                            uint32_t payload_bytes,
@@ -162,9 +178,7 @@ int rafaelia_neon4096_seal(RafaeliaNeon4096PageV1 *page,
         page->buffer_l2, sizeof(page->buffer_l2));
     page->control.crc32c_storage = rafaelia_neon4096_crc32c(
         page->storage, sizeof(page->storage));
-    rafaelia_neon4096_fold128(
-        page->hot_l1, RAFAELIA_NEON4096_PAYLOAD_BYTES,
-        page->control.simd_fold128);
+    n4k_fold_page_payload(page, page->control.simd_fold128);
     page->control.crc32c_page = 0u;
     page->control.crc32c_page = n4k_page_crc32c(page);
     return RAFAELIA_NEON4096_STATUS_OK;
@@ -188,12 +202,15 @@ int rafaelia_neon4096_verify(const RafaeliaNeon4096PageV1 *page) {
         return RAFAELIA_NEON4096_STATUS_ERR_CRC;
 
     uint8_t fold[16];
-    rafaelia_neon4096_fold128(
-        page->hot_l1, RAFAELIA_NEON4096_PAYLOAD_BYTES, fold);
+    n4k_fold_page_payload(page, fold);
     if (memcmp(fold, page->control.simd_fold128, sizeof(fold)) != 0)
         return RAFAELIA_NEON4096_STATUS_ERR_CRC;
 
     return RAFAELIA_NEON4096_STATUS_OK;
+}
+
+static uint8_t n4k_probe_pattern(uint32_t index) {
+    return (uint8_t)((index * 17u + 3u) & 0xffu);
 }
 
 int rafaelia_neon4096_runtime_probe(RafaeliaNeon4096RuntimeV1 *snapshot_out) {
@@ -218,9 +235,11 @@ int rafaelia_neon4096_runtime_probe(RafaeliaNeon4096RuntimeV1 *snapshot_out) {
 
     RafaeliaNeon4096PageV1 page;
     memset(&page, 0, sizeof(page));
-    uint8_t *payload = page.hot_l1;
-    for (uint32_t i = 0u; i < RAFAELIA_NEON4096_PAYLOAD_BYTES; ++i)
-        payload[i] = (uint8_t)((i * 17u + 3u) & 0xffu);
+    for (uint32_t i = 0u; i < RAFAELIA_NEON4096_REGION_BYTES; ++i) {
+        page.hot_l1[i] = n4k_probe_pattern(i);
+        page.buffer_l2[i] = n4k_probe_pattern(i + RAFAELIA_NEON4096_REGION_BYTES);
+        page.storage[i] = n4k_probe_pattern(i + 2u * RAFAELIA_NEON4096_REGION_BYTES);
+    }
 
     int rc = rafaelia_neon4096_seal(
         &page, UINT64_C(1), RAFAELIA_NEON4096_PAYLOAD_BYTES,
