@@ -47,66 +47,103 @@ jobs:
             xz-utils \
             zip
 
-      - name: Install Android 17 SDK Build-Tools and NDK
+      - name: Resolve and install Android 17 SDK Build-Tools and NDK
         id: android-tools
         shell: bash
         run: |
           set -euo pipefail
+          mkdir -p evidence
+
+          sdk_list="$(mktemp)"
+          sdkmanager --list --channel=3 > "$sdk_list"
+          cp "$sdk_list" evidence/sdkmanager-list.txt
 
           bt_pkg="$(
-            sdkmanager --list |
-              awk -F'|' '
-                /build-tools;37\./ {
-                  gsub(/^[[:space:]]+|[[:space:]]+$/, "", $1)
-                  print $1
-                }
-              ' |
+            awk -F'|' '
+              /build-tools;37\./ {
+                gsub(/^[[:space:]]+|[[:space:]]+$/, "", $1)
+                print $1
+              }
+            ' "$sdk_list" |
               sort -V |
               tail -n 1
           )"
+
+          platform_pkg="$(
+            awk -F'|' '
+              /platforms;android-37([[:space:]]|$)/ {
+                gsub(/^[[:space:]]+|[[:space:]]+$/, "", $1)
+                print $1
+              }
+            ' "$sdk_list" |
+              head -n 1
+          )"
+
+          if [[ -z "$platform_pkg" ]]; then
+            platform_pkg="$(
+              awk -F'|' '
+                /platforms;android-CinnamonBun([[:space:]]|$)/ {
+                  gsub(/^[[:space:]]+|[[:space:]]+$/, "", $1)
+                  print $1
+                }
+              ' "$sdk_list" |
+                head -n 1
+            )"
+          fi
 
           [[ -n "$bt_pkg" ]] || {
             echo "::error::Android Build-Tools 37.x not found by sdkmanager"
             exit 43
           }
+          [[ -n "$platform_pkg" ]] || {
+            echo "::error::Neither platforms;android-37 nor platforms;android-CinnamonBun is available"
+            grep -E 'platforms;android-(37|CinnamonBun)' "$sdk_list" || true
+            exit 44
+          }
+
+          printf 'resolved_platform_package=%s\n' "$platform_pkg" | tee evidence/android17-platform-resolution.txt
+          printf 'resolved_build_tools_package=%s\n' "$bt_pkg" | tee -a evidence/android17-platform-resolution.txt
 
           yes | sdkmanager --licenses >/dev/null || true
-          sdkmanager \
-            "platforms;android-${COMPILE_SDK}" \
+          sdkmanager --channel=3 \
+            "$platform_pkg" \
             "$bt_pkg" \
             "platform-tools" \
             "ndk;${NDK_VERSION}"
 
           bt_version="${bt_pkg#build-tools;}"
+          platform_dir="${platform_pkg#platforms;}"
           bt_dir="${ANDROID_SDK_ROOT}/build-tools/${bt_version}"
-          android_jar="${ANDROID_SDK_ROOT}/platforms/android-${COMPILE_SDK}/android.jar"
+          android_jar="${ANDROID_SDK_ROOT}/platforms/${platform_dir}/android.jar"
           ndk_dir="${ANDROID_SDK_ROOT}/ndk/${NDK_VERSION}"
           toolchain="${ndk_dir}/toolchains/llvm/prebuilt/linux-x86_64/bin"
 
           for tool in aapt2 d8 apksigner zipalign; do
             [[ -x "$bt_dir/$tool" ]] || {
               echo "::error::Missing Android Build-Tools executable: $bt_dir/$tool"
-              exit 44
+              exit 45
             }
           done
 
           [[ -f "$android_jar" ]] || {
-            echo "::error::Missing android.jar: $android_jar"
-            exit 45
+            echo "::error::Missing Android 17 android.jar: $android_jar"
+            find "${ANDROID_SDK_ROOT}/platforms" -maxdepth 2 -name android.jar -print || true
+            exit 46
           }
 
           [[ -x "$toolchain/armv7a-linux-androideabi${MIN_SDK}-clang" ]] || {
             echo "::error::Missing ARMv7 NDK clang wrapper"
-            exit 46
+            exit 47
           }
           [[ -x "$toolchain/aarch64-linux-android${MIN_SDK}-clang" ]] || {
             echo "::error::Missing AArch64 NDK clang wrapper"
-            exit 47
+            exit 48
           }
 
           echo "bt_dir=$bt_dir" >> "$GITHUB_OUTPUT"
           echo "android_jar=$android_jar" >> "$GITHUB_OUTPUT"
           echo "build_tools=$bt_version" >> "$GITHUB_OUTPUT"
+          echo "platform_package=$platform_pkg" >> "$GITHUB_OUTPUT"
           echo "ndk_dir=$ndk_dir" >> "$GITHUB_OUTPUT"
           echo "toolchain=$toolchain" >> "$GITHUB_OUTPUT"
 
@@ -190,7 +227,7 @@ jobs:
               echo "::error::SHA-256 mismatch for $name"
               echo "expected=$expected"
               echo "actual=$actual"
-              exit 48
+              exit 49
             }
 
             xz -t "$compressed"
@@ -253,6 +290,7 @@ jobs:
               file "native/$abi/$name" | tee "evidence/${abi}-${name}.file.txt"
               readelf -h "native/$abi/$name" | tee "evidence/${abi}-${name}.elf-header.txt"
               readelf -d "native/$abi/$name" > "evidence/${abi}-${name}.elf-dynamic.txt"
+              readelf -lW "native/$abi/$name" > "evidence/${abi}-${name}.elf-program-headers.txt"
             done
           done
 
@@ -285,7 +323,7 @@ jobs:
           mapfile -t classes < <(find build/android17/classes -type f -name '*.class' -print | sort)
           ((${#classes[@]} > 0)) || {
             echo "::error::javac produced no .class files"
-            exit 49
+            exit 50
           }
 
           "$BT_DIR/d8" \
@@ -423,6 +461,7 @@ jobs:
         shell: bash
         env:
           BUILD_TOOLS: ${{ steps.android-tools.outputs.build_tools }}
+          PLATFORM_PACKAGE: ${{ steps.android-tools.outputs.platform_package }}
         run: |
           set -euo pipefail
 
@@ -473,6 +512,7 @@ jobs:
               "compile_sdk": int(os.environ["COMPILE_SDK"]),
               "target_sdk": int(os.environ["TARGET_SDK"]),
               "min_sdk": int(os.environ["MIN_SDK"]),
+              "android_platform_package": os.environ["PLATFORM_PACKAGE"],
               "build_tools": os.environ["BUILD_TOOLS"],
               "ndk_version": os.environ["NDK_VERSION"],
               "abis": ["armeabi-v7a", "arm64-v8a"],
