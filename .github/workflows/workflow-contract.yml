@@ -34,6 +34,7 @@ jobs:
       - name: Check out repository
         uses: actions/checkout@v4
         with:
+          fetch-depth: 2
           persist-credentials: false
 
       - name: Syntax-check workflow implementation scripts
@@ -49,7 +50,7 @@ jobs:
         run: python3 .github/scripts/rafaelia/workflow-contract.py
 
       - name: Check patch whitespace integrity
-        run: git diff --check HEAD^ HEAD || git diff --check
+        run: git diff --check HEAD^ HEAD
 
       - name: Upload workflow contract evidence
         uses: actions/upload-artifact@v4
