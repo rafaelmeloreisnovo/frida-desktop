@@ -26,13 +26,13 @@ defaults:
 
 jobs:
   workflow-contract:
-    name: Workflow topology + implementation contract
+    name: Workflow topology + catalyst contract
     runs-on: ubuntu-latest
     timeout-minutes: 10
 
     steps:
       - name: Check out repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2, Node 24
         with:
           fetch-depth: 2
           persist-credentials: false
@@ -46,14 +46,14 @@ jobs:
           bash -n .github/scripts/rafaelia/runtime-aided-hardening.sh
           python3 -m py_compile .github/scripts/rafaelia/workflow-contract.py
 
-      - name: Run fail-closed workflow architecture contract
+      - name: Run fail-closed workflow + catalyst contract
         run: python3 .github/scripts/rafaelia/workflow-contract.py
 
       - name: Check patch whitespace integrity
         run: git diff --check HEAD^ HEAD
 
       - name: Upload workflow contract evidence
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1, Node 24
         with:
           name: workflow-contract-${{ github.run_id }}
           path: evidence/workflow-contract/
