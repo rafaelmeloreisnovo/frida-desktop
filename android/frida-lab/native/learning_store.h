@@ -27,6 +27,7 @@ extern "C" {
 #define RAFAELIA_RFL_FLAG_PREDICTION_VALID (1u << 0)
 #define RAFAELIA_RFL_FLAG_PREDICTION_CORRECT (1u << 1)
 #define RAFAELIA_RFL_FLAG_LEARNING_UPDATE (1u << 2)
+#define RAFAELIA_RFL_FLAG_VALIDATION_SAMPLE (1u << 3)
 #define RAFAELIA_RFL_FLAG_MODE_SHIFT 8u
 #define RAFAELIA_RFL_FLAG_MODE_MASK (7u << RAFAELIA_RFL_FLAG_MODE_SHIFT)
 
@@ -38,7 +39,8 @@ typedef enum RafaeliaLearningMode {
     RAFAELIA_LEARNING_OBSERVE = 1,
     RAFAELIA_LEARNING_LEARN_SHADOW = 2,
     RAFAELIA_LEARNING_PREDICT_SHADOW = 3,
-    RAFAELIA_LEARNING_FROZEN = 4
+    RAFAELIA_LEARNING_VALIDATE_SHADOW = 4,
+    RAFAELIA_LEARNING_FROZEN = 5
 } RafaeliaLearningMode;
 
 typedef enum RafaeliaLearningStatus {
@@ -51,13 +53,6 @@ typedef enum RafaeliaLearningStatus {
     RAFAELIA_LEARNING_STATUS_ERR_CAPACITY = -6
 } RafaeliaLearningStatus;
 
-/*
- * On-disk wire structures.
- *
- * V1 is explicitly little-endian. Implementations must not dereference packed
- * fields from untrusted/mapped storage on architectures that require alignment;
- * copy/deserialize into aligned locals first.
- */
 #if defined(__GNUC__) || defined(__clang__)
 #define RAFAELIA_PACKED __attribute__((packed))
 #else
@@ -103,6 +98,9 @@ typedef struct RafaeliaLearningSnapshotV1 {
     uint64_t predictions;
     uint64_t correct_predictions;
     uint64_t incorrect_predictions;
+    uint64_t validation_predictions;
+    uint64_t validation_correct_predictions;
+    uint64_t validation_incorrect_predictions;
     uint64_t dropped_observations;
     uint64_t records_committed;
     uint64_t store_bytes;
@@ -113,8 +111,11 @@ typedef struct RafaeliaLearningSnapshotV1 {
     uint32_t predictor_entries_used;
     uint32_t eligible_contexts;
     uint32_t error_ppm;
+    uint32_t validation_error_ppm;
     uint16_t global_confidence_q16;
+    uint16_t validation_accuracy_q16;
     uint16_t slab_records_used;
+    uint16_t reserved16;
     uint32_t flags;
 } RafaeliaLearningSnapshotV1;
 
@@ -139,15 +140,15 @@ _Static_assert(RAFAELIA_RFL_RECORDS_PER_SLAB == 64u,
                "RFL V1 slab must contain exactly 64 records");
 #endif
 
-/* Native core lifecycle. */
 int rafaelia_learning_init(const char *store_path,
                            const RafaeliaLearningConfigV1 *config);
 int rafaelia_learning_set_mode(uint32_t mode);
 int rafaelia_learning_get_mode(void);
 
 /*
- * Observe one bounded event. candidate_id is the actual observed class/policy.
- * In LEARN/PREDICT shadow modes the core predicts before updating the table.
+ * Observe one bounded event. In LEARN/PREDICT shadow modes the predictor may
+ * update after scoring. In VALIDATE_SHADOW the predictor is read-only: the
+ * actual outcome is recorded/scored but cannot change predictor state.
  */
 int rafaelia_learning_observe(uint64_t context_hash,
                               uint32_t candidate_id,
@@ -156,7 +157,6 @@ int rafaelia_learning_observe(uint64_t context_hash,
                               int64_t memory_delta,
                               uint64_t aux_hash);
 
-/* Prediction never applies a policy in V1; it only reports a shadow result. */
 int rafaelia_learning_predict(uint64_t context_hash,
                               uint32_t *candidate_out,
                               uint16_t *confidence_q16_out,
