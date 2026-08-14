@@ -41,6 +41,7 @@ jobs:
         run: |
           set -euo pipefail
           bash -n .github/scripts/rafaelia/ci-common.sh
+          bash -n .github/scripts/rafaelia/host-tools.sh
           bash -n .github/scripts/rafaelia/android-lab-ci.sh
           bash -n .github/scripts/rafaelia/rfl-neon4096-selftest.sh
           bash -n .github/scripts/rafaelia/runtime-aided-hardening.sh
