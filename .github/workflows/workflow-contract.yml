@@ -1,0 +1,60 @@
+name: Workflow Architecture Contract
+
+on:
+  pull_request:
+    paths:
+      - ".github/workflows/**"
+      - ".github/scripts/rafaelia/**"
+  push:
+    branches:
+      - main
+    paths:
+      - ".github/workflows/**"
+      - ".github/scripts/rafaelia/**"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: workflow-contract-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  workflow-contract:
+    name: Workflow topology + implementation contract
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Syntax-check workflow implementation scripts
+        run: |
+          set -euo pipefail
+          bash -n .github/scripts/rafaelia/ci-common.sh
+          bash -n .github/scripts/rafaelia/android-lab-ci.sh
+          bash -n .github/scripts/rafaelia/rfl-neon4096-selftest.sh
+          bash -n .github/scripts/rafaelia/runtime-aided-hardening.sh
+          python3 -m py_compile .github/scripts/rafaelia/workflow-contract.py
+
+      - name: Run fail-closed workflow architecture contract
+        run: python3 .github/scripts/rafaelia/workflow-contract.py
+
+      - name: Check patch whitespace integrity
+        run: git diff --check HEAD^ HEAD || git diff --check
+
+      - name: Upload workflow contract evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: workflow-contract-${{ github.run_id }}
+          path: evidence/workflow-contract/
+          if-no-files-found: error
+          retention-days: 14
