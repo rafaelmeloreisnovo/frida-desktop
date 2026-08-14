@@ -24,6 +24,12 @@ extern "C" {
 #define RAFAELIA_LEARNING_DEFAULT_MAX_ERROR_PPM 1000u
 #define RAFAELIA_LEARNING_DEFAULT_CONFIDENCE_Q16 65469u /* ~= 99.9% */
 
+#define RAFAELIA_RFL_FLAG_PREDICTION_VALID (1u << 0)
+#define RAFAELIA_RFL_FLAG_PREDICTION_CORRECT (1u << 1)
+#define RAFAELIA_RFL_FLAG_LEARNING_UPDATE (1u << 2)
+#define RAFAELIA_RFL_FLAG_MODE_SHIFT 8u
+#define RAFAELIA_RFL_FLAG_MODE_MASK (7u << RAFAELIA_RFL_FLAG_MODE_SHIFT)
+
 typedef enum RafaeliaLearningMode {
     RAFAELIA_LEARNING_OFF = 0,
     RAFAELIA_LEARNING_OBSERVE = 1,
@@ -73,13 +79,13 @@ typedef struct RAFAELIA_PACKED RafaeliaRflRecordV1 {
     uint64_t sequence;
     uint64_t monotonic_ns;
     uint64_t context_hash;
-    uint64_t aux_hash;
     uint32_t event_type;
     uint32_t candidate_id;
+    uint32_t predicted_id;
+    uint32_t prediction_support;
     uint32_t cost_ns_q;
     int32_t memory_delta_q;
-    uint16_t predicted_id;
-    uint16_t actual_id;
+    uint32_t aux_hash32;
     uint16_t confidence_q16;
     uint16_t error_q16;
     uint32_t flags;
