@@ -1,15 +1,19 @@
 #define _POSIX_C_SOURCE 200809L
 #include "neon4096_core.h"
 
+#include <fcntl.h>
+#include <stdatomic.h>
 #include <string.h>
 #include <unistd.h>
 
-#if defined(__ARM_NEON) || defined(__ARM_NEON__) || defined(__aarch64__)
+#if defined(__arm__) || defined(__aarch64__)
 #include <arm_neon.h>
-#define RAFAELIA_NEON4096_HAS_NEON 1
+#define RAFAELIA_NEON4096_HAS_NEON_CODE 1
 #else
-#define RAFAELIA_NEON4096_HAS_NEON 0
+#define RAFAELIA_NEON4096_HAS_NEON_CODE 0
 #endif
+
+static atomic_int g_neon_runtime_available = ATOMIC_VAR_INIT(-1);
 
 static uint32_t n4k_crc32c_update(uint32_t crc, const void *data, size_t size) {
     const uint8_t *p = (const uint8_t *)data;
@@ -33,6 +37,53 @@ static void n4k_fold128_scalar(const uint8_t *data, size_t size, uint8_t out[16]
     for (size_t i = 0u; i < size; ++i) out[i & 15u] ^= data[i];
 }
 
+#if RAFAELIA_NEON4096_HAS_NEON_CODE
+#if defined(__arm__) && !defined(__aarch64__)
+__attribute__((target("neon")))
+#endif
+static void n4k_fold128_neon(const uint8_t *data, size_t size, uint8_t out[16]) {
+    uint8x16_t acc = vdupq_n_u8(0u);
+    size_t i = 0u;
+    for (; i + 16u <= size; i += 16u)
+        acc = veorq_u8(acc, vld1q_u8(data + i));
+    vst1q_u8(out, acc);
+    for (; i < size; ++i) out[i & 15u] ^= data[i];
+}
+#endif
+
+static int n4k_has_token(const char *data, size_t size, const char token[4]) {
+    if (!data || size < 4u) return 0;
+    for (size_t i = 0u; i + 4u <= size; ++i) {
+        if (data[i] == token[0] && data[i + 1u] == token[1] &&
+            data[i + 2u] == token[2] && data[i + 3u] == token[3])
+            return 1;
+    }
+    return 0;
+}
+
+static int n4k_detect_neon_runtime(void) {
+#if defined(__aarch64__)
+    /* Advanced SIMD is part of the AArch64 base execution environment. */
+    return 1;
+#elif defined(__arm__)
+    int cached = atomic_load_explicit(&g_neon_runtime_available, memory_order_acquire);
+    if (cached >= 0) return cached;
+
+    int available = 0;
+    int fd = open("/proc/cpuinfo", O_RDONLY | O_CLOEXEC);
+    if (fd >= 0) {
+        char buffer[8192];
+        ssize_t n = read(fd, buffer, sizeof(buffer));
+        (void)close(fd);
+        if (n > 0 && n4k_has_token(buffer, (size_t)n, "neon")) available = 1;
+    }
+    atomic_store_explicit(&g_neon_runtime_available, available, memory_order_release);
+    return available;
+#else
+    return 0;
+#endif
+}
+
 void rafaelia_neon4096_fold128(const void *data, size_t size, uint8_t out[16]) {
     const uint8_t *p = (const uint8_t *)data;
     if (!out) return;
@@ -41,25 +92,20 @@ void rafaelia_neon4096_fold128(const void *data, size_t size, uint8_t out[16]) {
         return;
     }
 
-#if RAFAELIA_NEON4096_HAS_NEON
-    uint8x16_t acc = vdupq_n_u8(0u);
-    size_t i = 0u;
-    for (; i + 16u <= size; i += 16u) {
-        acc = veorq_u8(acc, vld1q_u8(p + i));
+#if RAFAELIA_NEON4096_HAS_NEON_CODE
+    if (n4k_detect_neon_runtime()) {
+        n4k_fold128_neon(p, size, out);
+        return;
     }
-    vst1q_u8(out, acc);
-    for (; i < size; ++i) out[i & 15u] ^= p[i];
-#else
-    n4k_fold128_scalar(p, size, out);
 #endif
+    n4k_fold128_scalar(p, size, out);
 }
 
 uint32_t rafaelia_neon4096_backend(void) {
-#if RAFAELIA_NEON4096_HAS_NEON
-    return RAFAELIA_NEON4096_BACKEND_NEON128;
-#else
-    return RAFAELIA_NEON4096_BACKEND_SCALAR;
+#if RAFAELIA_NEON4096_HAS_NEON_CODE
+    if (n4k_detect_neon_runtime()) return RAFAELIA_NEON4096_BACKEND_NEON128;
 #endif
+    return RAFAELIA_NEON4096_BACKEND_SCALAR;
 }
 
 const char *rafaelia_neon4096_backend_name(uint32_t backend) {
@@ -104,7 +150,7 @@ int rafaelia_neon4096_seal(RafaeliaNeon4096PageV1 *page,
     page->control.magic = RAFAELIA_NEON4096_MAGIC;
     page->control.version = RAFAELIA_NEON4096_VERSION;
     page->control.flags = 0u;
-#if RAFAELIA_NEON4096_HAS_NEON
+#if RAFAELIA_NEON4096_HAS_NEON_CODE
     page->control.flags |= RAFAELIA_NEON4096_FLAG_NEON_COMPILED;
 #endif
     page->control.sequence = sequence;
@@ -166,7 +212,7 @@ int rafaelia_neon4096_runtime_probe(RafaeliaNeon4096RuntimeV1 *snapshot_out) {
         snapshot_out->observed_page_size = (uint32_t)observed_page;
     if (snapshot_out->observed_page_size == RAFAELIA_NEON4096_PAGE_BYTES)
         snapshot_out->flags |= RAFAELIA_NEON4096_FLAG_PAGE_SIZE_MATCH;
-#if RAFAELIA_NEON4096_HAS_NEON
+#if RAFAELIA_NEON4096_HAS_NEON_CODE
     snapshot_out->flags |= RAFAELIA_NEON4096_FLAG_NEON_COMPILED;
 #endif
 
