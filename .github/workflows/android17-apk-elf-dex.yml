@@ -1,6 +1,7 @@
 name: Android 17 APK + ELF/DEX Lab
 
 on:
+  pull_request:
   workflow_run:
     workflows: ["CI"]
     types: [completed]
@@ -23,6 +24,7 @@ jobs:
   build-apk:
     if: >-
       github.event_name == 'workflow_dispatch' ||
+      github.event_name == 'pull_request' ||
       (github.event_name == 'workflow_run' &&
        github.event.workflow_run.conclusion == 'success' &&
        github.event.workflow_run.head_branch == 'main' &&
