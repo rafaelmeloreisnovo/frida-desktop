@@ -5,6 +5,7 @@ on:
     paths:
       - "android/frida-lab/**"
       - ".github/scripts/rafaelia/android-lab-ci.sh"
+      - ".github/scripts/rafaelia/host-tools.sh"
       - ".github/scripts/rafaelia/ci-common.sh"
       - ".github/workflows/android17-apk-elf-dex.yml"
   push:
@@ -13,6 +14,7 @@ on:
     paths:
       - "android/frida-lab/**"
       - ".github/scripts/rafaelia/android-lab-ci.sh"
+      - ".github/scripts/rafaelia/host-tools.sh"
       - ".github/scripts/rafaelia/ci-common.sh"
       - ".github/workflows/android17-apk-elf-dex.yml"
   workflow_dispatch:
@@ -41,31 +43,31 @@ jobs:
       FRIDA_VERSION: "17.9.11"
 
     steps:
+      # External actions are bounded catalysts only. Build, validation and
+      # evidence semantics live in .github/scripts/rafaelia/.
       - name: Check out repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2, Node 24
         with:
           persist-credentials: false
 
       - name: Set up Java 17
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@03ad4de0992f5dab5e18fcb136590ce7c4a0ac95 # v5.6.0, Node 24
         with:
           distribution: temurin
           java-version: "17"
+          check-latest: false
 
-      - name: Set up Android SDK command-line tools
-        uses: android-actions/setup-android@v3
+      - name: Expose Android SDK command-line tools
+        uses: android-actions/setup-android@40fd30fb8d7440372e1316f5d1809ec01dcd3699 # v4.0.1, Node 24
+        with:
+          # Package resolution and license gate belong to android-lab-ci.sh.
+          # The external action is only a command-line-tools bootstrap.
+          packages: ""
+          accept-android-sdk-licenses: false
+          log-accepted-android-sdk-licenses: false
 
-      - name: Install host inspection tools
-        run: |
-          set -euo pipefail
-          sudo apt-get update
-          sudo apt-get install -y --no-install-recommends \
-            binutils \
-            curl \
-            file \
-            unzip \
-            xz-utils \
-            zip
+      - name: Resolve required host inspection tools
+        run: bash .github/scripts/rafaelia/host-tools.sh
 
       - name: Resolve Android SDK + Build-Tools + NDK contract
         run: bash .github/scripts/rafaelia/android-lab-ci.sh resolve-sdk
@@ -91,11 +93,14 @@ jobs:
         run: bash .github/scripts/rafaelia/android-lab-ci.sh receipt
 
       - name: Upload APK + ELF + DEX + provenance evidence
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1, Node 24
         with:
           name: frida-android17-apk-elf-dex-${{ github.run_id }}
           if-no-files-found: error
           retention-days: 14
+          # APK/ELF/XZ content is already largely incompressible; avoid an
+          # unnecessary CPU compression loop in the external transport layer.
+          compression-level: 0
           path: |
             dist/android17-lab/
             build/android17/native/
