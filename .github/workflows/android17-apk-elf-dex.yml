@@ -5,6 +5,7 @@ on:
     paths:
       - "android/frida-lab/**"
       - ".github/scripts/rafaelia/android-lab-ci.sh"
+      - ".github/scripts/rafaelia/host-tools.sh"
       - ".github/scripts/rafaelia/ci-common.sh"
       - ".github/workflows/android17-apk-elf-dex.yml"
   push:
@@ -13,6 +14,7 @@ on:
     paths:
       - "android/frida-lab/**"
       - ".github/scripts/rafaelia/android-lab-ci.sh"
+      - ".github/scripts/rafaelia/host-tools.sh"
       - ".github/scripts/rafaelia/ci-common.sh"
       - ".github/workflows/android17-apk-elf-dex.yml"
   workflow_dispatch:
@@ -58,21 +60,14 @@ jobs:
       - name: Expose Android SDK command-line tools
         uses: android-actions/setup-android@40fd30fb8d7440372e1316f5d1809ec01dcd3699 # v4.0.1, Node 24
         with:
-          # Package resolution belongs to android-lab-ci.sh. Avoid duplicate
-          # setup loops here; this action only provides the SDK bootstrap.
+          # Package resolution and license gate belong to android-lab-ci.sh.
+          # The external action is only a command-line-tools bootstrap.
           packages: ""
+          accept-android-sdk-licenses: false
+          log-accepted-android-sdk-licenses: false
 
-      - name: Install host inspection tools
-        run: |
-          set -euo pipefail
-          sudo apt-get update
-          sudo apt-get install -y --no-install-recommends \
-            binutils \
-            curl \
-            file \
-            unzip \
-            xz-utils \
-            zip
+      - name: Resolve required host inspection tools
+        run: bash .github/scripts/rafaelia/host-tools.sh
 
       - name: Resolve Android SDK + Build-Tools + NDK contract
         run: bash .github/scripts/rafaelia/android-lab-ci.sh resolve-sdk
