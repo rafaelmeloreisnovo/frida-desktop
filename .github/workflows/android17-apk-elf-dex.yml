@@ -1,0 +1,374 @@
+name: Android 17 APK + ELF/DEX Lab
+
+on:
+  workflow_run:
+    workflows: ["CI"]
+    types: [completed]
+  workflow_dispatch:
+    inputs:
+      ci_run_id:
+        description: "Successful CI run id; blank = latest successful CI run on main"
+        required: false
+        type: string
+
+permissions:
+  actions: read
+  contents: read
+
+concurrency:
+  group: android17-apk-lab-${{ github.event.workflow_run.id || inputs.ci_run_id || github.run_id }}
+  cancel-in-progress: false
+
+jobs:
+  build-apk:
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event_name == 'workflow_run' &&
+       github.event.workflow_run.conclusion == 'success' &&
+       github.event.workflow_run.head_branch == 'main' &&
+       github.event.workflow_run.head_repository.full_name == github.repository)
+    runs-on: ubuntu-latest
+    env:
+      COMPILE_SDK: "37"
+      TARGET_SDK: "37"
+      MIN_SDK: "21"
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Resolve native-artifact CI run
+        id: source-run
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          EVENT_NAME: ${{ github.event_name }}
+          EVENT_RUN_ID: ${{ github.event.workflow_run.id }}
+          INPUT_RUN_ID: ${{ inputs.ci_run_id }}
+        run: |
+          set -euo pipefail
+          if [[ "$EVENT_NAME" == "workflow_run" ]]; then
+            run_id="$EVENT_RUN_ID"
+          elif [[ -n "${INPUT_RUN_ID:-}" ]]; then
+            run_id="$INPUT_RUN_ID"
+          else
+            run_id="$(
+              gh api \
+                -H "Accept: application/vnd.github+json" \
+                "/repos/${GITHUB_REPOSITORY}/actions/workflows/ci.yml/runs?branch=main&status=success&per_page=1" \
+                --jq '.workflow_runs[0].id'
+            )"
+          fi
+          [[ "$run_id" =~ ^[0-9]+$ ]] || {
+            echo "::error::Could not resolve a successful CI run id"
+            exit 42
+          }
+          echo "run_id=$run_id" >> "$GITHUB_OUTPUT"
+
+      - name: Download ARMv7 Gadget ELF
+        uses: actions/download-artifact@v4
+        with:
+          repository: ${{ github.repository }}
+          run-id: ${{ steps.source-run.outputs.run_id }}
+          github-token: ${{ github.token }}
+          name: frida-gadget-android-arm
+          path: input/arm
+
+      - name: Download ARM64 Gadget ELF
+        uses: actions/download-artifact@v4
+        with:
+          repository: ${{ github.repository }}
+          run-id: ${{ steps.source-run.outputs.run_id }}
+          github-token: ${{ github.token }}
+          name: frida-gadget-android-arm64
+          path: input/arm64
+
+      - name: Resolve Android 17 Build-Tools
+        id: android-tools
+        shell: bash
+        run: |
+          set -euo pipefail
+          bt_pkg="$(
+            sdkmanager --list |
+              awk -F'|' '
+                /build-tools;37\./ {
+                  gsub(/^[[:space:]]+|[[:space:]]+$/, "", $1)
+                  print $1
+                }
+              ' |
+              sort -V |
+              tail -n 1
+          )"
+          [[ -n "$bt_pkg" ]] || {
+            echo "::error::Android Build-Tools 37.x not found"
+            exit 43
+          }
+
+          yes | sdkmanager --licenses >/dev/null || true
+          sdkmanager "platforms;android-${COMPILE_SDK}" "$bt_pkg" "platform-tools"
+
+          bt_version="${bt_pkg#build-tools;}"
+          bt_dir="${ANDROID_SDK_ROOT}/build-tools/${bt_version}"
+          android_jar="${ANDROID_SDK_ROOT}/platforms/android-${COMPILE_SDK}/android.jar"
+
+          for tool in aapt2 d8 apksigner zipalign; do
+            [[ -x "$bt_dir/$tool" ]] || {
+              echo "::error::Missing Android tool: $bt_dir/$tool"
+              exit 44
+            }
+          done
+          [[ -f "$android_jar" ]] || exit 45
+
+          echo "bt_dir=$bt_dir" >> "$GITHUB_OUTPUT"
+          echo "android_jar=$android_jar" >> "$GITHUB_OUTPUT"
+          echo "build_tools=$bt_version" >> "$GITHUB_OUTPUT"
+
+      - name: Prove ARM ELF inputs
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p native/armeabi-v7a native/arm64-v8a
+
+          test -f input/arm/frida-gadget.so
+          test -f input/arm64/frida-gadget.so
+          cp input/arm/frida-gadget.so native/armeabi-v7a/libfrida-gadget.so
+          cp input/arm64/frida-gadget.so native/arm64-v8a/libfrida-gadget.so
+
+          python3 - <<'PY'
+          from pathlib import Path
+          for p in (
+              Path("native/armeabi-v7a/libfrida-gadget.so"),
+              Path("native/arm64-v8a/libfrida-gadget.so"),
+          ):
+              magic = p.read_bytes()[:4]
+              if magic != b"\x7fELF":
+                  raise SystemExit(f"ELF gate failed for {p}: {magic!r}")
+              print("ELF magic PASS:", p)
+          PY
+
+          file native/armeabi-v7a/libfrida-gadget.so
+          file native/arm64-v8a/libfrida-gadget.so
+          readelf -h native/armeabi-v7a/libfrida-gadget.so | tee native/armeabi-v7a/elf-header.txt
+          readelf -h native/arm64-v8a/libfrida-gadget.so | tee native/arm64-v8a/elf-header.txt
+
+          readelf -h native/armeabi-v7a/libfrida-gadget.so | grep -Eq 'Machine:[[:space:]]+ARM([[:space:]]|$)'
+          readelf -h native/arm64-v8a/libfrida-gadget.so | grep -Eq 'Machine:[[:space:]]+AArch64'
+
+      - name: Compile Java directly to classes.dex
+        shell: bash
+        env:
+          ANDROID_JAR: ${{ steps.android-tools.outputs.android_jar }}
+          BT_DIR: ${{ steps.android-tools.outputs.bt_dir }}
+        run: |
+          set -euo pipefail
+          rm -rf build/android17
+          mkdir -p build/android17/classes build/android17/dex
+
+          javac \
+            --release 8 \
+            -classpath "$ANDROID_JAR" \
+            -d build/android17/classes \
+            android/frida-lab/src/io/rafaelia/fridalab/MainActivity.java
+
+          mapfile -t classes < <(find build/android17/classes -type f -name '*.class' -print | sort)
+          ((${#classes[@]} > 0))
+
+          "$BT_DIR/d8" \
+            --lib "$ANDROID_JAR" \
+            --min-api "$MIN_SDK" \
+            --output build/android17/dex \
+            "${classes[@]}"
+
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path("build/android17/dex/classes.dex")
+          magic = p.read_bytes()[:8]
+          if not magic.startswith(b"dex\n"):
+              raise SystemExit(f"DEX gate failed: {magic!r}")
+          print("DEX magic PASS:", magic)
+          PY
+
+      - name: Build and sign ARMv7 ARM64 and universal APKs
+        shell: bash
+        env:
+          ANDROID_JAR: ${{ steps.android-tools.outputs.android_jar }}
+          BT_DIR: ${{ steps.android-tools.outputs.bt_dir }}
+        run: |
+          set -euo pipefail
+          mkdir -p dist build/android17/apk
+
+          keytool -genkeypair \
+            -keystore build/android17/debug.keystore \
+            -storepass android \
+            -alias androiddebugkey \
+            -keypass android \
+            -dname "CN=Android Debug,O=RAFAELIA,C=BR" \
+            -keyalg RSA \
+            -keysize 2048 \
+            -validity 3650 \
+            -noprompt
+
+          cat > build/android17/gadget-config.json <<'JSON'
+          {
+            "interaction": {
+              "type": "listen",
+              "address": "127.0.0.1",
+              "port": 27042,
+              "on_port_conflict": "fail",
+              "on_load": "resume"
+            },
+            "teardown": "minimal",
+            "runtime": "default"
+          }
+          JSON
+
+          build_apk() {
+            local flavor="$1"
+            shift
+            local work="build/android17/apk/$flavor"
+
+            rm -rf "$work"
+            mkdir -p "$work/stage"
+
+            "$BT_DIR/aapt2" link \
+              -o "$work/base.apk" \
+              -I "$ANDROID_JAR" \
+              --manifest android/frida-lab/AndroidManifest.xml \
+              --min-sdk-version "$MIN_SDK" \
+              --target-sdk-version "$TARGET_SDK" \
+              --version-code 1 \
+              --version-name "17-api37-${GITHUB_RUN_NUMBER}"
+
+            cp "$work/base.apk" "$work/unsigned.apk"
+            (
+              cd build/android17/dex
+              zip -q "../apk/$flavor/unsigned.apk" classes.dex
+            )
+
+            for abi in "$@"; do
+              mkdir -p "$work/stage/lib/$abi"
+              cp "native/$abi/libfrida-gadget.so" "$work/stage/lib/$abi/libfrida-gadget.so"
+              cp build/android17/gadget-config.json "$work/stage/lib/$abi/libfrida-gadget.config.so"
+            done
+
+            (
+              cd "$work/stage"
+              zip -q -r "../unsigned.apk" lib
+            )
+
+            "$BT_DIR/zipalign" -p -f 4 "$work/unsigned.apk" "$work/aligned.apk"
+            "$BT_DIR/apksigner" sign \
+              --ks build/android17/debug.keystore \
+              --ks-pass pass:android \
+              --key-pass pass:android \
+              --ks-key-alias androiddebugkey \
+              --out "dist/frida-lab-${flavor}-debug.apk" \
+              "$work/aligned.apk"
+
+            "$BT_DIR/apksigner" verify \
+              --verbose \
+              --print-certs \
+              "dist/frida-lab-${flavor}-debug.apk"
+
+            unzip -l "dist/frida-lab-${flavor}-debug.apk" \
+              | tee "dist/frida-lab-${flavor}.contents.txt"
+
+            unzip -p "dist/frida-lab-${flavor}-debug.apk" classes.dex \
+              | python3 -c 'import sys; d=sys.stdin.buffer.read(8); assert d.startswith(b"dex\n"), d; print("APK DEX PASS:", d)'
+          }
+
+          build_apk armv7 armeabi-v7a
+          build_apk arm64 arm64-v8a
+          build_apk universal armeabi-v7a arm64-v8a
+
+          cp android/frida-lab/adb-smoke.sh dist/adb-smoke.sh
+          chmod +x dist/adb-smoke.sh
+
+      - name: Produce evidence receipt
+        shell: bash
+        env:
+          SOURCE_CI_RUN: ${{ steps.source-run.outputs.run_id }}
+          BUILD_TOOLS: ${{ steps.android-tools.outputs.build_tools }}
+        run: |
+          set -euo pipefail
+          sha256sum \
+            dist/*.apk \
+            native/armeabi-v7a/libfrida-gadget.so \
+            native/arm64-v8a/libfrida-gadget.so \
+            > dist/SHA256SUMS.txt
+
+          python3 - <<'PY'
+          import hashlib
+          import json
+          import os
+          from pathlib import Path
+
+          def sha256(path):
+              h = hashlib.sha256()
+              with open(path, "rb") as f:
+                  for chunk in iter(lambda: f.read(1024 * 1024), b""):
+                      h.update(chunk)
+              return h.hexdigest()
+
+          apks = {}
+          for p in sorted(Path("dist").glob("*.apk")):
+              apks[p.name] = {
+                  "bytes": p.stat().st_size,
+                  "sha256": sha256(p),
+              }
+
+          native = {}
+          for abi in ("armeabi-v7a", "arm64-v8a"):
+              p = Path("native") / abi / "libfrida-gadget.so"
+              native[abi] = {
+                  "bytes": p.stat().st_size,
+                  "sha256": sha256(p),
+              }
+
+          receipt = {
+              "schema": "rafaelia.frida.android-apk-lab.receipt.v1",
+              "source_ci_run_id": int(os.environ["SOURCE_CI_RUN"]),
+              "github_repository": os.environ["GITHUB_REPOSITORY"],
+              "github_workflow_run_id": int(os.environ["GITHUB_RUN_ID"]),
+              "github_sha": os.environ["GITHUB_SHA"],
+              "compile_sdk": int(os.environ["COMPILE_SDK"]),
+              "target_sdk": int(os.environ["TARGET_SDK"]),
+              "min_sdk": int(os.environ["MIN_SDK"]),
+              "build_tools": os.environ["BUILD_TOOLS"],
+              "abis": ["armeabi-v7a", "arm64-v8a"],
+              "apk_signing": "ephemeral-debug-key",
+              "dex_gate": "PASS",
+              "elf_gate": "PASS",
+              "apk": apks,
+              "gadget_elf": native,
+              "physical_device_smoke": "TOKEN_VAZIO",
+              "scope": "embedded-self-process-lab",
+              "claim_allowed": False,
+          }
+
+          Path("dist/receipt.android17-apk-lab.v1.json").write_text(
+              json.dumps(receipt, indent=2, sort_keys=True) + "\n",
+              encoding="utf-8",
+          )
+          PY
+
+          cat dist/receipt.android17-apk-lab.v1.json
+
+      - name: Upload APK + ELF/DEX evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: frida-android17-apk-elf-dex-${{ github.run_id }}
+          if-no-files-found: error
+          retention-days: 14
+          path: |
+            dist/
+            native/
