@@ -54,7 +54,6 @@ resolve_sdk() {
   mkdir -p "$EVIDENCE_DIR" "$(dirname "$TOOLCHAIN_ENV")"
   local sdk_list
   sdk_list="$(mktemp)"
-  trap 'rm -f "$sdk_list"' RETURN
 
   sdkmanager --list --channel=3 > "$sdk_list"
   cp "$sdk_list" "$EVIDENCE_DIR/sdkmanager-list.txt"
@@ -137,6 +136,7 @@ resolve_sdk() {
     printf 'RESOLVED_PLATFORM_PACKAGE=%q\n' "$platform_pkg"
   } > "$TOOLCHAIN_ENV"
 
+  rm -f "$sdk_list"
   rafaelia_notice "Android toolchain resolved fail-closed: ${platform_pkg}, build-tools ${bt_version}, NDK ${NDK_VERSION}"
 }
 
@@ -293,7 +293,6 @@ PY
   # not rewritten to force our linker policy onto upstream binaries.
   python3 - "$NATIVE_DIR/armeabi-v7a/librafaelia-probe.so" 4096 \
              "$NATIVE_DIR/arm64-v8a/librafaelia-probe.so" 16384 <<'PY'
-import re
 import subprocess
 import sys
 
@@ -403,7 +402,7 @@ JSON
     cp "$work/base.apk" "$work/unsigned.apk"
     (
       cd "$DEX_DIR"
-      zip -q "../../apk/$flavor/unsigned.apk" classes.dex
+      zip -q "../apk/$flavor/unsigned.apk" classes.dex
     )
 
     local abi
