@@ -6,12 +6,12 @@ import android.os.Bundle;
 import android.widget.TextView;
 
 public final class MainActivity extends Activity {
-    private static String loadGadget() {
+    private static String loadElf(String library, String label) {
         try {
-            System.loadLibrary("frida-gadget");
-            return "Frida Gadget ELF: LOADED";
+            System.loadLibrary(library);
+            return label + ": LOADED";
         } catch (Throwable t) {
-            return "Frida Gadget ELF: FAILED\n" + t.getClass().getName() + ": " + String.valueOf(t.getMessage());
+            return label + ": FAILED\n" + t.getClass().getName() + ": " + String.valueOf(t.getMessage());
         }
     }
 
@@ -21,7 +21,8 @@ public final class MainActivity extends Activity {
 
         StringBuilder status = new StringBuilder();
         status.append("RAFAELIA / Frida Android Lab\n\n");
-        status.append(loadGadget()).append("\n");
+        status.append(loadElf("rafaelia-probe", "Source-built ELF probe")).append("\n");
+        status.append(loadElf("frida-gadget", "Frida Gadget ELF")).append("\n");
         status.append("SDK: ").append(Build.VERSION.SDK_INT).append("\n");
         status.append("Primary ABI: ");
         if (Build.VERSION.SDK_INT >= 21 && Build.SUPPORTED_ABIS.length > 0) {
@@ -30,7 +31,8 @@ public final class MainActivity extends Activity {
             status.append("TOKEN_VAZIO");
         }
         status.append("\n");
-        status.append("DEX -> Java Activity -> System.loadLibrary -> ELF\n");
+        status.append("C source -> NDK clang -> ELF\n");
+        status.append("Java source -> javac -> D8 -> DEX -> Activity -> System.loadLibrary -> ELF\n");
         status.append("Embedded Gadget endpoint: 127.0.0.1:27042\n");
 
         TextView view = new TextView(this);
