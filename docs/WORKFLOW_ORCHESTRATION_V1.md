@@ -12,6 +12,23 @@ The workflow layer is declarative:
 
 Executable build/test logic lives in `.github/scripts/rafaelia/` so it can be invoked outside GitHub Actions and reviewed without parsing large YAML shell blocks.
 
+## External dependency model: `BOUNDED_CATALYST`
+
+External GitHub Actions are treated as peripheral catalysts, not implementation authority. They may bootstrap a workspace/toolchain or transport evidence, but the semantic build/test/gate logic remains in repository-owned scripts.
+
+For the custom RAFAELIA workflows the allowed catalysts are identity-pinned to full commits:
+
+- `actions/checkout` — v6.0.2 / Node 24 — workspace bootstrap;
+- `actions/setup-java` — v5.6.0 / Node 24 — JDK bootstrap;
+- `android-actions/setup-android` — v4.0.1 / Node 24 — Android SDK command-line bootstrap;
+- `actions/upload-artifact` — v7.0.1 / Node 24 — evidence transport.
+
+The full SHA, not the mutable major tag, is the enforced workflow identity. `workflow-contract.py` fails closed if a custom workflow introduces an unclassified external action, changes a catalyst pin, or adds Node runtime escape hatches such as `FORCE_JAVASCRIPT_ACTIONS_TO_NODE24` or `ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION`.
+
+The Android setup action is intentionally configured with `packages: ""`: it exposes the command-line tooling, while SDK/Build-Tools/NDK package selection remains exclusively in `android-lab-ci.sh`. This avoids a duplicate package-resolution/install loop. Java setup uses `check-latest: false` so a compatible runner cache is preferred instead of forcing an unnecessary network refresh.
+
+This boundary does not mean external software is unnecessary. It means external software is **replaceable infrastructure around a locally owned contract**: if a catalyst changes, the build semantics and evidence model do not silently move with it.
+
 ## Workflow roles
 
 ### `.github/workflows/ci.yml`
@@ -20,7 +37,7 @@ Role: `UPSTREAM_RELEASE_GRAPH`.
 
 This is the large Frida multi-platform build/release graph. It spans Windows, macOS, Linux, iOS, watchOS, tvOS, Android, QNX, SDK/toolchain rolling, packaging and publish jobs. The RAFAELIA Android lab does not inject implementation logic into this release graph.
 
-The file is intentionally preserved rather than mechanically reformatted: a broad rewrite would couple the lab changes to unrelated release paths and increase regression risk. `workflow-contract.py` still inventories and gates its sensitive trigger/release anchors.
+The file is intentionally preserved rather than mechanically reformatted: a broad rewrite would couple the lab changes to unrelated release paths and increase regression risk. `workflow-contract.py` still inventories and gates its sensitive trigger/release anchors. Dependency-generation migration inside this upstream graph is a separate risk surface and must not be silently coupled to the custom lab workflows.
 
 ### `.github/workflows/android17-apk-elf-dex.yml`
 
@@ -69,7 +86,7 @@ Role: `RAFAELIA_CUSTOM_ORCHESTRATION / META-GATE`.
 
 Implementation: `.github/scripts/rafaelia/workflow-contract.py`.
 
-It inventories every `.yml/.yaml` under `.github/workflows`, records hashes/roles, rejects `pull_request_target`, rejects broad `write-all`, rejects floating action refs such as `@main/@master`, requires explicit controls on custom workflows, and protects the upstream release graph's trigger anchors.
+It inventories every `.yml/.yaml` under `.github/workflows`, records hashes/roles/external actions, rejects `pull_request_target`, rejects broad `write-all`, rejects floating action refs such as `@main/@master`, requires explicit controls on custom workflows, enforces the bounded catalyst pins and protects the upstream release graph's trigger anchors.
 
 ## Evidence hierarchy
 
