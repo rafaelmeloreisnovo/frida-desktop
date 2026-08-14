@@ -1,55 +1,97 @@
 # Android 17 APK + ELF/DEX lab
 
-This repository now has two separate Android delivery paths.
+This repository has two independent Android paths:
 
-1. The existing Frida Android CI lane remains the source of truth for native artifacts.
-2. `.github/workflows/android17-apk-elf-dex.yml` consumes the ARM Frida Gadget artifacts and assembles an installable development APK without Gradle.
+1. The existing Frida Android CI lane builds the repository's native Frida targets.
+2. `.github/workflows/android17-apk-elf-dex.yml` is a standalone development lab for an installable self-process APK. It does not depend on the monolithic native CI producing artifacts first.
 
-## Explicit build path
+## Explicit build graph
 
-The APK lane is intentionally low-level and inspectable:
+The lab deliberately avoids Gradle so every binary transition remains visible.
 
-`Java source -> javac -> .class -> d8 -> classes.dex -> aapt2 -> APK -> zipalign -> apksigner`
+Source-built native path:
 
-The native side is verified independently:
+`elf_probe.c -> Android NDK clang -> ARMv7 ELF + AArch64 ELF -> readelf/file gates`
 
-`Frida CI artifact -> ELF magic -> readelf machine gate -> lib/<ABI>/libfrida-gadget.so`
+Managed-code path:
+
+`MainActivity.java -> javac -> .class -> d8 -> classes.dex`
+
+APK path:
+
+`AndroidManifest.xml + classes.dex + ELF libraries -> aapt2/zip -> zipalign -> apksigner -> APK`
+
+Frida Gadget provenance path:
+
+`pinned Frida release metadata -> exact asset name -> release SHA-256 digest -> HTTPS download -> SHA-256 comparison -> xz validation -> ELF validation`
+
+The pinned development input is Frida `17.9.11`. The workflow refuses to continue if either required release asset is absent, if its release metadata lacks a valid `sha256:` digest, if the download URL is outside the expected Frida release path, or if the downloaded bytes do not match that digest.
+
+## ABI and SDK contract
 
 Supported APK ABIs:
 
-- `armeabi-v7a` (ARMv7 / 32-bit)
-- `arm64-v8a` (AArch64 / 64-bit)
+- `armeabi-v7a` — ARMv7 / 32-bit
+- `arm64-v8a` — AArch64 / 64-bit
 
-Android SDK policy:
+Android toolchain policy:
 
 - `compileSdk = 37`
-- `targetSdk = 37` (Android 17)
+- `targetSdk = 37` — Android 17
 - `minSdk = 21`
-- Build-Tools: latest `37.x` visible to `sdkmanager` at build time
+- NDK `29.0.14206865`
+- latest Build-Tools `37.x` visible to `sdkmanager` at build time
 
-## Outputs
+The universal APK contains both ARM ABIs. It does not make a 32-bit ABI executable on a 64-bit-only device: Android still chooses only an ABI supported by the physical device. Use the ARM64 APK on ARM64-only devices.
+
+## Native ELF gates
+
+For each ABI, the workflow carries two independent ELF objects:
+
+- `librafaelia-probe.so`: compiled in the workflow from `android/frida-lab/native/elf_probe.c` with the corresponding NDK clang wrapper;
+- `libfrida-gadget.so`: retrieved from the pinned official Frida release and checked against its release digest.
+
+The gate checks ELF magic and machine type with `readelf`:
+
+- ARMv7 must report `Machine: ARM`;
+- ARM64 must report `Machine: AArch64`.
+
+The source-built probe must also expose `rafaelia_elf_probe_identity` in its symbol table. Header, dynamic-section and `file` evidence are preserved in the workflow artifact.
+
+## DEX gate
+
+`MainActivity.java` is compiled directly by `javac`. `d8` converts the resulting `.class` files to `classes.dex`. The workflow checks DEX magic before packaging and checks the DEX again after extracting it from each signed APK.
+
+At runtime the Activity makes both native loads explicit:
+
+`classes.dex -> MainActivity -> System.loadLibrary("rafaelia-probe") -> source-built ELF`
+
+`classes.dex -> MainActivity -> System.loadLibrary("frida-gadget") -> Frida Gadget ELF`
+
+## APK outputs
 
 The workflow produces:
 
 - `frida-lab-armv7-debug.apk`
 - `frida-lab-arm64-debug.apk`
 - `frida-lab-universal-debug.apk`
-- ARMv7 and ARM64 `libfrida-gadget.so` evidence inputs
-- ELF header evidence
-- APK content listings
+- ARMv7 and ARM64 source-built probe ELFs
+- ARMv7 and ARM64 Frida Gadget ELFs
+- ELF header/dynamic-section evidence
+- APK content and signature evidence
 - `SHA256SUMS.txt`
-- `receipt.android17-apk-lab.v1.json`
+- `receipt.android17-apk-lab.v2.json`
 - `adb-smoke.sh`
 
-The APK is signed with an ephemeral debug key generated during CI. It is a development/test artifact, not a release-signing path.
+Each APK is aligned with `zipalign`, signed with an ephemeral CI debug key, and verified with `apksigner`. This is a development/test signing path, not a production release key.
 
-## Developer mode / ADB
+## Developer options and ADB
 
 On the Android device:
 
 1. Enable Developer options.
 2. Enable USB debugging, or Wireless debugging where supported.
-3. Authorize the host when Android shows the ADB fingerprint prompt.
+3. Authorize the host when Android presents the ADB fingerprint prompt.
 
 With the workflow artifact extracted on the host:
 
@@ -58,25 +100,34 @@ chmod +x dist/adb-smoke.sh
 ./dist/adb-smoke.sh dist
 ```
 
-The script detects the device API and primary ABI, chooses the ARMv7 or ARM64 APK, installs it, starts `io.rafaelia.fridalab/.MainActivity`, and forwards TCP 27042 through ADB.
+The script reads the physical device API and primary ABI, selects the ARMv7 or ARM64 APK, installs it with ADB, launches `io.rafaelia.fridalab/.MainActivity`, obtains its PID, and creates a host-to-device TCP forward for port `27042`.
 
-The embedded Frida Gadget is configured for localhost port 27042 with `on_load = resume`. The Activity makes the boundary explicit:
-
-`classes.dex -> MainActivity -> System.loadLibrary("frida-gadget") -> ELF`
+The embedded Gadget is configured to listen only on device localhost `127.0.0.1:27042` with `on_load = resume`.
 
 ## Scope boundary
 
-Developer mode / ADB does not itself grant system-wide process instrumentation privileges.
+Developer options and ADB do not grant root or system-wide process instrumentation privileges.
 
-This lab embeds Frida Gadget inside its own debuggable application process. That path can be installed and exercised without root because the native library belongs to the app being tested. System-wide `frida-server` operation is a separate mode and is not bundled into this APK workflow.
+This lab embeds Frida Gadget only inside its own debuggable application process. It does not package or deploy `frida-server`, does not alter other applications, and does not represent ADB access as system privilege.
 
 ## Evidence policy
 
-The CI receipt records the DEX gate, ELF gate, APK SHA-256, Gadget SHA-256, source CI run, workflow run, commit, SDK and Build-Tools values.
+The V2 receipt records:
 
-A GitHub-hosted runner cannot prove a physical-device install/launch by itself. Until a real Android device executes the ADB smoke path, the receipt keeps:
+- repository, workflow run and commit identity;
+- Frida version;
+- SDK, Build-Tools and NDK versions;
+- ARMv7/ARM64 native ELF hashes;
+- three APK hashes;
+- release-digest gate;
+- source-built ELF gate;
+- Frida Gadget ELF gate;
+- DEX gate;
+- APK signature gate.
+
+A GitHub-hosted runner cannot prove a physical-device installation and launch. Until `adb-smoke.sh` is run against a real Android device, the receipt deliberately keeps:
 
 - `physical_device_smoke = TOKEN_VAZIO`
 - `claim_allowed = false`
 
-This prevents a cloud build from being mislabeled as a physical Android validation.
+Cloud compilation is therefore not mislabeled as physical Android validation.
