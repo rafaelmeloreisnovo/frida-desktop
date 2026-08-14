@@ -1,0 +1,68 @@
+name: Android 17 RFL Learning Selftest
+
+on:
+  pull_request:
+    paths:
+      - "android/frida-lab/native/learning_store.h"
+      - "android/frida-lab/native/learning_store.c"
+      - "android/frida-lab/native/learning_store_selftest.c"
+      - "android/frida-lab/native/elf_probe.c"
+      - "android/frida-lab/src/io/rafaelia/fridalab/MainActivity.java"
+      - ".github/workflows/android17-rfl-selftest.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  rfl-selftest:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Compile RFL V1 with strict warnings
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p build/rfl-selftest evidence
+          cc \
+            -std=c11 \
+            -O2 \
+            -Wall \
+            -Wextra \
+            -Werror \
+            -pedantic \
+            -I android/frida-lab/native \
+            android/frida-lab/native/learning_store.c \
+            android/frida-lab/native/learning_store_selftest.c \
+            -o build/rfl-selftest/rfl-selftest
+
+      - name: Run append replay corruption and promotion gates
+        shell: bash
+        run: |
+          set -euo pipefail
+          build/rfl-selftest/rfl-selftest | tee evidence/rfl-selftest.txt
+          grep -q '^RFL_SELFTEST_OK ' evidence/rfl-selftest.txt
+          grep -q 'replay=PASS' evidence/rfl-selftest.txt
+          grep -q 'corrupt_tail=RECOVERED' evidence/rfl-selftest.txt
+          grep -q 'promotion=DISABLED' evidence/rfl-selftest.txt
+
+      - name: Record source identity
+        shell: bash
+        run: |
+          set -euo pipefail
+          sha256sum \
+            android/frida-lab/native/learning_store.h \
+            android/frida-lab/native/learning_store.c \
+            android/frida-lab/native/learning_store_selftest.c \
+            android/frida-lab/native/elf_probe.c \
+            > evidence/RFL_SOURCE_SHA256SUMS.txt
+
+      - name: Upload RFL selftest evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: rfl-learning-selftest-${{ github.run_id }}
+          path: evidence/
+          if-no-files-found: error
+          retention-days: 14
