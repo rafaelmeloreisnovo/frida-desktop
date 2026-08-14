@@ -60,23 +60,28 @@ jobs:
 
           bt_pkg="$(
             awk -F'|' '
-              /build-tools;37\./ {
-                gsub(/^[[:space:]]+|[[:space:]]+$/, "", $1)
-                print $1
+              {
+                pkg = $1
+                gsub(/^[[:space:]]+|[[:space:]]+$/, "", pkg)
+                if (pkg ~ /^build-tools;37\.[0-9]+\.[0-9]+$/)
+                  print pkg
               }
             ' "$sdk_list" |
-              sort -V |
+              sort -Vu |
               tail -n 1
           )"
 
           platform_pkg="$(
             awk -F'|' '
-              /platforms;android-37([[:space:]]|$)/ {
-                gsub(/^[[:space:]]+|[[:space:]]+$/, "", $1)
-                print $1
+              {
+                pkg = $1
+                gsub(/^[[:space:]]+|[[:space:]]+$/, "", pkg)
+                if (pkg ~ /^platforms;android-37(\.[0-9]+)?$/)
+                  print pkg
               }
             ' "$sdk_list" |
-              head -n 1
+              sort -Vu |
+              tail -n 1
           )"
 
           if [[ -z "$platform_pkg" ]]; then
@@ -92,11 +97,12 @@ jobs:
           fi
 
           [[ -n "$bt_pkg" ]] || {
-            echo "::error::Android Build-Tools 37.x not found by sdkmanager"
+            echo "::error::Stable Android Build-Tools 37.x not found by sdkmanager"
+            grep -E 'build-tools;37\.' "$sdk_list" || true
             exit 43
           }
           [[ -n "$platform_pkg" ]] || {
-            echo "::error::Neither platforms;android-37 nor platforms;android-CinnamonBun is available"
+            echo "::error::No stable Android 17 platform package found"
             grep -E 'platforms;android-(37|CinnamonBun)' "$sdk_list" || true
             exit 44
           }
