@@ -39,13 +39,15 @@ public final class MainActivity extends Activity {
     private static final int LEARNING_OBSERVE = 1;
     private static final int LEARNING_LEARN_SHADOW = 2;
     private static final int LEARNING_PREDICT_SHADOW = 3;
-    private static final int LEARNING_FROZEN = 4;
+    private static final int LEARNING_VALIDATE_SHADOW = 4;
+    private static final int LEARNING_FROZEN = 5;
 
     private static final String[] LEARNING_MODE_LABELS = new String[] {
             "OFF — sem gravação",
             "OBSERVE — medir e gravar",
             "LEARN_SHADOW — aprender sem agir",
-            "PREDICT_SHADOW — prever sem agir",
+            "PREDICT_SHADOW — prever e continuar aprendendo",
+            "VALIDATE_SHADOW — modelo congelado + dados novos",
             "FROZEN — somente leitura"
     };
 
@@ -131,7 +133,9 @@ public final class MainActivity extends Activity {
         return "Java.perform(function () {\n"
                 + "  const Lab = Java.use('io.rafaelia.fridalab.MainActivity');\n"
                 + "  // Pass only real observations from your hook:\n"
-                + "  // Lab.learningObserve(contextHash, actualClass, eventType, costNs, memoryDelta, auxHash);\n"
+                + "  // Lab.learningObserve(contextHash, actualCandidate, eventType, costNs, memoryDelta, auxHash);\n"
+                + "  // Candidate may represent a class or route (CPU scalar / NEON / GPU / storage).\n"
+                + "  // VALIDATE_SHADOW predicts with the frozen model and never trains it.\n"
                 + "});";
     }
 
@@ -155,15 +159,19 @@ public final class MainActivity extends Activity {
     private void renderLearningStatus() {
         if (learningStatusView == null) return;
         StringBuilder text = new StringBuilder();
-        text.append("\nLEARNING / RFL V1\n");
+        text.append("\nLEARNING / RFL V1 + NEON4096/3\n");
         text.append(safeLearningSnapshot(verboseMode)).append("\n");
         text.append("Store: ").append(learningStorePath == null ? "TOKEN_VAZIO" : learningStorePath).append("\n");
-        text.append("ZIPRAF checkpoint: TOKEN_VAZIO / Phase 2\n");
+        text.append("VALIDATE_SHADOW: modelo congelado; janela de validação não altera suporte aprendido.\n");
+        text.append("Validation persistence: TOKEN_VAZIO (janela atual é volátil).\n");
+        text.append("ZIPRAF checkpoint + segment GC/compaction: TOKEN_VAZIO / próxima fase.\n");
+        text.append("GPU compute backend: TOKEN_VAZIO até execução física medida.\n");
         text.append("Automatic ACTIVE policy: DISABLED\n");
         text.append("Promotion gate: support + error + confidence + overhead + memory + validation window\n");
         if (verboseMode) {
             text.append("\nFrida bridge example:\n").append(learningAgentSnippet()).append("\n");
-            text.append("\nHot path: fixed native predictor + 4 KiB record slab; no Java DB object per observation.\n");
+            text.append("\nNative geometry: 4096 B = 64 B control + 3 x 1344 B; 64 cache-lines; 256 NEON vectors.\n");
+            text.append("RFL hot path: fixed native predictor + 4 KiB record slab; no Java DB object per observation.\n");
         }
         learningStatusView.setText(text.toString());
     }
@@ -197,7 +205,7 @@ public final class MainActivity extends Activity {
                 status.append("Device: ").append(Build.MANUFACTURER).append(" ")
                         .append(Build.MODEL).append("\n");
                 status.append("Build fingerprint: ").append(Build.FINGERPRINT).append("\n");
-                status.append("C source -> NDK clang -> ELF\n");
+                status.append("C source -> NDK clang -> ELF -> RFL/NEON4096 runtime\n");
                 status.append("Java source -> javac -> D8 -> DEX -> Activity -> System.loadLibrary -> ELF\n");
                 status.append("\nHost commands:\n").append(hostCommands()).append("\n");
                 status.append("\nSystem Developer Options status is not inferred by this app; use the button below to open the Android settings page.\n");
@@ -364,7 +372,7 @@ public final class MainActivity extends Activity {
         root.addView(learningPanel);
 
         TextView learningTitle = new TextView(this);
-        learningTitle.setText("Learning / RFL V1 — shadow only");
+        learningTitle.setText("Learning / RFL + NEON4096 — shadow / validation");
         learningTitle.setTextSize(18.0f);
         learningPanel.addView(learningTitle);
 
@@ -405,7 +413,7 @@ public final class MainActivity extends Activity {
         }));
 
         TextView phase2 = new TextView(this);
-        phase2.setText("ZIPRAF checkpoint + segment GC/compaction: Phase 2 — ainda não promovido.");
+        phase2.setText("Próxima etapa: persistir janela VALIDATE + ZIPRAF checkpoint + segment GC/compaction + backend GPU físico medido.");
         learningPanel.addView(phase2);
 
         learningModeSpinner.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {

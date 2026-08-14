@@ -1,4 +1,4 @@
-name: Android 17 RFL Learning Selftest
+name: Android 17 RFL + NEON4096 Learning Selftest
 
 on:
   pull_request:
@@ -6,6 +6,11 @@ on:
       - "android/frida-lab/native/learning_store.h"
       - "android/frida-lab/native/learning_store.c"
       - "android/frida-lab/native/learning_store_selftest.c"
+      - "android/frida-lab/native/neon4096_core.h"
+      - "android/frida-lab/native/neon4096_core.c"
+      - "android/frida-lab/native/learning_runtime.h"
+      - "android/frida-lab/native/learning_runtime.c"
+      - "android/frida-lab/native/learning_runtime_selftest.c"
       - "android/frida-lab/native/elf_probe.c"
       - "android/frida-lab/src/io/rafaelia/fridalab/MainActivity.java"
       - ".github/workflows/android17-rfl-selftest.yml"
@@ -38,6 +43,24 @@ jobs:
             android/frida-lab/native/learning_store_selftest.c \
             -o build/rfl-selftest/rfl-selftest
 
+      - name: Compile NEON4096 runtime with strict warnings
+        shell: bash
+        run: |
+          set -euo pipefail
+          cc \
+            -std=c11 \
+            -O2 \
+            -Wall \
+            -Wextra \
+            -Werror \
+            -pedantic \
+            -I android/frida-lab/native \
+            android/frida-lab/native/learning_store.c \
+            android/frida-lab/native/neon4096_core.c \
+            android/frida-lab/native/learning_runtime.c \
+            android/frida-lab/native/learning_runtime_selftest.c \
+            -o build/rfl-selftest/neon4096-runtime-selftest
+
       - name: Run append replay corruption and promotion gates
         shell: bash
         run: |
@@ -48,6 +71,19 @@ jobs:
           grep -q 'corrupt_tail=RECOVERED' evidence/rfl-selftest.txt
           grep -q 'promotion=DISABLED' evidence/rfl-selftest.txt
 
+      - name: Run NEON4096 contract and frozen-validation gates
+        shell: bash
+        run: |
+          set -euo pipefail
+          build/rfl-selftest/neon4096-runtime-selftest | tee evidence/neon4096-runtime-selftest.txt
+          grep -q '^NEON4096_RUNTIME_SELFTEST_OK ' evidence/neon4096-runtime-selftest.txt
+          grep -q 'page=4096' evidence/neon4096-runtime-selftest.txt
+          grep -q 'thirds=1344x3' evidence/neon4096-runtime-selftest.txt
+          grep -q 'validation=FROZEN' evidence/neon4096-runtime-selftest.txt
+          grep -q 'support_unchanged=PASS' evidence/neon4096-runtime-selftest.txt
+          grep -q 'gpu=TOKEN_VAZIO' evidence/neon4096-runtime-selftest.txt
+          grep -q 'promotion=DISABLED' evidence/neon4096-runtime-selftest.txt
+
       - name: Record source identity
         shell: bash
         run: |
@@ -56,13 +92,18 @@ jobs:
             android/frida-lab/native/learning_store.h \
             android/frida-lab/native/learning_store.c \
             android/frida-lab/native/learning_store_selftest.c \
+            android/frida-lab/native/neon4096_core.h \
+            android/frida-lab/native/neon4096_core.c \
+            android/frida-lab/native/learning_runtime.h \
+            android/frida-lab/native/learning_runtime.c \
+            android/frida-lab/native/learning_runtime_selftest.c \
             android/frida-lab/native/elf_probe.c \
-            > evidence/RFL_SOURCE_SHA256SUMS.txt
+            > evidence/RFL_NEON4096_SOURCE_SHA256SUMS.txt
 
-      - name: Upload RFL selftest evidence
+      - name: Upload RFL and NEON4096 selftest evidence
         uses: actions/upload-artifact@v4
         with:
-          name: rfl-learning-selftest-${{ github.run_id }}
+          name: rfl-neon4096-selftest-${{ github.run_id }}
           path: evidence/
           if-no-files-found: error
           retention-days: 14
