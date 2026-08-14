@@ -13,6 +13,10 @@ static void must(int condition, const char *message) {
     }
 }
 
+static uint8_t pattern_byte(uint32_t index) {
+    return (uint8_t)((index * 29u + 7u) & 0xffu);
+}
+
 int main(void) {
     must(sizeof(RafaeliaNeon4096ControlV1) == 64u, "NEON4096 control is 64 B");
     must(sizeof(RafaeliaNeon4096PageV1) == 4096u, "NEON4096 page is 4096 B");
@@ -31,8 +35,11 @@ int main(void) {
 
     RafaeliaNeon4096PageV1 page;
     memset(&page, 0, sizeof(page));
-    for (uint32_t i = 0u; i < RAFAELIA_NEON4096_PAYLOAD_BYTES; ++i)
-        page.hot_l1[i] = (uint8_t)((i * 29u + 7u) & 0xffu);
+    for (uint32_t i = 0u; i < RAFAELIA_NEON4096_REGION_BYTES; ++i) {
+        page.hot_l1[i] = pattern_byte(i);
+        page.buffer_l2[i] = pattern_byte(i + RAFAELIA_NEON4096_REGION_BYTES);
+        page.storage[i] = pattern_byte(i + 2u * RAFAELIA_NEON4096_REGION_BYTES);
+    }
     must(rafaelia_neon4096_seal(
              &page, 42u, RAFAELIA_NEON4096_PAYLOAD_BYTES,
              probe.default_route) == 0,
