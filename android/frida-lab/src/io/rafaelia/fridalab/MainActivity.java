@@ -14,28 +14,74 @@ import android.os.Process;
 import android.provider.Settings;
 import android.util.Log;
 import android.view.View;
+import android.widget.AdapterView;
+import android.widget.ArrayAdapter;
 import android.widget.Button;
 import android.widget.CheckBox;
 import android.widget.CompoundButton;
 import android.widget.LinearLayout;
 import android.widget.ScrollView;
+import android.widget.Spinner;
 import android.widget.TextView;
 import android.widget.Toast;
+
+import java.io.File;
 
 public final class MainActivity extends Activity {
     private static final String TAG = "RAFAELIA-FridaLab";
     private static final String PREFS = "frida_lab_prefs";
     private static final String PREF_DEVELOPER = "developer_mode";
     private static final String PREF_VERBOSE = "verbose_mode";
+    private static final String PREF_LEARNING_MODE = "learning_mode";
     private static final String ENDPOINT = "127.0.0.1:27042";
+
+    private static final int LEARNING_OFF = 0;
+    private static final int LEARNING_OBSERVE = 1;
+    private static final int LEARNING_LEARN_SHADOW = 2;
+    private static final int LEARNING_PREDICT_SHADOW = 3;
+    private static final int LEARNING_FROZEN = 4;
+
+    private static final String[] LEARNING_MODE_LABELS = new String[] {
+            "OFF — sem gravação",
+            "OBSERVE — medir e gravar",
+            "LEARN_SHADOW — aprender sem agir",
+            "PREDICT_SHADOW — prever sem agir",
+            "FROZEN — somente leitura"
+    };
+
+    private static native int nativeLearningInit(String path);
+    private static native int nativeLearningSetMode(int mode);
+    private static native int nativeLearningFlush();
+    private static native int nativeLearningResetVolatile();
+    private static native String nativeLearningSnapshot(boolean verbose);
+
+    /*
+     * Public bridge for Frida JavaScript. Instrumentation agents can call this
+     * without creating a Java-side model or database object per event.
+     */
+    public static native int learningObserve(
+            long contextHash,
+            int candidateId,
+            int eventType,
+            long costNs,
+            long memoryDelta,
+            long auxHash);
 
     private boolean developerMode;
     private boolean verboseMode;
+    private boolean learningInitialized;
+    private boolean changingLearningMode;
+    private int learningMode;
+    private int learningInitRc;
+    private String learningStorePath;
     private String probeStatus;
     private String gadgetStatus;
     private TextView statusView;
+    private TextView learningStatusView;
     private CheckBox developerCheck;
     private CheckBox verboseCheck;
+    private LinearLayout learningPanel;
+    private Spinner learningModeSpinner;
 
     private String loadElf(String library, String label) {
         try {
@@ -62,9 +108,7 @@ public final class MainActivity extends Activity {
         if (Build.VERSION.SDK_INT >= 21 && Build.SUPPORTED_ABIS.length > 0) {
             StringBuilder result = new StringBuilder();
             for (int i = 0; i < Build.SUPPORTED_ABIS.length; i++) {
-                if (i != 0) {
-                    result.append(", ");
-                }
+                if (i != 0) result.append(", ");
                 result.append(Build.SUPPORTED_ABIS[i]);
             }
             return result.toString();
@@ -83,10 +127,45 @@ public final class MainActivity extends Activity {
                 + "frida -H 127.0.0.1:27042 -n Gadget";
     }
 
+    private String learningAgentSnippet() {
+        return "Java.perform(function () {\n"
+                + "  const Lab = Java.use('io.rafaelia.fridalab.MainActivity');\n"
+                + "  // Pass only real observations from your hook:\n"
+                + "  // Lab.learningObserve(contextHash, actualClass, eventType, costNs, memoryDelta, auxHash);\n"
+                + "});";
+    }
+
     private void verbose(String message) {
-        if (verboseMode) {
-            Log.v(TAG, message);
+        if (verboseMode) Log.v(TAG, message);
+    }
+
+    private String safeLearningSnapshot(boolean verbose) {
+        if (!learningInitialized) {
+            return "Learning core: NOT_INITIALIZED rc=" + learningInitRc;
         }
+        try {
+            return nativeLearningSnapshot(verbose);
+        } catch (Throwable t) {
+            Log.e(TAG, "Learning snapshot failed", t);
+            return "Learning core: FAILED — " + t.getClass().getSimpleName() + ": "
+                    + String.valueOf(t.getMessage());
+        }
+    }
+
+    private void renderLearningStatus() {
+        if (learningStatusView == null) return;
+        StringBuilder text = new StringBuilder();
+        text.append("\nLEARNING / RFL V1\n");
+        text.append(safeLearningSnapshot(verboseMode)).append("\n");
+        text.append("Store: ").append(learningStorePath == null ? "TOKEN_VAZIO" : learningStorePath).append("\n");
+        text.append("ZIPRAF checkpoint: TOKEN_VAZIO / Phase 2\n");
+        text.append("Automatic ACTIVE policy: DISABLED\n");
+        text.append("Promotion gate: support + error + confidence + overhead + memory + validation window\n");
+        if (verboseMode) {
+            text.append("\nFrida bridge example:\n").append(learningAgentSnippet()).append("\n");
+            text.append("\nHot path: fixed native predictor + 4 KiB record slab; no Java DB object per observation.\n");
+        }
+        learningStatusView.setText(text.toString());
     }
 
     private void renderStatus() {
@@ -98,7 +177,7 @@ public final class MainActivity extends Activity {
             status.append(gadgetStatus).append("\n\n");
             status.append("Endpoint: ").append(ENDPOINT).append("\n");
             status.append("Próximo passo: conecte pelo ADB/Frida no computador.\n");
-            status.append("Ative Developer Mode abaixo para diagnóstico técnico.\n");
+            status.append("Ative Developer Mode abaixo para diagnóstico e Learning.\n");
         } else {
             status.append("DEVELOPER MODE: ON\n");
             status.append("Verbose: ").append(verboseMode ? "ON" : "OFF").append("\n\n");
@@ -126,8 +205,11 @@ public final class MainActivity extends Activity {
         }
 
         statusView.setText(status.toString());
+        if (learningPanel != null) learningPanel.setVisibility(developerMode ? View.VISIBLE : View.GONE);
+        renderLearningStatus();
         verbose("renderStatus developer=" + developerMode + " verbose=" + verboseMode
-                + " pid=" + Process.myPid() + " abi=" + primaryAbi());
+                + " pid=" + Process.myPid() + " abi=" + primaryAbi()
+                + " learningMode=" + learningMode);
     }
 
     private void saveModes() {
@@ -135,6 +217,7 @@ public final class MainActivity extends Activity {
                 .edit()
                 .putBoolean(PREF_DEVELOPER, developerMode)
                 .putBoolean(PREF_VERBOSE, verboseMode)
+                .putInt(PREF_LEARNING_MODE, learningMode)
                 .apply();
     }
 
@@ -156,8 +239,87 @@ public final class MainActivity extends Activity {
 
     private void copyHostCommands() {
         ClipboardManager clipboard = (ClipboardManager) getSystemService(Context.CLIPBOARD_SERVICE);
-        clipboard.setPrimaryClip(ClipData.newPlainText("Frida host commands", hostCommands()));
-        Toast.makeText(this, "Comandos ADB/Frida copiados", Toast.LENGTH_SHORT).show();
+        clipboard.setPrimaryClip(ClipData.newPlainText(
+                "Frida host + learning commands",
+                hostCommands() + "\n\n" + learningAgentSnippet()));
+        Toast.makeText(this, "Comandos ADB/Frida/Learning copiados", Toast.LENGTH_SHORT).show();
+    }
+
+    private void initializeLearning() {
+        learningStorePath = new File(getFilesDir(), "frida-learning-v1.rfl").getAbsolutePath();
+        try {
+            learningInitRc = nativeLearningInit(learningStorePath);
+            learningInitialized = learningInitRc == 0;
+            if (learningInitialized) {
+                int rc = nativeLearningSetMode(learningMode);
+                if (rc != 0) {
+                    Log.e(TAG, "Could not restore learning mode rc=" + rc);
+                    learningMode = LEARNING_OFF;
+                    nativeLearningSetMode(LEARNING_OFF);
+                }
+            }
+        } catch (Throwable t) {
+            learningInitialized = false;
+            learningInitRc = Integer.MIN_VALUE;
+            Log.e(TAG, "Learning initialization failed", t);
+        }
+    }
+
+    private void setLearningMode(int requestedMode, boolean fromUser) {
+        if (requestedMode < LEARNING_OFF || requestedMode > LEARNING_FROZEN) return;
+        if (!learningInitialized) {
+            if (fromUser) Toast.makeText(this, "Learning core não inicializado", Toast.LENGTH_SHORT).show();
+            return;
+        }
+        try {
+            int rc = nativeLearningSetMode(requestedMode);
+            if (rc == 0) {
+                learningMode = requestedMode;
+                saveModes();
+                if (fromUser) {
+                    Toast.makeText(this, "Learning: " + LEARNING_MODE_LABELS[requestedMode], Toast.LENGTH_SHORT).show();
+                }
+            } else {
+                Toast.makeText(this, "Falha ao mudar Learning rc=" + rc, Toast.LENGTH_LONG).show();
+                changingLearningMode = true;
+                learningModeSpinner.setSelection(learningMode);
+                changingLearningMode = false;
+            }
+        } catch (Throwable t) {
+            Log.e(TAG, "Learning mode change failed", t);
+            Toast.makeText(this, "Learning mode falhou: " + t.getClass().getSimpleName(), Toast.LENGTH_LONG).show();
+        }
+        renderLearningStatus();
+    }
+
+    private void flushLearning() {
+        if (!learningInitialized) return;
+        try {
+            int rc = nativeLearningFlush();
+            Toast.makeText(this, rc == 0 ? "RFL flush: PASS" : "RFL flush rc=" + rc,
+                    Toast.LENGTH_SHORT).show();
+        } catch (Throwable t) {
+            Log.e(TAG, "Learning flush failed", t);
+            Toast.makeText(this, "RFL flush falhou", Toast.LENGTH_LONG).show();
+        }
+        renderLearningStatus();
+    }
+
+    private void resetVolatilePredictor() {
+        if (!learningInitialized) return;
+        if (learningMode != LEARNING_OFF && learningMode != LEARNING_FROZEN) {
+            Toast.makeText(this, "Coloque Learning em OFF ou FROZEN antes do reset", Toast.LENGTH_LONG).show();
+            return;
+        }
+        try {
+            int rc = nativeLearningResetVolatile();
+            Toast.makeText(this, rc == 0 ? "Preditor volátil resetado" : "Reset rc=" + rc,
+                    Toast.LENGTH_SHORT).show();
+        } catch (Throwable t) {
+            Log.e(TAG, "Learning reset failed", t);
+            Toast.makeText(this, "Reset falhou", Toast.LENGTH_LONG).show();
+        }
+        renderLearningStatus();
     }
 
     @Override
@@ -167,9 +329,12 @@ public final class MainActivity extends Activity {
         SharedPreferences prefs = getSharedPreferences(PREFS, MODE_PRIVATE);
         developerMode = prefs.getBoolean(PREF_DEVELOPER, false);
         verboseMode = prefs.getBoolean(PREF_VERBOSE, false);
+        learningMode = prefs.getInt(PREF_LEARNING_MODE, LEARNING_OFF);
+        if (learningMode < LEARNING_OFF || learningMode > LEARNING_FROZEN) learningMode = LEARNING_OFF;
 
         probeStatus = loadElf("rafaelia-probe", "Source-built ELF probe");
         gadgetStatus = loadElf("frida-gadget", "Frida Gadget ELF");
+        initializeLearning();
 
         ScrollView scroll = new ScrollView(this);
         LinearLayout root = new LinearLayout(this);
@@ -193,6 +358,67 @@ public final class MainActivity extends Activity {
         verboseCheck.setChecked(verboseMode);
         verboseCheck.setEnabled(developerMode);
         root.addView(verboseCheck);
+
+        learningPanel = new LinearLayout(this);
+        learningPanel.setOrientation(LinearLayout.VERTICAL);
+        root.addView(learningPanel);
+
+        TextView learningTitle = new TextView(this);
+        learningTitle.setText("Learning / RFL V1 — shadow only");
+        learningTitle.setTextSize(18.0f);
+        learningPanel.addView(learningTitle);
+
+        learningModeSpinner = new Spinner(this);
+        ArrayAdapter<String> learningAdapter = new ArrayAdapter<String>(
+                this,
+                android.R.layout.simple_spinner_item,
+                LEARNING_MODE_LABELS);
+        learningAdapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
+        learningModeSpinner.setAdapter(learningAdapter);
+        learningModeSpinner.setSelection(learningMode);
+        learningPanel.addView(learningModeSpinner);
+
+        learningStatusView = new TextView(this);
+        learningStatusView.setTextSize(14.0f);
+        learningStatusView.setTextIsSelectable(true);
+        learningPanel.addView(learningStatusView);
+
+        learningPanel.addView(button("Atualizar métricas do Learning", new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                renderLearningStatus();
+            }
+        }));
+
+        learningPanel.addView(button("Flush RFL agora", new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                flushLearning();
+            }
+        }));
+
+        learningPanel.addView(button("Resetar preditor volátil", new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                resetVolatilePredictor();
+            }
+        }));
+
+        TextView phase2 = new TextView(this);
+        phase2.setText("ZIPRAF checkpoint + segment GC/compaction: Phase 2 — ainda não promovido.");
+        learningPanel.addView(phase2);
+
+        learningModeSpinner.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
+            @Override
+            public void onItemSelected(AdapterView<?> parent, View view, int position, long id) {
+                if (changingLearningMode || position == learningMode) return;
+                setLearningMode(position, true);
+            }
+
+            @Override
+            public void onNothingSelected(AdapterView<?> parent) {
+            }
+        });
 
         developerCheck.setOnCheckedChangeListener(new CompoundButton.OnCheckedChangeListener() {
             @Override
@@ -232,7 +458,7 @@ public final class MainActivity extends Activity {
             }
         }));
 
-        root.addView(button("Copiar comandos ADB / Frida", new View.OnClickListener() {
+        root.addView(button("Copiar comandos ADB / Frida / Learning", new View.OnClickListener() {
             @Override
             public void onClick(View v) {
                 copyHostCommands();
@@ -241,5 +467,17 @@ public final class MainActivity extends Activity {
 
         renderStatus();
         setContentView(scroll);
+    }
+
+    @Override
+    protected void onPause() {
+        super.onPause();
+        if (learningInitialized && learningMode != LEARNING_OFF) {
+            try {
+                nativeLearningFlush();
+            } catch (Throwable t) {
+                Log.e(TAG, "Learning flush onPause failed", t);
+            }
+        }
     }
 }
