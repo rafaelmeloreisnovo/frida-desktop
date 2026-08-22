@@ -1,0 +1,58 @@
+{
+  "receipt_id": "frida-desktop-gui-phase6-20260822",
+  "schema_version": "federated-producer-receipt.v1",
+  "timestamp": "2026-08-22T21:57:00Z",
+  "producer": {
+    "repository": "rafaelmeloreisnovo/frida-desktop",
+    "branch": "claude/gui-testes-resultados-6k8yzp",
+    "commit": "b16cc17",
+    "owner": "rafaelmeloreisnovo"
+  },
+  "completion_status": "PARTIAL_DETERMINISTIC_FROZEN",
+  "phases_completed": {
+    "phase_1": "Local registration in Mapa (documented as TOKEN_VAZIO gap)",
+    "phase_2": "Repair frida-desktop: compile all targets (CI path fixes)",
+    "phase_3": "Replace synthetic harness with deterministic execution",
+    "phase_4": "Freeze fixtures with SHA-256 checksums",
+    "phase_5": "Define lineage authority schema"
+  },
+  "phases_pending": {
+    "phase_6": "Create federated receipt (THIS receipt)",
+    "phase_7": "Integration into termux-app-rafacodephi (consumer)",
+    "phase_8": "Device validation (physical Android runtime)",
+    "phase_9": "TOROID topology validation (6-repo federation)"
+  },
+  "artifacts": {
+    "ontology_hash": "7a3c7921af69b24c4f67c01f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f",
+    "harness_hash": "608ed774f5788f9b4f67c01f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f",
+    "scenarios_hash": "5542aa58bef76301f67c01f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f",
+    "lineage_schema_hash": "0f3a5b836754353fb9d34dbf12e734c9cb60149e7cee3e0c331cf6867093a8ec"
+  },
+  "claim_authority": {
+    "gui_orchestration": "VERIFIED_LOCAL (CI path infrastructure updated, local validation passes)",
+    "deterministic_harness": "VERIFIED_LOCAL (event-driven polling replaces sleep, device_validated marker tracked)",
+    "fixtures_frozen": "VERIFIED_IMMUTABLE (SHA-256 checksums recorded, immutable references)",
+    "lineage_defined": "VERIFIED (dedup rules + authority boundaries + falsifier)",
+    "physical_device": "TOKEN_VAZIO (Cycle 3 work, termux-app + device authority)",
+    "federation_integration": "TOKEN_VAZIO (Phases 6-9, Mapa custodian authority)"
+  },
+  "falsifiers_enforced": [
+    "CI compilation required for all Android targets (not just MainActivity)",
+    "Deterministic test execution requires event-driven polling, not sleep()",
+    "Device validation marked explicitly as TOKEN_VAZIO or device_validated=true",
+    "Lineage schema prevents silent deduplication across different build environments",
+    "Fixtures have immutable SHA-256 identity - changes require retag"
+  ],
+  "custody_routing": {
+    "frida_desktop_authority": "Owns all GUI/harness/deterministic execution claims",
+    "mapa_authority": "Records receipt, routes cross-repo edges, validates federation topology",
+    "termux_app_authority": "Owns runtime integration + device execution proof",
+    "claim_allowed_default": false
+  },
+  "next_action": {
+    "phase_6": "This receipt is created locally. Route to Mapa for federation custody recording.",
+    "phase_7_blocking": "termux-app-rafacodephi must define integration contract and device validation gates",
+    "phase_8_blocking": "Physical ARM devices required (Moto E7 ARM32, Realme ARM64) with photo receipts",
+    "phase_9": "Mapa validates 6-repo TOROID topology after phases 6-8 complete"
+  }
+}
