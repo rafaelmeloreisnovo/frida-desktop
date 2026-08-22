@@ -4,6 +4,8 @@
 /releng/modules/frida-gadget-ios/*.dylib
 /releng/modules/frida-gadget-ios/node_modules
 /subprojects/*
+android/.gradle/
+android/build/
 
 # Node.js
 node_modules/
