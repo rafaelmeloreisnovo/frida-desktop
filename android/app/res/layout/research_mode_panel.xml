@@ -1,0 +1,104 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.constraintlayout.widget.ConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:padding="16dp">
+
+    <!-- Mode Spinner -->
+    <Spinner
+        android:id="@+id/mode_spinner"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        app:layout_constraintTop_toTopOf="parent"
+        app:layout_constraintLeft_toLeftOf="parent"
+        app:layout_constraintRight_toRightOf="parent" />
+
+    <!-- Metrics Display -->
+    <TextView
+        android:id="@+id/accuracy_value"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="Accuracy: -- %"
+        android:textSize="14sp"
+        app:layout_constraintTop_toBottomOf="@id/mode_spinner"
+        app:layout_constraintLeft_toLeftOf="parent" />
+
+    <TextView
+        android:id="@+id/overhead_value"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="Overhead: -- %"
+        android:textSize="14sp"
+        app:layout_constraintTop_toBottomOf="@id/accuracy_value"
+        app:layout_constraintLeft_toLeftOf="parent" />
+
+    <TextView
+        android:id="@+id/memory_value"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="Memory: -- B"
+        android:textSize="14sp"
+        app:layout_constraintTop_toBottomOf="@id/overhead_value"
+        app:layout_constraintLeft_toLeftOf="parent" />
+
+    <TextView
+        android:id="@+id/context_count_value"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="Contexts: --"
+        android:textSize="14sp"
+        app:layout_constraintTop_toBottomOf="@id/memory_value"
+        app:layout_constraintLeft_toLeftOf="parent" />
+
+    <TextView
+        android:id="@+id/last_update_text"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="Last update: --"
+        android:textSize="12sp"
+        app:layout_constraintTop_toBottomOf="@id/context_count_value"
+        app:layout_constraintLeft_toLeftOf="parent" />
+
+    <!-- Action Buttons -->
+    <Button
+        android:id="@+id/start_button"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="Start"
+        app:layout_constraintTop_toBottomOf="@id/last_update_text"
+        app:layout_constraintLeft_toLeftOf="parent" />
+
+    <Button
+        android:id="@+id/stop_button"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="Stop"
+        app:layout_constraintTop_toBottomOf="@id/last_update_text"
+        app:layout_constraintLeft_toRightOf="@id/start_button" />
+
+    <Button
+        android:id="@+id/snapshot_button"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="Snapshot"
+        app:layout_constraintTop_toBottomOf="@id/last_update_text"
+        app:layout_constraintLeft_toRightOf="@id/stop_button" />
+
+    <Button
+        android:id="@+id/export_button"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="Export"
+        app:layout_constraintTop_toBottomOf="@id/last_update_text"
+        app:layout_constraintLeft_toRightOf="@id/snapshot_button" />
+
+    <Button
+        android:id="@+id/timeline_button"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="Timeline"
+        app:layout_constraintTop_toBottomOf="@id/start_button"
+        app:layout_constraintLeft_toLeftOf="parent" />
+
+</androidx.constraintlayout.widget.ConstraintLayout>
