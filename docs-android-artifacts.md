@@ -22,7 +22,7 @@ The existing native lane may produce unsigned native artifacts and can sign nati
 
 Native source proof:
 - installs Android NDK `29.0.14206865`;
-- compiles `android/frida-lab/native/elf_probe.c` with the ARMv7 NDK clang wrapper;
+- compiles `android/app/native/elf_probe.c` with the ARMv7 NDK clang wrapper;
 - compiles the same source with the AArch64 NDK clang wrapper;
 - checks ELF magic, machine type and the exported probe symbol.
 
@@ -60,6 +60,6 @@ The universal APK does not override a device's ABI support. A 64-bit-only Androi
 
 The APK lane embeds Frida Gadget only in its own debuggable laboratory application process. It does not bundle or deploy `frida-server` and does not treat Developer options or ADB as root/system-wide privilege.
 
-The workflow can prove cloud-side build, ELF, DEX, alignment and APK-signature gates. Physical installation and launch remain `TOKEN_VAZIO` until `android/frida-lab/adb-smoke.sh` is executed against an actual Android device.
+The workflow can prove cloud-side build, ELF, DEX, alignment and APK-signature gates. Physical installation and launch remain `TOKEN_VAZIO` until `android/app/adb-smoke.sh` is executed against an actual Android device.
 
 See `docs/android-apk-elf-dex-lab.md` for the complete raw toolchain, ADB workflow and receipt contract.
