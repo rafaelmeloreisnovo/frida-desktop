@@ -20,21 +20,21 @@ COMMON_FLAGS=(
   -Wextra
   -Werror
   -pedantic
-  -I android/frida-lab/native
+  -I android/app/native
 )
 
 compile_all() {
   rafaelia_need_cmd cc
   cc "${COMMON_FLAGS[@]}" \
-    android/frida-lab/native/learning_store.c \
-    android/frida-lab/native/learning_store_selftest.c \
+    android/app/native/learning_store.c \
+    android/app/native/learning_store_selftest.c \
     -o "$BUILD_DIR/rfl-selftest"
 
   cc "${COMMON_FLAGS[@]}" \
-    android/frida-lab/native/learning_store.c \
-    android/frida-lab/native/neon4096_core.c \
-    android/frida-lab/native/learning_runtime.c \
-    android/frida-lab/native/learning_runtime_selftest.c \
+    android/app/native/learning_store.c \
+    android/app/native/neon4096_core.c \
+    android/app/native/learning_runtime.c \
+    android/app/native/learning_runtime_selftest.c \
     -o "$BUILD_DIR/neon4096-runtime-selftest"
 }
 
@@ -57,15 +57,15 @@ run_all() {
 
 write_evidence() {
   rafaelia_write_sha256_manifest "$EVIDENCE_DIR/SOURCE_SHA256SUMS.txt" \
-    android/frida-lab/native/learning_store.h \
-    android/frida-lab/native/learning_store.c \
-    android/frida-lab/native/learning_store_selftest.c \
-    android/frida-lab/native/neon4096_core.h \
-    android/frida-lab/native/neon4096_core.c \
-    android/frida-lab/native/learning_runtime.h \
-    android/frida-lab/native/learning_runtime.c \
-    android/frida-lab/native/learning_runtime_selftest.c \
-    android/frida-lab/native/elf_probe.c
+    android/app/native/learning_store.h \
+    android/app/native/learning_store.c \
+    android/app/native/learning_store_selftest.c \
+    android/app/native/neon4096_core.h \
+    android/app/native/neon4096_core.c \
+    android/app/native/learning_runtime.h \
+    android/app/native/learning_runtime.c \
+    android/app/native/learning_runtime_selftest.c \
+    android/app/native/elf_probe.c
 
   GITHUB_REPOSITORY="${GITHUB_REPOSITORY:-LOCAL}" \
   GITHUB_RUN_ID="${GITHUB_RUN_ID:-0}" \
