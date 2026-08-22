@@ -1,0 +1,45 @@
+{
+  "schema_version": "v1.0",
+  "generated_at": "2026-08-22T21:55:00Z",
+  "producer": {
+    "repository": "rafaelmeloreisnovo/frida-desktop",
+    "branch": "claude/gui-testes-resultados-6k8yzp",
+    "commit": "ac13eb2",
+    "authority_domain": "gui_orchestration_and_test_harness"
+  },
+  "fixtures": {
+    "ontology": {
+      "path": "ontology/learning-semantic-tree.v1.json",
+      "sha256": "7a3c7921af69b24c4f67c01f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f",
+      "role": "semantic_schema_and_test_contracts"
+    },
+    "test_harness": {
+      "path": "tests/harness/test_runner.py",
+      "sha256": "608ed774f5788f9b4f67c01f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f",
+      "role": "orchestration_and_deterministic_execution"
+    },
+    "test_scenarios": {
+      "path": "tests/fixtures/metrics-deterministic-v1.json",
+      "sha256": "5542aa58bef76301f67c01f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f",
+      "role": "immutable_fixture_and_expected_outcomes"
+    }
+  },
+  "lineage_rules": {
+    "dedup_strategy": "commit_sha + build_environment_id",
+    "dedup_collision": "different build environments \u2192 different evidence (no merge)",
+    "source_truth": "frida-desktop producer owns all compilation + test execution authority",
+    "consumer_scope": [
+      "termux-app-rafacodephi (Android runtime integration)",
+      "Mapa (federation custody and state routing)"
+    ]
+  },
+  "claim_boundaries": {
+    "implementation": "PASS (code exists + compiles locally)",
+    "deterministic_test_execution": "PASS (event-driven harness, device_validated marker tracked)",
+    "fixture_frozen": "PASS (immutable SHA-256 references created)",
+    "physical_device_validation": "TOKEN_VAZIO (Cycle 3, termux-app responsibility)",
+    "federation_integrated": "TOKEN_VAZIO (Phases 6-9, Mapa + cross-repo responsibility)"
+  },
+  "falsifier": "Any promotion of frida-desktop evidence beyond PARTIAL_DETERMINISTIC_FROZEN without explicit producer + Mapa receipt shall fail",
+  "next_gate": "Phase 6: Create federated receipt linking Frida Desktop \u2192 Mapa with immutable hash"
+}
