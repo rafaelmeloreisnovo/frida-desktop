@@ -1,0 +1,378 @@
+{
+  "version": "1.0.0",
+  "generated_at": "2026-08-22T00:00:00Z",
+  "description": "Semantic tree mapping tests to learning phases, metrics, and components",
+  "root": {
+    "id": "rfl_learning_ecosystem",
+    "name": "RFL Learning Ecosystem",
+    "type": "root"
+  },
+  "test_scenarios": [
+    {
+      "id": "scenario_cold_start",
+      "name": "Cold Start Behavior",
+      "description": "Measure learning acquisition from empty state",
+      "type": "test_scenario",
+      "phases": [
+        {
+          "id": "phase_observe",
+          "name": "OBSERVE",
+          "duration_ms": 5000,
+          "description": "Collect baseline data without learning"
+        },
+        {
+          "id": "phase_learn_shadow",
+          "name": "LEARN_SHADOW",
+          "duration_ms": 10000,
+          "description": "Train predictor on collected data"
+        },
+        {
+          "id": "phase_predict_shadow",
+          "name": "PREDICT_SHADOW",
+          "duration_ms": 5000,
+          "description": "Validate predictions against held-out data"
+        }
+      ],
+      "affects_components": [
+        "RFLPredictor",
+        "ContextCache",
+        "WriteSlabAllocator"
+      ],
+      "metrics": [
+        "warmup_time_ms",
+        "accuracy_percent",
+        "overhead_percent",
+        "memory_bytes",
+        "context_count"
+      ],
+      "expected_outcomes": {
+        "accuracy_min": 60.0,
+        "overhead_max_percent": 15.0,
+        "memory_max_bytes": 65536
+      }
+    },
+    {
+      "id": "scenario_cache_miss",
+      "name": "Cache Miss Pattern",
+      "description": "Test predictor under high miss rate scenarios",
+      "type": "test_scenario",
+      "phases": [
+        {
+          "id": "phase_observe",
+          "name": "OBSERVE",
+          "duration_ms": 3000,
+          "description": "Establish miss baseline"
+        },
+        {
+          "id": "phase_learn_shadow",
+          "name": "LEARN_SHADOW",
+          "duration_ms": 7000,
+          "description": "Learn miss patterns"
+        },
+        {
+          "id": "phase_predict_shadow",
+          "name": "PREDICT_SHADOW",
+          "duration_ms": 5000,
+          "description": "Predict future misses"
+        }
+      ],
+      "affects_components": [
+        "RFLPredictor",
+        "DeltaMissMode",
+        "ContextHash"
+      ],
+      "metrics": [
+        "miss_rate_percent",
+        "prediction_accuracy_percent",
+        "false_positive_rate",
+        "latency_ns"
+      ],
+      "expected_outcomes": {
+        "miss_rate_max": 40.0,
+        "prediction_accuracy_min": 70.0
+      }
+    },
+    {
+      "id": "scenario_adversarial",
+      "name": "Adversarial Input",
+      "description": "Test robustness under pathological access patterns",
+      "type": "test_scenario",
+      "phases": [
+        {
+          "id": "phase_observe",
+          "name": "OBSERVE",
+          "duration_ms": 2000,
+          "description": "Baseline adversarial traffic"
+        },
+        {
+          "id": "phase_learn_shadow",
+          "name": "LEARN_SHADOW",
+          "duration_ms": 5000,
+          "description": "Attempt to learn adversarial patterns"
+        },
+        {
+          "id": "phase_validate_shadow",
+          "name": "VALIDATE_SHADOW",
+          "duration_ms": 3000,
+          "description": "Measure stability and fallback behavior"
+        }
+      ],
+      "affects_components": [
+        "RFLPredictor",
+        "ErrorRecovery",
+        "ConfidenceThreshold"
+      ],
+      "metrics": [
+        "crash_count",
+        "overflow_count",
+        "confidence_drop_percent",
+        "fallback_rate"
+      ],
+      "expected_outcomes": {
+        "crash_count_max": 0,
+        "overflow_count_max": 0,
+        "fallback_rate_max": 30.0
+      }
+    },
+    {
+      "id": "scenario_sustained_load",
+      "name": "Sustained Load Performance",
+      "description": "Measure degradation over extended operation",
+      "type": "test_scenario",
+      "phases": [
+        {
+          "id": "phase_warm_up",
+          "name": "WARM_UP",
+          "duration_ms": 5000,
+          "description": "Reach steady state"
+        },
+        {
+          "id": "phase_learn_sustained",
+          "name": "LEARN_SHADOW",
+          "duration_ms": 30000,
+          "description": "Extended learning period"
+        },
+        {
+          "id": "phase_measure",
+          "name": "MEASURE",
+          "duration_ms": 10000,
+          "description": "Measure final performance"
+        }
+      ],
+      "affects_components": [
+        "RFLPredictor",
+        "WriteSlabAllocator",
+        "GarbageCollection"
+      ],
+      "metrics": [
+        "accuracy_start_percent",
+        "accuracy_end_percent",
+        "accuracy_degradation_percent",
+        "memory_peak_bytes",
+        "gc_pause_ms"
+      ],
+      "expected_outcomes": {
+        "accuracy_degradation_max": 10.0,
+        "gc_pause_max_ms": 50.0
+      }
+    }
+  ],
+  "components": [
+    {
+      "id": "rfl_predictor",
+      "name": "RFLPredictor",
+      "file_path": "src/io/rafaelia/fridalab/learning/RFLPredictor.java",
+      "type": "core_learning",
+      "description": "256-set, 4-way LRU predictor (1024 total entries)",
+      "owned_by": "RFL Learning Engine",
+      "interfaces": [
+        "predict(context_hash: u64) -> prediction",
+        "train(context_hash: u64, outcome: u64)",
+        "snapshot() -> RFLSnapshot"
+      ]
+    },
+    {
+      "id": "context_cache",
+      "name": "ContextCache",
+      "file_path": "src/io/rafaelia/fridalab/learning/ContextCache.java",
+      "type": "cache",
+      "description": "Hash-to-context mapping for quick lookup",
+      "owned_by": "RFL Learning Engine",
+      "capacity_entries": 256
+    },
+    {
+      "id": "write_slab_allocator",
+      "name": "WriteSlabAllocator",
+      "file_path": "src/io/rafaelia/fridalab/learning/WriteSlabAllocator.java",
+      "type": "memory",
+      "description": "4KiB slab pool for learning records (64B each = 64 records/slab)",
+      "owned_by": "RFL Learning Engine",
+      "capacity_bytes": 4096,
+      "record_size_bytes": 64
+    },
+    {
+      "id": "delta_miss_mode",
+      "name": "DeltaMissMode",
+      "file_path": "src/io/rafaelia/fridalab/learning/DeltaMissMode.java",
+      "type": "analysis",
+      "description": "Specialized predictor mode for cache miss patterns",
+      "owned_by": "RFL Learning Engine",
+      "depends_on": ["rfl_predictor", "context_cache"]
+    },
+    {
+      "id": "confidence_threshold",
+      "name": "ConfidenceThreshold",
+      "file_path": "src/io/rafaelia/fridalab/learning/ConfidenceThreshold.java",
+      "type": "decision",
+      "description": "Dynamically thresholds predictions based on confidence score",
+      "owned_by": "RFL Learning Engine",
+      "default_threshold": 0.7
+    },
+    {
+      "id": "error_recovery",
+      "name": "ErrorRecovery",
+      "file_path": "src/io/rafaelia/fridalab/learning/ErrorRecovery.java",
+      "type": "resilience",
+      "description": "Fallback behavior on overflow, corruption, or prediction failure",
+      "owned_by": "RFL Learning Engine"
+    },
+    {
+      "id": "garbage_collection",
+      "name": "GarbageCollection",
+      "file_path": "src/io/rafaelia/fridalab/learning/GarbageCollection.java",
+      "type": "memory_management",
+      "description": "Evicts old records and compacts slab pool",
+      "owned_by": "RFL Learning Engine"
+    }
+  ],
+  "metrics_catalog": {
+    "performance": [
+      {
+        "id": "latency_ns",
+        "name": "Latency (ns)",
+        "type": "gauge",
+        "unit": "nanoseconds",
+        "description": "Single-prediction latency"
+      },
+      {
+        "id": "throughput_predictions_sec",
+        "name": "Throughput",
+        "type": "gauge",
+        "unit": "predictions/sec",
+        "description": "Predictions per second"
+      },
+      {
+        "id": "warmup_time_ms",
+        "name": "Warmup Time",
+        "type": "gauge",
+        "unit": "milliseconds",
+        "description": "Time to reach steady-state accuracy"
+      }
+    ],
+    "accuracy": [
+      {
+        "id": "accuracy_percent",
+        "name": "Accuracy",
+        "type": "gauge",
+        "unit": "percent",
+        "min": 0.0,
+        "max": 100.0,
+        "description": "Prediction accuracy (hit rate)"
+      },
+      {
+        "id": "miss_rate_percent",
+        "name": "Miss Rate",
+        "type": "gauge",
+        "unit": "percent",
+        "min": 0.0,
+        "max": 100.0,
+        "description": "False miss rate"
+      },
+      {
+        "id": "false_positive_rate",
+        "name": "False Positive Rate",
+        "type": "gauge",
+        "unit": "percent",
+        "description": "Incorrect predictions"
+      }
+    ],
+    "resource": [
+      {
+        "id": "memory_bytes",
+        "name": "Memory Usage",
+        "type": "gauge",
+        "unit": "bytes",
+        "description": "Total memory allocated by RFL"
+      },
+      {
+        "id": "memory_peak_bytes",
+        "name": "Peak Memory",
+        "type": "gauge",
+        "unit": "bytes",
+        "description": "Maximum memory reached"
+      },
+      {
+        "id": "overhead_percent",
+        "name": "Overhead",
+        "type": "gauge",
+        "unit": "percent",
+        "description": "CPU overhead vs baseline"
+      }
+    ],
+    "reliability": [
+      {
+        "id": "crash_count",
+        "name": "Crash Count",
+        "type": "counter",
+        "unit": "count",
+        "description": "Number of crashes or hard errors"
+      },
+      {
+        "id": "overflow_count",
+        "name": "Overflow Count",
+        "type": "counter",
+        "unit": "count",
+        "description": "Number of predictor overflows"
+      },
+      {
+        "id": "gc_pause_ms",
+        "name": "GC Pause Time",
+        "type": "gauge",
+        "unit": "milliseconds",
+        "description": "Maximum garbage collection pause"
+      }
+    ]
+  },
+  "execution_gates": [
+    {
+      "id": "gate_startup",
+      "name": "Startup Gate",
+      "condition": "All components initialize without error",
+      "failure_mode": "crash_count > 0"
+    },
+    {
+      "id": "gate_accuracy_baseline",
+      "name": "Accuracy Baseline Gate",
+      "condition": "accuracy_percent >= expected_outcomes.accuracy_min",
+      "failure_mode": "accuracy_percent < threshold"
+    },
+    {
+      "id": "gate_overhead_acceptable",
+      "name": "Overhead Gate",
+      "condition": "overhead_percent <= expected_outcomes.overhead_max_percent",
+      "failure_mode": "overhead_percent > threshold"
+    },
+    {
+      "id": "gate_memory_bounded",
+      "name": "Memory Bound Gate",
+      "condition": "memory_bytes <= expected_outcomes.memory_max_bytes",
+      "failure_mode": "out_of_memory or exceeds limit"
+    },
+    {
+      "id": "gate_no_corruption",
+      "name": "Corruption Detection Gate",
+      "condition": "All checksums valid, no data structure violations",
+      "failure_mode": "checksum_mismatch or structural_violation"
+    }
+  ]
+}
