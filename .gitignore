@@ -4,3 +4,19 @@
 /releng/modules/frida-gadget-ios/*.dylib
 /releng/modules/frida-gadget-ios/node_modules
 /subprojects/*
+android/.gradle/
+android/build/
+
+# Node.js
+node_modules/
+package-lock.json
+npm-debug.log
+
+# Development
+data/
+.env
+.env.local
+
+# Generated
+evidence/
+.github/scripts/rafaelia/__pycache__/

@@ -27,7 +27,7 @@ On-Device (Android)           Backend (Node.js)             Frontend (React)
 
 ### Architecture
 
-**File:** `android/frida-lab/src/io/rafaelia/fridalab/MainActivity.java`
+**File:** `android/app/src/io/rafaelia/fridalab/MainActivity.java`
 
 The MainActivity expands from single-panel to **triple-panel layout**:
 
@@ -349,7 +349,7 @@ npm --version   # v9+
 
 ```bash
 # 1. Compile Android app
-cd android/frida-lab
+cd android/app
 ./gradlew :app:assembleDebug
 
 # 2. Install on device
@@ -379,7 +379,7 @@ frida-desktop/
 ├── ontology/
 │   └── learning-semantic-tree.v1.json        (Semantic model)
 │
-├── android/frida-lab/
+├── android/app/
 │   ├── src/io/rafaelia/fridalab/
 │   │   ├── MainActivity.java                 (Expanded with Research Mode)
 │   │   ├── ui/

@@ -22,12 +22,12 @@ public class RFLBridge {
         }
     }
 
-    // Native methods
-    native int setMode(String mode) throws Exception;
-    native JSONObject snapshot() throws JSONException;
-    native long predict(long contextHash) throws Exception;
-    native void train(long contextHash, long outcome) throws Exception;
-    native void reset() throws Exception;
+    // Native methods (prefixed to avoid collision with wrapper methods)
+    private native int native_setMode(String mode) throws Exception;
+    private native JSONObject native_snapshot() throws JSONException;
+    private native long native_predict(long contextHash) throws Exception;
+    private native void native_train(long contextHash, long outcome) throws Exception;
+    private native void native_reset() throws Exception;
 
     /**
      * Set learning mode
@@ -37,7 +37,7 @@ public class RFLBridge {
      */
     public void setMode(String mode) throws Exception {
         Log.d(TAG, "setMode(" + mode + ")");
-        int result = setMode(mode);
+        int result = native_setMode(mode);
         if (result != 0) {
             throw new Exception("Failed to set mode: " + mode + " (code: " + result + ")");
         }
@@ -51,7 +51,7 @@ public class RFLBridge {
      */
     public JSONObject snapshot() throws JSONException {
         Log.d(TAG, "snapshot()");
-        return snapshot();
+        return native_snapshot();
     }
 
     /**
@@ -63,7 +63,7 @@ public class RFLBridge {
      */
     public long predict(long contextHash) throws Exception {
         Log.d(TAG, "predict(0x" + Long.toHexString(contextHash) + ")");
-        return predict(contextHash);
+        return native_predict(contextHash);
     }
 
     /**
@@ -75,7 +75,7 @@ public class RFLBridge {
      */
     public void train(long contextHash, long outcome) throws Exception {
         Log.d(TAG, "train(0x" + Long.toHexString(contextHash) + ", 0x" + Long.toHexString(outcome) + ")");
-        train(contextHash, outcome);
+        native_train(contextHash, outcome);
     }
 
     /**
@@ -85,7 +85,7 @@ public class RFLBridge {
      */
     public void reset() throws Exception {
         Log.d(TAG, "reset()");
-        reset();
+        native_reset();
     }
 
     /**

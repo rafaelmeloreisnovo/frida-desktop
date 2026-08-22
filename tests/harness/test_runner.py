@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
-RFL Learning Test Harness
-Orchestrates test scenarios, collects metrics, and generates results
+RFL Learning Test Harness — Deterministic Event-Driven Execution
+Orchestrates test scenarios with fixture-based metrics and event polling (no sleep)
 """
 
 import json
@@ -14,6 +14,8 @@ from pathlib import Path
 from typing import Dict, List, Optional
 import hashlib
 import uuid
+
+from deterministic_executor import DeterministicExecutor
 
 
 @dataclass
@@ -68,6 +70,10 @@ class TestHarness:
         self.results_dir.mkdir(parents=True, exist_ok=True)
         self.suite_id = str(uuid.uuid4())[:12]
 
+        # Initialize deterministic executor with fixture-based metrics
+        fixtures_path = Path("tests/fixtures/metrics-deterministic-v1.json")
+        self.executor = DeterministicExecutor(str(fixtures_path))
+
     def _load_ontology(self, path: str) -> dict:
         """Load semantic tree ontology"""
         with open(path) as f:
@@ -89,7 +95,7 @@ class TestHarness:
             return {"abi": "unknown", "sdk": 0, "error": str(e)}
 
     def run_scenario(self, scenario: dict) -> TestResult:
-        """Execute a single test scenario"""
+        """Execute a single test scenario with deterministic device validation marker"""
         scenario_id = scenario["id"]
         print(f"\n{'='*60}")
         print(f"Running: {scenario['name']}")
@@ -103,6 +109,10 @@ class TestHarness:
         status = "SKIPPED"
 
         try:
+            # Mark device validation: TOKEN_VAZIO (no physical device in this environment)
+            # Production: Would set source to "adb-logcat", "frida-gadget", or "physical-android-device"
+            self.executor.set_device_validated(source="TOKEN_VAZIO")
+
             # Phase 1: OBSERVE
             print(f"\n  Phase 1: OBSERVE ({scenario['phases'][0]['duration_ms']}ms)")
             self._run_phase(scenario_id, "OBSERVE")
@@ -115,17 +125,18 @@ class TestHarness:
             print(f"  Phase 3: PREDICT_SHADOW ({scenario['phases'][2]['duration_ms']}ms)")
             self._run_phase(scenario_id, "PREDICT_SHADOW")
 
-            # Collect metrics
+            # Collect metrics from fixture with device validation markers
             metrics = self._collect_metrics(scenario_id, scenario)
 
-            # Validate gates
+            # Validate gates with mandatory device validation gate
             gates_passed = self._validate_gates(scenario, metrics)
 
-            # Determine status
+            # Determine status: PASS only if all gates pass AND device validation satisfied
             status = "PASS" if all(gates_passed.values()) else "FAIL"
 
             print(f"\n  Metrics collected: {len(metrics)} values")
-            print(f"  Gates: {sum(gates_passed.values())}/{len(gates_passed)} passed")
+            print(f"  Gates: {sum(1 for v in gates_passed.values() if v)}/{len(gates_passed)} passed")
+            print(f"  Device validation: {metrics.get('device_validation_source', 'unknown')}")
 
         except Exception as e:
             status = "FAIL"
@@ -152,51 +163,61 @@ class TestHarness:
             print(f"\n  Status: {status} ({duration_ms}ms)")
             return result
 
-    def _run_phase(self, scenario_id: str, phase_name: str):
-        """Execute a learning phase"""
-        # TODO: Integrate with actual Frida gadget + JNI bridge
-        # For now, simulate with sleep
-        time.sleep(0.1)  # Minimal sleep for demo
-        print(f"    ✓ {phase_name} phase complete")
+    def _run_phase(self, scenario_id: str, phase_name: str, timeout_ms: int = 5000):
+        """Execute a learning phase with deterministic event-driven polling"""
+        success, message = self.executor.run_phase_deterministic(
+            scenario_id=scenario_id,
+            phase_name=phase_name,
+            timeout_ms=timeout_ms
+        )
+        if success:
+            print(f"    {message}")
+        else:
+            print(f"    {message}")
+            raise RuntimeError(f"Phase {phase_name} failed or timed out")
 
     def _collect_metrics(self, scenario_id: str, scenario: dict) -> Dict[str, float]:
-        """Collect metrics from device/logs"""
-        # TODO: Parse logcat, connect to RFL via Frida bridge
-        # Stub: return synthetic metrics matching scenario
-        metrics = {}
-        for metric_name in scenario.get("metrics", []):
-            # Generate plausible value
-            if "accuracy" in metric_name:
-                metrics[metric_name] = 85.5
-            elif "overhead" in metric_name:
-                metrics[metric_name] = 8.3
-            elif "latency" in metric_name:
-                metrics[metric_name] = 1250.0
-            elif "memory" in metric_name:
-                metrics[metric_name] = 45000.0
-            else:
-                metrics[metric_name] = 42.0
+        """Collect deterministic metrics from fixture, not synthetic generation"""
+        # Retrieve fixture-based metrics with device validation markers
+        metrics = self.executor.collect_metrics_deterministic(scenario_id)
 
-        return metrics
+        # Map fixture metrics to scenario's metric names for backward compatibility
+        result = {}
+        fixture_metrics = {k: v for k, v in metrics.items()
+                          if k not in ("device_validated", "device_validation_source")}
+
+        for metric_name in scenario.get("metrics", []):
+            if metric_name in fixture_metrics:
+                result[metric_name] = fixture_metrics[metric_name]
+            else:
+                # Fallback: map by type (accuracy, overhead, latency, memory)
+                for fixture_key, fixture_value in fixture_metrics.items():
+                    if metric_name.lower() in fixture_key.lower():
+                        result[metric_name] = fixture_value
+                        break
+
+        # Preserve device validation markers
+        result["device_validated"] = metrics.get("device_validated", False)
+        result["device_validation_source"] = metrics.get("device_validation_source", "TOKEN_VAZIO")
+
+        return result
 
     def _validate_gates(self, scenario: dict, metrics: Dict) -> Dict[str, bool]:
-        """Check if metrics pass execution gates"""
-        gates_passed = {}
-        expected = scenario.get("expected_outcomes", {})
+        """Validate execution gates with critical device validation requirement"""
+        scenario_id = scenario["id"]
 
-        # Gate: accuracy
-        acc = metrics.get("accuracy_percent", 0)
-        gates_passed["accuracy"] = acc >= expected.get("accuracy_min", 0)
+        # Use executor's gate validator which enforces device_validated marker
+        gates = self.executor.validate_gates_with_device_marker(
+            scenario_id=scenario_id,
+            metrics=metrics
+        )
 
-        # Gate: overhead
-        ovh = metrics.get("overhead_percent", 100)
-        gates_passed["overhead"] = ovh <= expected.get("overhead_max_percent", 100)
+        # Falsifier: If ERROR key is present, test must fail
+        if "ERROR" in gates:
+            print(f"\n  FALSIFIER VIOLATION: {gates['ERROR']}")
+            gates["device_validation"] = False
 
-        # Gate: memory
-        mem = metrics.get("memory_bytes", float('inf'))
-        gates_passed["memory"] = mem <= expected.get("memory_max_bytes", float('inf'))
-
-        return gates_passed
+        return gates
 
     def run_all_scenarios(self) -> TestSuite:
         """Execute all scenarios in ontology"""
@@ -220,7 +241,7 @@ class TestHarness:
         return suite
 
     def save_results(self, suite: TestSuite) -> Path:
-        """Persist results to disk"""
+        """Persist results to disk with deterministic receipts"""
         run_dir = self.results_dir / suite.suite_id
         run_dir.mkdir(exist_ok=True)
 
@@ -230,6 +251,18 @@ class TestHarness:
             with open(result_file, 'w') as f:
                 json.dump(asdict(result), f, indent=2)
 
+            # Generate deterministic receipt for each result
+            if result.scenario_id in [s["id"] for s in self.ontology.get("test_scenarios", [])]:
+                receipt = self.executor.generate_deterministic_receipt(
+                    scenario_id=result.scenario_id,
+                    metrics=result.metrics,
+                    gates=result.gates_passed,
+                    execution_time_ms=result.duration_ms
+                )
+                receipt_file = run_dir / f"{result.scenario_id}-receipt.json"
+                with open(receipt_file, 'w') as f:
+                    json.dump(receipt, f, indent=2)
+
         # Save suite summary
         summary_file = run_dir / "summary.json"
         suite_data = {
@@ -237,6 +270,8 @@ class TestHarness:
             "created_at": suite.created_at,
             "device_info": suite.device_info,
             "summary": suite.summary,
+            "harness_deterministic": True,
+            "fixture_version": "1.0",
         }
         with open(summary_file, 'w') as f:
             json.dump(suite_data, f, indent=2)
@@ -253,6 +288,7 @@ class TestHarness:
             "created_at": suite.created_at,
             "device_abi": suite.device_info.get("abi"),
             "summary": suite.summary,
+            "harness_deterministic": True,
             "path": str(run_dir.relative_to(self.results_dir))
         })
 

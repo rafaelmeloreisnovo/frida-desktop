@@ -48,7 +48,7 @@ The universal APK contains both ARM ABIs. It does not make a 32-bit ABI executab
 
 For each ABI, the workflow carries two independent ELF objects:
 
-- `librafaelia-probe.so`: compiled in the workflow from `android/frida-lab/native/elf_probe.c` with the corresponding NDK clang wrapper;
+- `librafaelia-probe.so`: compiled in the workflow from `android/app/native/elf_probe.c` with the corresponding NDK clang wrapper;
 - `libfrida-gadget.so`: retrieved from the pinned official Frida release and checked against its release digest.
 
 The gate checks ELF magic and machine type with `readelf`:

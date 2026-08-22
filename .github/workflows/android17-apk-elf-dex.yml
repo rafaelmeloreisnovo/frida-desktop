@@ -3,7 +3,7 @@ name: Android 17 APK + ELF/DEX Lab
 on:
   pull_request:
     paths:
-      - "android/frida-lab/**"
+      - "android/app/**"
       - ".github/scripts/rafaelia/android-lab-ci.sh"
       - ".github/scripts/rafaelia/host-tools.sh"
       - ".github/scripts/rafaelia/ci-common.sh"
@@ -12,7 +12,7 @@ on:
     branches:
       - main
     paths:
-      - "android/frida-lab/**"
+      - "android/app/**"
       - ".github/scripts/rafaelia/android-lab-ci.sh"
       - ".github/scripts/rafaelia/host-tools.sh"
       - ".github/scripts/rafaelia/ci-common.sh"
