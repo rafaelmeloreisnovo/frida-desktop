@@ -229,7 +229,7 @@ build_native() {
   require_contract_env
   load_toolchain_env
   mkdir -p "$NATIVE_DIR/armeabi-v7a" "$NATIVE_DIR/arm64-v8a"
-  rafaelia_need_file android/frida-lab/native/elf_probe.c
+  rafaelia_need_file android/app/native/elf_probe.c
 
   local common=(
     -std=c11 -O2 -fPIC -fvisibility=hidden -shared
@@ -243,14 +243,14 @@ build_native() {
     -Wl,-z,max-page-size=4096 \
     -Wl,-z,common-page-size=4096 \
     -o "$NATIVE_DIR/armeabi-v7a/librafaelia-probe.so" \
-    android/frida-lab/native/elf_probe.c
+    android/app/native/elf_probe.c
 
   "$TOOLCHAIN/aarch64-linux-android${MIN_SDK}-clang" \
     "${common[@]}" \
     -Wl,-z,max-page-size=16384 \
     -Wl,-z,common-page-size=4096 \
     -o "$NATIVE_DIR/arm64-v8a/librafaelia-probe.so" \
-    android/frida-lab/native/elf_probe.c
+    android/app/native/elf_probe.c
 }
 
 verify_native() {
@@ -324,7 +324,7 @@ build_dex() {
     --release 8 \
     -classpath "$ANDROID_JAR" \
     -d "$CLASSES_DIR" \
-    android/frida-lab/src/io/rafaelia/fridalab/MainActivity.java
+    android/app/src/io/rafaelia/fridalab/MainActivity.java
 
   mapfile -t classes < <(find "$CLASSES_DIR" -type f -name '*.class' -print | sort)
   ((${#classes[@]} > 0)) || rafaelia_die "javac produced no .class files"
@@ -393,7 +393,7 @@ JSON
     "$BT_DIR/aapt2" link \
       -o "$work/base.apk" \
       -I "$ANDROID_JAR" \
-      --manifest android/frida-lab/AndroidManifest.xml \
+      --manifest android/app/AndroidManifest.xml \
       --min-sdk-version "$MIN_SDK" \
       --target-sdk-version "$TARGET_SDK" \
       --version-code 1 \
@@ -448,7 +448,7 @@ JSON
   build_one_apk arm64 arm64-v8a
   build_one_apk universal armeabi-v7a arm64-v8a
 
-  cp android/frida-lab/adb-smoke.sh "$DIST_DIR/adb-smoke.sh"
+  cp android/app/adb-smoke.sh "$DIST_DIR/adb-smoke.sh"
 }
 
 write_receipt() {
