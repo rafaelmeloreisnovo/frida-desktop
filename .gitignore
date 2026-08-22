@@ -4,3 +4,13 @@
 /releng/modules/frida-gadget-ios/*.dylib
 /releng/modules/frida-gadget-ios/node_modules
 /subprojects/*
+
+# Node.js
+node_modules/
+package-lock.json
+npm-debug.log
+
+# Development
+data/
+.env
+.env.local
