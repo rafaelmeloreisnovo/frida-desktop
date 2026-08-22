@@ -16,3 +16,7 @@ npm-debug.log
 data/
 .env
 .env.local
+
+# Generated
+evidence/
+.github/scripts/rafaelia/__pycache__/
