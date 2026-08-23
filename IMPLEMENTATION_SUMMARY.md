@@ -142,7 +142,7 @@ python3 tests/harness/test_runner.py
 - Vite como build tool
 
 ### 5️⃣ **Android UI (Java)** ✅
-**Diretório:** `android/frida-lab/src/io/rafaelia/fridalab/`
+**Diretório:** `android/app/src/io/rafaelia/fridalab/`
 
 **ResearchModePanel.java** — Painel de pesquisa interativo
 - Spinner de modo (OFF/OBSERVE/LEARN_SHADOW/PREDICT_SHADOW/FROZEN)
@@ -201,7 +201,7 @@ frida-desktop/
 │   │       └── ArchitectureNavigator.css
 │   └── package.json
 │
-├── android/frida-lab/src/io/rafaelia/fridalab/
+├── android/app/src/io/rafaelia/fridalab/
 │   ├── ui/
 │   │   └── ResearchModePanel.java              [420 linhas]
 │   └── learning/
@@ -249,7 +249,7 @@ python3 test_runner.py
 ### Android Integration
 
 ```bash
-cd android/frida-lab
+cd android/app
 ./gradlew :app:assembleDebug
 adb install build/outputs/apk/debug/fridalab-debug.apk
 # MainActivity agora tem Research Mode Panel

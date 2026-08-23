@@ -1,0 +1,25 @@
+{
+  "frozen_at": "2026-08-22T21:52:32.211024Z",
+  "files": {
+    "ontology": {
+      "path": "ontology/learning-semantic-tree.v1.json",
+      "sha256": "7a3c7921af69b24cc590e71cd126afaad67ada616afb8245b08d107373c7b967",
+      "size_bytes": 10889
+    },
+    "test_harness": {
+      "path": "tests/harness/test_runner.py",
+      "sha256": "608ed774f5788f9b932d97793c7980bb5f69273c03b2a63d68dfbd677addfb36",
+      "size_bytes": 13279
+    },
+    "test_scenarios": {
+      "path": "tests/fixtures/metrics-deterministic-v1.json",
+      "sha256": "5542aa58bef763014b6cf789c6bede3455d15c19bfa74bb2289d6a9a0bfe81d3",
+      "size_bytes": 2794
+    },
+    "deterministic_executor": {
+      "path": "tests/harness/deterministic_executor.py",
+      "sha256": "2eb4c69c34e0400664d4f6829a78f72ca481dce4503dd93c14cfaef2f30f58dc",
+      "size_bytes": 6445
+    }
+  }
+}

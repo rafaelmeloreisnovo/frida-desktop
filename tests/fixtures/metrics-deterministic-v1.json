@@ -1,0 +1,81 @@
+{
+  "fixture_version": "1.0",
+  "fixture_date": "2026-08-22",
+  "fixture_purpose": "Deterministic test metrics for harness validation",
+  "fixture_hash_sha256": "COMPUTED_AT_FREEZE",
+  "device_validation_required": true,
+  "scenarios": {
+    "scenario_1_basic_learning": {
+      "name": "Basic Learning Observation",
+      "metrics": {
+        "accuracy_percent": 85.5,
+        "overhead_percent": 8.3,
+        "latency_ns": 1250000,
+        "memory_bytes": 45000,
+        "context_count": 128
+      },
+      "expected_outcomes": {
+        "accuracy_min": 80.0,
+        "overhead_max_percent": 15.0,
+        "memory_max_bytes": 65536
+      },
+      "device_validation_status": "TOKEN_VAZIO",
+      "device_validation_note": "Must validate on physical Android device before PASS promotion"
+    },
+    "scenario_2_predict_shadow": {
+      "name": "Predict Shadow Mode Convergence",
+      "metrics": {
+        "accuracy_percent": 92.3,
+        "overhead_percent": 12.1,
+        "latency_ns": 1850000,
+        "memory_bytes": 52000,
+        "context_count": 256
+      },
+      "expected_outcomes": {
+        "accuracy_min": 85.0,
+        "overhead_max_percent": 20.0,
+        "memory_max_bytes": 65536
+      },
+      "device_validation_status": "TOKEN_VAZIO"
+    },
+    "scenario_3_validate_frozen": {
+      "name": "Validate Frozen Model Window",
+      "metrics": {
+        "accuracy_percent": 88.7,
+        "overhead_percent": 5.2,
+        "latency_ns": 950000,
+        "memory_bytes": 48000,
+        "context_count": 512
+      },
+      "expected_outcomes": {
+        "accuracy_min": 75.0,
+        "overhead_max_percent": 10.0,
+        "memory_max_bytes": 65536
+      },
+      "device_validation_status": "TOKEN_VAZIO"
+    },
+    "scenario_4_neon_vectorization": {
+      "name": "NEON Vectorization Performance",
+      "metrics": {
+        "accuracy_percent": 94.1,
+        "overhead_percent": 3.8,
+        "latency_ns": 650000,
+        "memory_bytes": 51000,
+        "context_count": 1024
+      },
+      "expected_outcomes": {
+        "accuracy_min": 90.0,
+        "overhead_max_percent": 8.0,
+        "memory_max_bytes": 65536
+      },
+      "device_validation_status": "TOKEN_VAZIO"
+    }
+  },
+  "protocol": {
+    "version": "1.0",
+    "harness_contract": "Test harness MUST set device_validated=true if actual device execution occurred. Otherwise must include device_validation_status=TOKEN_VAZIO in output receipt.",
+    "falsifier": "Test producing PASS without device=true AND without device_validation_status=TOKEN_VAZIO marker shall FAIL immediately.",
+    "fixture_immutability": "This file is a checkpoint. When frozen at cycle closure, SHA-256 hash becomes immutable reference for reproduction.",
+    "next_stage": "Phase 4: Freeze fixtures with checksums when all gates close"
+  }
+}
