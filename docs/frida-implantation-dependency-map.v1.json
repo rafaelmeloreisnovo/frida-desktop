@@ -1,0 +1,174 @@
+{
+  "schema": "rafaelia.frida.implantation_dependency_map.v1",
+  "generated_at": "2026-08-24",
+  "repository": "rafaelmeloreisnovo/frida-desktop",
+  "snapshot": {
+    "branch": "main",
+    "commit": "27104496379491008ff56ce157ce9e7de1bdcce8"
+  },
+  "scope": "MAPPING_ONLY",
+  "execution_performed": false,
+  "claim_allowed": false,
+  "status": "MAPPED_FOR_CORRECTION",
+  "invariants": [
+    "VISION_NE_ARTIFACT",
+    "ARTIFACT_NE_EXECUTION",
+    "EXECUTION_NE_EVIDENCE",
+    "EVIDENCE_NE_CLAIM",
+    "TOKEN_VAZIO_NE_ZERO"
+  ],
+  "surfaces": {
+    "frida_upstream": {
+      "class": "UPSTREAM_FRIDA_EXTERNAL_SOURCE",
+      "count": 10,
+      "items": [
+        "frida-gum",
+        "frida-core",
+        "frida-python",
+        "frida-node",
+        "frida-swift",
+        "frida-clr",
+        "frida-qml",
+        "frida-tools",
+        "frida-go",
+        "releng"
+      ],
+      "target_boundary": "bridge/frida"
+    },
+    "android_host": {
+      "class": "ANDROID_HOSTED_BUILD_RUNTIME",
+      "compile_sdk": 34,
+      "min_sdk": 29,
+      "target_sdk": 34,
+      "java": 11,
+      "abis": ["armeabi-v7a", "arm64-v8a"],
+      "runtime_dependencies": [
+        "androidx.appcompat:appcompat:1.6.1",
+        "androidx.constraintlayout:constraintlayout:2.1.4",
+        "com.google.android.material:material:1.10.0",
+        "com.google.code.gson:gson:2.10.1",
+        "com.squareup.okhttp3:okhttp:4.11.0"
+      ],
+      "test_dependencies": [
+        "junit:junit:4.13.2",
+        "androidx.test.ext:junit:1.1.5",
+        "androidx.test.espresso:espresso-core:3.5.1"
+      ]
+    },
+    "dashboard_backend": {
+      "class": "HOSTED_AUXILIARY",
+      "runtime_dependencies": ["express", "sqlite3", "cors", "dotenv", "ws", "uuid"],
+      "dev_dependencies": ["nodemon", "jest", "supertest", "eslint"]
+    },
+    "dashboard_web": {
+      "class": "HOSTED_AUXILIARY",
+      "runtime_dependencies": ["react", "react-dom", "recharts", "axios", "zustand"],
+      "build_family": ["typescript", "vite", "eslint"]
+    }
+  },
+  "native_units": {
+    "android/app/native/neon4096_core.c": {
+      "role": "DETERMINISTIC_ALGORITHM_PLUS_PLATFORM_PROBE",
+      "external_boundaries": {
+        "posix": ["open", "read", "close", "sysconf", "/proc/cpuinfo"],
+        "c_library": ["memset", "memcpy", "memcmp"],
+        "c11": ["stdatomic"],
+        "compiler_arch": ["arm_neon.h", "NEON intrinsics"]
+      },
+      "correction": "split algorithm from cpu/page platform probe"
+    },
+    "android/app/native/learning_store.c": {
+      "role": "MODEL_PLUS_PERSISTENCE",
+      "external_boundaries": {
+        "posix_io": ["open", "close", "fstat", "pread", "pwrite", "ftruncate", "fdatasync"],
+        "posix_time": ["clock_gettime:CLOCK_MONOTONIC"],
+        "posix_contract": ["errno", "EINTR", "off_t", "struct stat"],
+        "c_library": ["memset", "memcpy"],
+        "c11": ["stdatomic"]
+      },
+      "correction": "split predictor/codec semantics from storage and clock ports"
+    },
+    "android/app/native/learning_runtime.c": {
+      "role": "FREESTANDING_CORE_CANDIDATE",
+      "external_boundaries": {
+        "c_library": ["memset"],
+        "c11": ["stdatomic"],
+        "headers": ["limits.h", "string.h"]
+      },
+      "correction": "retain deterministic state/mode logic in core and inject effects"
+    },
+    "android/app/native/elf_probe.c": {
+      "role": "ANDROID_JNI_BRIDGE_AND_CURRENT_AMALGAMATION",
+      "external_boundaries": {
+        "jni": ["jni.h", "JNIEnv"],
+        "hosted_formatting": ["stdio.h", "snprintf"],
+        "amalgamated_c_sources": ["learning_store.c", "neon4096_core.c", "learning_runtime.c"]
+      },
+      "correction": "compile core/ports/bridge as independent translation units"
+    }
+  },
+  "target_layers": [
+    {
+      "id": "L0",
+      "name": "rafaelia_core",
+      "class": "AUTHORIAL_FREESTANDING_TARGET",
+      "effects_allowed": []
+    },
+    {
+      "id": "L1",
+      "name": "ports",
+      "class": "NARROW_ABI_CONTRACT",
+      "interfaces": ["storage", "clock", "cpu_caps_page_size", "memory"]
+    },
+    {
+      "id": "L2",
+      "name": "platform_android_linux",
+      "class": "OS_RUNTIME_BOUNDARY"
+    },
+    {
+      "id": "L3",
+      "name": "bridge_android_jni",
+      "class": "JNI_UI_BOUNDARY"
+    },
+    {
+      "id": "L4",
+      "name": "bridge_frida",
+      "class": "UPSTREAM_INSTRUMENTATION_BOUNDARY"
+    },
+    {
+      "id": "L5",
+      "name": "dashboard",
+      "class": "HOSTED_AUXILIARY"
+    }
+  ],
+  "audit_flags": {
+    "FRIDA_UPSTREAM_EXTERNAL_PRESENT": 1,
+    "ANDROID_HOSTED_DEPS_PRESENT": 1,
+    "DASHBOARD_HOSTED_DEPS_PRESENT": 1,
+    "RFL_POSIX_IO_IN_CORE_PATH": 1,
+    "RFL_OS_PROBE_IN_NEON_PATH": 1,
+    "RFL_JNI_IN_AMALGAMATION_PATH": 1,
+    "RFL_CORE_FREESTANDING_TARGET": 1,
+    "FULL_FRIDA_FREESTANDING_PROVEN": 0,
+    "NO_EXTERNAL_DEPENDENCIES_PROVEN": 0,
+    "CLAIM_ALLOWED": 0
+  },
+  "static_gates_for_future_implementation": [
+    "core_has_no_jni_h",
+    "core_has_no_stdio_h",
+    "core_has_no_unistd_h",
+    "core_has_no_fcntl_h",
+    "core_has_no_sys_stat_h",
+    "core_imports_no_open_read_pread_pwrite_close_ftruncate_fdatasync_sysconf_clock_gettime_snprintf",
+    "core_build_requires_no_gradle_dashboard_packages",
+    "core_freestanding_object_receipt_matches_tested_ref"
+  ],
+  "token_vazio_alignment": {
+    "TV-26": "ARM32 cross-build receipt",
+    "TV-27": "ARM64 cross-build receipt",
+    "TV-28": "authorized Android Frida attachment adapter",
+    "TV-29": "physical Android ARM32 runtime receipt",
+    "TV-30": "bounded overhead/stability measurement"
+  },
+  "next_verifiable_stage": "implement boundary split without behavior change, then produce per-ref static/build receipts"
+}
