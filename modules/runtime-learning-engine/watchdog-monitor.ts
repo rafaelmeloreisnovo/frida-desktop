@@ -19,6 +19,7 @@ export class WatchdogMonitorImpl implements WatchdogMonitor {
   private trap_count = 0;
   private current_state: WatchdogState = 'STABLE';
   private rollback_callback: (() => void) | null = null;
+  private last_heartbeat_time: number = 0;
 
   async startWatchdog(): Promise<void> {
     if (this.monitoring) {
@@ -31,6 +32,7 @@ export class WatchdogMonitorImpl implements WatchdogMonitor {
     this.heartbeat_count = 0;
     this.current_epoch = Math.floor(Date.now() / 1000);
     this.trap_count = 0;
+    this.last_heartbeat_time = Date.now();
 
     this.heartbeatTimer = setInterval(() => {
       this.heartbeat();
@@ -57,6 +59,7 @@ export class WatchdogMonitorImpl implements WatchdogMonitor {
 
   async heartbeat(): Promise<void> {
     this.heartbeat_count++;
+    this.last_heartbeat_time = Date.now();
 
     try {
       const event: WatchdogEvent = {
@@ -115,10 +118,13 @@ export class WatchdogMonitorImpl implements WatchdogMonitor {
     if (!this.monitoring) return;
 
     const now = Date.now();
-    const lastHeartbeatAge = this.heartbeat_count > 0 ? 0 : EPOCH_TIMEOUT + 1;
+    const lastHeartbeatAge = now - this.last_heartbeat_time;
 
     if (lastHeartbeatAge > EPOCH_TIMEOUT) {
-      console.error('[WatchdogMonitor] Epoch timeout detected! Triggering rollback...');
+      console.error(
+        `[WatchdogMonitor] Epoch timeout detected! ` +
+        `Last heartbeat was ${lastHeartbeatAge}ms ago (timeout: ${EPOCH_TIMEOUT}ms). Triggering rollback...`
+      );
 
       this.current_state = 'FAILSAFE';
       this.trap_count++;
@@ -130,7 +136,7 @@ export class WatchdogMonitorImpl implements WatchdogMonitor {
         state: this.current_state,
         trap_count: this.trap_count,
         rollback_triggered: true,
-        reason: 'epoch_timeout'
+        reason: `epoch_timeout (${lastHeartbeatAge}ms)`
       };
 
       this.recordEvent(event).catch(e => console.error('[WatchdogMonitor] Failed to record timeout event:', e));
@@ -140,7 +146,7 @@ export class WatchdogMonitorImpl implements WatchdogMonitor {
       }
 
       this.current_epoch++;
-      this.heartbeat_count = 0;
+      this.last_heartbeat_time = now;
     }
   }
 

@@ -165,13 +165,35 @@ export class AutoFixerImpl implements AutoFixer {
 
   private getDefaultValue(original: any): any {
     if (original === null || original === undefined) {
+      if (typeof original === 'number') return 0;
+      if (typeof original === 'boolean') return false;
+      if (Array.isArray(original)) return [];
+      if (typeof original === 'object') return {};
       return '';
     }
     return original;
   }
 
   private createFallbackResult(methodName: string): any {
-    return null;
+    console.log(`[AutoFixer] Creating fallback result for ${methodName}`);
+
+    if (methodName.includes('get') || methodName.includes('fetch')) {
+      return null;
+    }
+    if (methodName.includes('is') || methodName.includes('has')) {
+      return false;
+    }
+    if (methodName.includes('count') || methodName.includes('size')) {
+      return 0;
+    }
+    if (methodName.includes('list') || methodName.includes('array')) {
+      return [];
+    }
+    if (methodName.includes('map') || methodName.includes('dict')) {
+      return {};
+    }
+
+    return undefined;
   }
 
   getActivePatches(): Map<string, any> {
