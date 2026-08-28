@@ -1,0 +1,81 @@
+{
+  "schema": "rafaelia.upstream-delta-provenance.v1",
+  "repository": "rafaelmeloreisnovo/frida-desktop",
+  "observed_commit": "72c95d353d68bf5722157e5ef66e16a73f90ff61",
+  "classification": "UPSTREAM_DERIVATIVE_REQUIRES_DELTA_PROVENANCE",
+  "upstream_license": {
+    "state": "OBSERVED",
+    "path": "COPYING",
+    "blob": "b01d49c670e55dbff638eb294ac1a52416fb32e8",
+    "name": "wxWindows Library Licence 3.1",
+    "preserved": true
+  },
+  "authorial_delta": {
+    "state": "TOKEN_VAZIO_NEEDS_UPSTREAM_DIFF",
+    "ownership_claimed_by_this_manifest": false,
+    "candidate_paths_observed_from_readme": [
+      "docs/freestanding-profile.md",
+      "tools/chipquantum-basic-commands.c",
+      "tools/chipquantum-benchmark.c",
+      "tools/chipquantum-repo-sensors.py",
+      "docs/chipquantum-basic-commands.md",
+      "tools/frida-debugger-class-a-autotune.c",
+      "tools/frida-debugger-class-a-autotune.h",
+      "docs/debugger-class-a-autotune.md",
+      "docs/runtime-stability-recorder.md",
+      "profiles/runtime-stability-recorder.json"
+    ],
+    "required_closure": [
+      "identify upstream repository and baseline commit",
+      "produce path-level diff against baseline",
+      "classify each changed hunk as upstream, authorial, generated or third-party",
+      "preserve applicable upstream notices",
+      "only then decide whether any compatible authorial notice is appropriate"
+    ]
+  },
+  "third_party": {
+    "state": "TOKEN_VAZIO_FULL_SUBMODULE_AND_DEPENDENCY_LICENSE_RECONCILIATION",
+    "gitmodules_present": true,
+    "flatten_to_single_license": false
+  },
+  "runtime": {
+    "state": "TOKEN_VAZIO_CURRENT_PHYSICAL_EXECUTION_FOR_NEW_DELTA",
+    "source_presence_is_runtime_evidence": false
+  },
+  "security": {
+    "state": "TOKEN_VAZIO_REVIEW_PER_DELTA",
+    "instrumentation_capability_is_security_claim": false
+  },
+  "gates": [
+    {
+      "id": "UPSTREAM_LICENSE_PRESERVED",
+      "state": "IMPLEMENTED",
+      "falsifier": "COPYING missing or manifest no longer binds its exact observed blob"
+    },
+    {
+      "id": "AUTHORIAL_DELTA_BOUND",
+      "state": "TOKEN_VAZIO",
+      "falsifier": "candidate path has no upstream-baseline diff and origin classification"
+    },
+    {
+      "id": "THIRD_PARTY_RECONCILED",
+      "state": "TOKEN_VAZIO",
+      "falsifier": "submodule/dependency material lacks governing terms"
+    }
+  ],
+  "risk": {
+    "severity": "HIGH",
+    "primary": "accidental ownership or license claim over upstream Frida/submodule material",
+    "mitigations": [
+      "COPYING remains unmodified authority for its scope",
+      "candidate delta paths are not declared authorial until diff evidence exists",
+      "unknown dependency/submodule rights remain TOKEN_VAZIO",
+      "runtime and security claims remain separate from source presence"
+    ]
+  },
+  "rollback": {
+    "available": true,
+    "procedure": "revert only this provenance-gate branch/commit; upstream source and COPYING remain untouched"
+  },
+  "claim_allowed": false
+}

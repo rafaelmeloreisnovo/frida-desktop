@@ -1,0 +1,42 @@
+name: RAFAELIA Provenance Gate
+
+on:
+  push:
+    paths:
+      - 'profiles/rafaelia-provenance-scope.v1.json'
+      - 'tools/validate-rafaelia-provenance.py'
+      - '.github/workflows/rafaelia-provenance-gate.yml'
+  pull_request:
+    paths:
+      - 'profiles/rafaelia-provenance-scope.v1.json'
+      - 'tools/validate-rafaelia-provenance.py'
+      - '.github/workflows/rafaelia-provenance-gate.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  provenance:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate fail-closed provenance scope
+        run: python3 tools/validate-rafaelia-provenance.py
+      - name: Negative gate — premature authorship promotion must fail
+        run: |
+          cp profiles/rafaelia-provenance-scope.v1.json /tmp/provenance.json
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          p = Path('profiles/rafaelia-provenance-scope.v1.json')
+          d = json.loads(p.read_text())
+          d['authorial_delta']['state'] = 'PASS'
+          d['authorial_delta']['ownership_claimed_by_this_manifest'] = True
+          p.write_text(json.dumps(d))
+          PY
+          if python3 tools/validate-rafaelia-provenance.py; then
+            echo 'FAIL: premature authorial promotion accepted' >&2
+            exit 1
+          fi
+          mv /tmp/provenance.json profiles/rafaelia-provenance-scope.v1.json
+          python3 tools/validate-rafaelia-provenance.py
