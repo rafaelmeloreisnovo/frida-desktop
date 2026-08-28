@@ -45,6 +45,7 @@ jobs:
           bash -n .github/scripts/rafaelia/android-lab-ci.sh
           bash -n .github/scripts/rafaelia/rfl-neon4096-selftest.sh
           bash -n .github/scripts/rafaelia/runtime-aided-hardening.sh
+          bash -n .github/scripts/rafaelia/runtime-learning-engine-ci.sh
           python3 -m py_compile .github/scripts/rafaelia/workflow-contract.py
 
       - name: Run fail-closed workflow + catalyst contract

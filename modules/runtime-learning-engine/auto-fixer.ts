@@ -1,8 +1,17 @@
-import { BugPattern, FixEvent, AutoFixer, TestResult } from './types';
+import { BugPattern, FixEvent, AutoFixer, RollbackCapability } from './types';
 import { generateFixId } from './utils';
 
+interface ActivePatchRecord {
+  fix_id: string;
+  strategy: FixEvent['strategy'];
+  target: string;
+  rollback_capability: RollbackCapability;
+  restore: Array<() => void>;
+  created_at: number;
+}
+
 export class AutoFixerImpl implements AutoFixer {
-  private activePatches: Map<string, any> = new Map();
+  private activePatches: Map<string, ActivePatchRecord> = new Map();
 
   async applyFix(pattern: BugPattern): Promise<FixEvent> {
     const fixId = generateFixId();
@@ -15,19 +24,32 @@ export class AutoFixerImpl implements AutoFixer {
       timestamp: Date.now(),
       strategy: pattern.fix_strategy,
       status: 'applied',
-      test_results: []
+      test_results: [],
+      rollback_capability: 'token_vazio',
+      rollback_verified: false
     };
 
     try {
       switch (pattern.fix_strategy) {
         case 'try_catch_with_fallback':
-          await this.tryCatchFallback(pattern.class);
+          await this.tryCatchFallbackInternal(pattern.class, fixId, pattern.fix_strategy);
+          fixEvent.rollback_capability = 'hook_restore';
           break;
         case 'monkey_patch_from_journal':
-          await this.monkeyPatch(pattern);
+          await this.monkeyPatchInternal(pattern, fixId);
+          fixEvent.rollback_capability = 'hook_restore';
           break;
         case 'component_restart':
           await this.restartComponent(pattern.class);
+          this.activePatches.set(fixId, {
+            fix_id: fixId,
+            strategy: pattern.fix_strategy,
+            target: pattern.class,
+            rollback_capability: 'non_reversible',
+            restore: [],
+            created_at: Date.now()
+          });
+          fixEvent.rollback_capability = 'non_reversible';
           break;
       }
 
@@ -36,46 +58,70 @@ export class AutoFixerImpl implements AutoFixer {
     } catch (e) {
       console.error(`[AutoFixer] Fix ${fixId} failed:`, e);
       fixEvent.status = 'failed';
+      fixEvent.rollback_capability = 'token_vazio';
       return fixEvent;
     }
   }
 
   async tryCatchFallback(target: string): Promise<void> {
+    const fixId = `manual_${generateFixId()}`;
+    await this.tryCatchFallbackInternal(target, fixId, 'try_catch_with_fallback');
+  }
+
+  private async tryCatchFallbackInternal(
+    target: string,
+    fixId: string,
+    strategy: FixEvent['strategy']
+  ): Promise<void> {
     console.log(`[AutoFixer] Applying try-catch fallback for ${target}`);
 
     try {
       const targetClass = Java.use(target);
+      const methods: string[] = Array.isArray(targetClass.$methods) ? targetClass.$methods : [];
+      const restore: Array<() => void> = [];
+      const seen = new Set<string>();
+      const self = this;
 
-      const methods = targetClass.$methods;
+      for (const methodDescriptor of methods) {
+        const methodName = String(methodDescriptor).split('-')[0];
+        if (!methodName || seen.has(methodName)) continue;
+        seen.add(methodName);
 
-      for (const method of methods) {
-        const methodName = method.split('-')[0];
+        const method = targetClass[methodName];
+        const overloads: any[] = method?.overloads || [];
 
-        try {
-          const overloads = targetClass[methodName].overloads;
+        for (const overload of overloads) {
+          const previousImplementation = overload.implementation;
+          const returnType = self.getFridaTypeName(overload.returnType);
+          const wrapped = function(this: any, ...args: any[]) {
+            try {
+              return overload.apply(this, args);
+            } catch (e) {
+              console.log(`[AutoFixer] Caught exception in ${target}.${methodName}: ${e}`);
+              return self.defaultValueForType(returnType);
+            }
+          };
 
-          for (let i = 0; i < overloads.length; i++) {
-            const original = overloads[i];
-            const self = this;
-            const wrapped = function(this: any, ...args: any[]) {
-              try {
-                return original.apply(this, args);
-              } catch (e) {
-                console.log(`[AutoFixer] Caught exception in ${target}.${methodName}: ${e}`);
-                return self.createFallbackResult(methodName);
-              }
-            };
-
-            targetClass[methodName].overload.apply(targetClass[methodName], overloads[i].descriptor.split(','))
-              .implementation = wrapped;
-          }
-        } catch (e) {
-          console.warn(`[AutoFixer] Could not wrap ${target}.${methodName}`, e);
+          overload.implementation = wrapped;
+          restore.push(() => {
+            overload.implementation = previousImplementation;
+          });
         }
       }
 
-      this.activePatches.set(target, { type: 'try_catch', target });
-      console.log(`[AutoFixer] Try-catch fallback applied to ${target}`);
+      if (restore.length === 0) {
+        throw new Error(`No hookable overloads found for ${target}`);
+      }
+
+      this.activePatches.set(fixId, {
+        fix_id: fixId,
+        strategy,
+        target,
+        rollback_capability: 'hook_restore',
+        restore,
+        created_at: Date.now()
+      });
+      console.log(`[AutoFixer] Try-catch fallback applied to ${target}; reversible hooks=${restore.length}`);
     } catch (e) {
       const errorContext = `Failed to apply try-catch fallback to ${target}: ${e}`;
       console.error(`[AutoFixer] ${errorContext}`);
@@ -84,6 +130,11 @@ export class AutoFixerImpl implements AutoFixer {
   }
 
   async monkeyPatch(pattern: BugPattern): Promise<void> {
+    const fixId = `manual_${generateFixId()}`;
+    await this.monkeyPatchInternal(pattern, fixId);
+  }
+
+  private async monkeyPatchInternal(pattern: BugPattern, fixId: string): Promise<void> {
     console.log(
       `[AutoFixer] Applying monkey patch for ${pattern.class}.${pattern.method} ` +
       `(${pattern.exception_type})`
@@ -92,42 +143,70 @@ export class AutoFixerImpl implements AutoFixer {
     try {
       const targetClass = Java.use(pattern.class);
       const methodName = pattern.method;
+      const method = targetClass[methodName];
 
-      const originalMethod = targetClass[methodName];
-
-      if (!originalMethod) {
+      if (!method) {
         throw new Error(`Method ${methodName} not found in ${pattern.class}`);
       }
 
+      const overloads: any[] = method.overloads?.length ? method.overloads : [method];
+      const restore: Array<() => void> = [];
       const self = this;
-      const patchedMethod = function(this: any, ...args: any[]) {
-        console.log(`[AutoFixer] Executing patched version of ${pattern.class}.${methodName}`);
 
-        if (pattern.exception_type === 'NullPointerException') {
-          for (let i = 0; i < args.length; i++) {
-            if (args[i] === null || args[i] === undefined) {
-              console.log(`[AutoFixer] Null argument detected at index ${i}, using default value`);
-              args[i] = self.getDefaultValue(args[i]);
+      for (const overload of overloads) {
+        const previousImplementation = overload.implementation;
+        const argumentTypes: string[] = (overload.argumentTypes || []).map((t: any) => self.getFridaTypeName(t));
+        const returnType = self.getFridaTypeName(overload.returnType);
+
+        const patchedMethod = function(this: any, ...args: any[]) {
+          console.log(`[AutoFixer] Executing patched version of ${pattern.class}.${methodName}`);
+
+          if (pattern.exception_type === 'NullPointerException') {
+            for (let i = 0; i < args.length; i++) {
+              if (args[i] === null || args[i] === undefined) {
+                const replacement = self.defaultArgumentForType(argumentTypes[i]);
+                if (replacement.supported) {
+                  console.log(`[AutoFixer] Null primitive argument at index ${i}; applying typed default`);
+                  args[i] = replacement.value;
+                } else {
+                  console.warn(
+                    `[AutoFixer] Null reference argument at index ${i} cannot be safely synthesized; preserving null`
+                  );
+                }
+              }
             }
           }
-        }
 
-        try {
-          return originalMethod.apply(this, args);
-        } catch (e) {
-          console.log(`[AutoFixer] Patched method caught exception: ${e}`);
-          return self.createFallbackResult(methodName);
-        }
-      };
+          try {
+            return overload.apply(this, args);
+          } catch (e) {
+            console.log(`[AutoFixer] Patched method caught exception: ${e}`);
+            return self.defaultValueForType(returnType);
+          }
+        };
 
-      targetClass[methodName].implementation = patchedMethod;
+        overload.implementation = patchedMethod;
+        restore.push(() => {
+          overload.implementation = previousImplementation;
+        });
+      }
 
-      this.activePatches.set(`${pattern.class}.${methodName}`, {
-        type: 'monkey_patch',
-        pattern
+      if (restore.length === 0) {
+        throw new Error(`No hookable overloads found for ${pattern.class}.${methodName}`);
+      }
+
+      this.activePatches.set(fixId, {
+        fix_id: fixId,
+        strategy: pattern.fix_strategy,
+        target: `${pattern.class}.${methodName}`,
+        rollback_capability: 'hook_restore',
+        restore,
+        created_at: Date.now()
       });
 
-      console.log(`[AutoFixer] Monkey patch applied to ${pattern.class}.${pattern.method}`);
+      console.log(
+        `[AutoFixer] Monkey patch applied to ${pattern.class}.${pattern.method}; reversible hooks=${restore.length}`
+      );
     } catch (e) {
       const errorContext = `Failed to apply monkey patch to ${pattern.class}.${pattern.method} (pattern ${pattern.pattern_id}): ${e}`;
       console.error(`[AutoFixer] ${errorContext}`);
@@ -139,28 +218,19 @@ export class AutoFixerImpl implements AutoFixer {
     console.log(`[AutoFixer] Restarting component ${class_name}`);
 
     try {
-      const activityManager = Java.use('android.app.ActivityManager');
       const context = Java.use('android.app.ActivityManagerNative').getDefault();
 
       if (class_name.includes('Activity')) {
-        const activityClass = Java.use(class_name);
-        const killBackgroundProcesses = context.killBackgroundProcesses;
-        killBackgroundProcesses.call(context, Java.use('android.app.ContextImpl').getApplicationContext().getPackageName());
-
-        console.log(`[AutoFixer] Restarted activity ${class_name}`);
+        const packageName = Java.use('android.app.ContextImpl').getApplicationContext().getPackageName();
+        context.killBackgroundProcesses(packageName);
+        console.log(`[AutoFixer] Requested activity process restart for ${class_name}`);
       } else if (class_name.includes('Service')) {
-        const am = context;
-        const pkgName = Java.use('android.app.ContextImpl').getApplicationContext().getPackageName();
-        am.forceStopPackage(pkgName);
-
-        console.log(`[AutoFixer] Force stopped service ${class_name}`);
+        const packageName = Java.use('android.app.ContextImpl').getApplicationContext().getPackageName();
+        context.forceStopPackage(packageName);
+        console.log(`[AutoFixer] Requested service process stop for ${class_name}`);
+      } else {
+        throw new Error(`Unsupported component type for restart: ${class_name}`);
       }
-
-      this.activePatches.set(class_name, {
-        type: 'component_restart',
-        class_name,
-        restart_time: Date.now()
-      });
     } catch (e) {
       const errorContext = `Failed to restart component ${class_name}: ${e}`;
       console.error(`[AutoFixer] ${errorContext}`);
@@ -168,37 +238,66 @@ export class AutoFixerImpl implements AutoFixer {
     }
   }
 
-  private getDefaultValue(original: any): any {
-    if (original === null || original === undefined) {
-      return null;
-    }
-    if (typeof original === 'number') return 0;
-    if (typeof original === 'boolean') return false;
-    if (Array.isArray(original)) return [];
-    if (typeof original === 'object') return {};
-    return '';
+  canRollbackFix(fixId: string): boolean {
+    const patch = this.activePatches.get(fixId);
+    return Boolean(patch && patch.rollback_capability === 'hook_restore' && patch.restore.length > 0);
   }
 
-  private createFallbackResult(methodName: string): any {
-    console.log(`[AutoFixer] Creating fallback result for ${methodName}`);
-
-    if (methodName.includes('get') || methodName.includes('fetch')) {
-      return null;
-    }
-    if (methodName.includes('is') || methodName.includes('has')) {
+  async rollbackFix(fixId: string): Promise<boolean> {
+    const patch = this.activePatches.get(fixId);
+    if (!patch) {
+      console.warn(`[AutoFixer] No active patch found for ${fixId}; rollback evidence is TOKEN_VAZIO`);
       return false;
     }
-    if (methodName.includes('count') || methodName.includes('size')) {
-      return 0;
-    }
-    if (methodName.includes('list') || methodName.includes('array')) {
-      return [];
-    }
-    if (methodName.includes('map') || methodName.includes('dict')) {
-      return {};
+
+    if (patch.rollback_capability !== 'hook_restore' || patch.restore.length === 0) {
+      console.error(
+        `[AutoFixer] Fix ${fixId} is ${patch.rollback_capability}; automatic rollback is not verified or supported`
+      );
+      return false;
     }
 
-    return undefined;
+    let success = true;
+    for (const restore of [...patch.restore].reverse()) {
+      try {
+        restore();
+      } catch (e) {
+        success = false;
+        console.error(`[AutoFixer] Failed restoring hook for ${fixId}:`, e);
+      }
+    }
+
+    if (success) {
+      this.activePatches.delete(fixId);
+      console.log(`[AutoFixer] Rollback verified by hook restoration for ${fixId}`);
+    }
+
+    return success;
+  }
+
+  private getFridaTypeName(type: any): string {
+    if (!type) return 'unknown';
+    return String(type.className || type.type || type.name || type);
+  }
+
+  private defaultArgumentForType(typeName: string | undefined): { supported: boolean; value: any } {
+    const normalized = (typeName || '').toLowerCase();
+    if (normalized === 'boolean') return { supported: true, value: false };
+    if (['byte', 'short', 'int', 'long', 'float', 'double'].includes(normalized)) {
+      return { supported: true, value: 0 };
+    }
+    if (normalized === 'char') return { supported: true, value: '\u0000' };
+    return { supported: false, value: null };
+  }
+
+  private defaultValueForType(typeName: string | undefined): any {
+    const normalized = (typeName || '').toLowerCase();
+    if (normalized === 'void') return undefined;
+    if (normalized === 'boolean') return false;
+    if (['byte', 'short', 'int', 'long', 'float', 'double'].includes(normalized)) return 0;
+    if (normalized === 'char') return '\u0000';
+    if (normalized === 'java.lang.string' || normalized === 'string') return '';
+    return null;
   }
 
   getActivePatches(): Map<string, any> {
@@ -206,6 +305,14 @@ export class AutoFixerImpl implements AutoFixer {
   }
 
   removePatch(patchId: string): void {
+    const patch = this.activePatches.get(patchId);
+    if (!patch) return;
+
+    if (patch.rollback_capability === 'hook_restore') {
+      for (const restore of [...patch.restore].reverse()) {
+        restore();
+      }
+    }
     this.activePatches.delete(patchId);
   }
 }

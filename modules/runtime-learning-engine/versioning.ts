@@ -24,52 +24,89 @@ export interface VersionMetadata {
   last_upgraded: number;
 }
 
+function defaultMetadata(): VersionMetadata {
+  return {
+    current: { major: 1, minor: 0, patch: 0 },
+    schema_version: 1,
+    changelog: [],
+    last_upgraded: Date.now()
+  };
+}
+
 export class Versioning {
-  private storagePath: string;
-  private metadata: VersionMetadata;
+  private metadata: VersionMetadata = defaultMetadata();
   private metadataPath: string;
 
-  constructor(storagePath: string = '/data/local/tmp/frida-learning') {
-    this.storagePath = storagePath;
+  constructor(private storagePath: string = '/data/local/tmp/frida-learning') {
     this.metadataPath = path.join(storagePath, 'version-metadata.json');
     this.ensureDirectory();
     this.loadMetadata();
   }
 
   private ensureDirectory(): void {
-    if (!fs.existsSync(this.storagePath)) {
-      fs.mkdirSync(this.storagePath, { recursive: true });
-    }
+    if (!fs.existsSync(this.storagePath)) fs.mkdirSync(this.storagePath, { recursive: true });
   }
 
   private loadMetadata(): void {
     try {
-      if (fs.existsSync(this.metadataPath)) {
-        const data = fs.readFileSync(this.metadataPath, 'utf-8');
-        this.metadata = JSON.parse(data);
-      } else {
-        this.metadata = {
-          current: { major: 1, minor: 0, patch: 0 },
-          schema_version: 1,
-          changelog: [],
-          last_upgraded: Date.now()
-        };
+      if (!fs.existsSync(this.metadataPath)) {
+        this.metadata = defaultMetadata();
         this.saveMetadata();
+        return;
       }
+
+      const parsed = JSON.parse(fs.readFileSync(this.metadataPath, 'utf-8')) as Partial<VersionMetadata>;
+      if (
+        !parsed.current ||
+        typeof parsed.current.major !== 'number' ||
+        typeof parsed.current.minor !== 'number' ||
+        typeof parsed.current.patch !== 'number' ||
+        typeof parsed.schema_version !== 'number' ||
+        !Array.isArray(parsed.changelog) ||
+        typeof parsed.last_upgraded !== 'number'
+      ) {
+        throw new Error('invalid version-metadata schema');
+      }
+
+      this.metadata = parsed as VersionMetadata;
     } catch (e) {
-      console.warn('[Versioning] Failed to load metadata, using defaults:', e);
-      this.metadata = {
-        current: { major: 1, minor: 0, patch: 0 },
-        schema_version: 1,
-        changelog: [],
-        last_upgraded: Date.now()
-      };
+      console.warn('[Versioning] Failed to load metadata; preserving evidence and using defaults:', e);
+      this.quarantineInvalidMetadata(e);
+      this.metadata = defaultMetadata();
+    }
+  }
+
+  private quarantineInvalidMetadata(reason: unknown): void {
+    try {
+      if (!fs.existsSync(this.metadataPath)) return;
+      const quarantine = `${this.metadataPath}.corrupt.${Date.now()}`;
+      fs.renameSync(this.metadataPath, quarantine);
+      fs.writeFileSync(
+        `${quarantine}.meta.json`,
+        JSON.stringify(
+          {
+            schema: 'rafaelia.version-metadata.quarantine.v1',
+            source: this.metadataPath,
+            quarantined_path: quarantine,
+            reason: String(reason),
+            destructive_recovery_performed: false,
+            claim_allowed: false
+          },
+          null,
+          2
+        ) + '\n',
+        'utf-8'
+      );
+    } catch (e) {
+      console.error('[Versioning] Failed to quarantine invalid metadata:', e);
     }
   }
 
   private saveMetadata(): void {
     try {
-      fs.writeFileSync(this.metadataPath, JSON.stringify(this.metadata, null, 2), 'utf-8');
+      const temporary = `${this.metadataPath}.tmp`;
+      fs.writeFileSync(temporary, JSON.stringify(this.metadata, null, 2), 'utf-8');
+      fs.renameSync(temporary, this.metadataPath);
     } catch (e) {
       console.error('[Versioning] Failed to save metadata:', e);
     }
@@ -80,12 +117,12 @@ export class Versioning {
   }
 
   getVersionString(): string {
-    const v = this.metadata.current;
-    return `${v.major}.${v.minor}.${v.patch}`;
+    const version = this.metadata.current;
+    return `${version.major}.${version.minor}.${version.patch}`;
   }
 
   recordUpgrade(
-    type: 'feature' | 'fix' | 'improvement' | 'breaking' | 'security',
+    type: ChangelogEntry['type'],
     title: string,
     description: string,
     breakingChanges?: string[],
@@ -104,7 +141,7 @@ export class Versioning {
       this.metadata.current.patch++;
     }
 
-    const entry: ChangelogEntry = {
+    this.metadata.changelog.push({
       version: this.getVersionString(),
       timestamp: Date.now(),
       type,
@@ -112,9 +149,7 @@ export class Versioning {
       description,
       breaking_changes: breakingChanges,
       migration_guide: migrationGuide
-    };
-
-    this.metadata.changelog.push(entry);
+    });
     this.metadata.last_upgraded = Date.now();
     this.saveMetadata();
 
@@ -136,28 +171,23 @@ export class Versioning {
     migration?: string;
   } {
     if (to.major > from.major) {
-      const breakingEntries = this.metadata.changelog.filter(
-        e => this.parseVersion(e.version).major > from.major &&
-              this.parseVersion(e.version).major <= to.major &&
-              e.type === 'breaking'
-      );
+      const breakingEntries = this.metadata.changelog.filter(entry => {
+        const version = this.parseVersion(entry.version);
+        return version.major > from.major && version.major <= to.major && entry.type === 'breaking';
+      });
 
       return {
         safe: false,
-        breaking: breakingEntries.flatMap(e => e.breaking_changes || []),
+        breaking: breakingEntries.flatMap(entry => entry.breaking_changes || []),
         migration: breakingEntries[0]?.migration_guide
       };
     }
 
-    return {
-      safe: true,
-      breaking: [],
-      migration: undefined
-    };
+    return { safe: true, breaking: [], migration: undefined };
   }
 
   private parseVersion(versionStr: string): Version {
-    const parts = versionStr.split('.').map(p => parseInt(p, 10));
+    const parts = versionStr.split('.').map(part => parseInt(part, 10));
     return {
       major: parts[0] || 0,
       minor: parts[1] || 0,
@@ -167,13 +197,13 @@ export class Versioning {
 
   getChangelogSince(version: Version): ChangelogEntry[] {
     return this.metadata.changelog.filter(entry => {
-      const entryVersion = this.parseVersion(entry.version);
+      const candidate = this.parseVersion(entry.version);
       return (
-        entryVersion.major > version.major ||
-        (entryVersion.major === version.major && entryVersion.minor > version.minor) ||
-        (entryVersion.major === version.major &&
-          entryVersion.minor === version.minor &&
-          entryVersion.patch > version.patch)
+        candidate.major > version.major ||
+        (candidate.major === version.major && candidate.minor > version.minor) ||
+        (candidate.major === version.major &&
+          candidate.minor === version.minor &&
+          candidate.patch > version.patch)
       );
     });
   }
@@ -185,15 +215,17 @@ export class Versioning {
   async migrateSchema(oldVersion: number, newVersion: number): Promise<boolean> {
     try {
       console.log(`[Versioning] Migrating schema from version ${oldVersion} to ${newVersion}`);
-
-      if (oldVersion === 1 && newVersion === 2) {
-        console.log('[Versioning] Schema 1→2: Adding integrity_hash field to bug-history.json');
+      if (oldVersion === newVersion) return true;
+      if (newVersion < oldVersion) {
+        console.error('[Versioning] Automatic schema downgrade is not supported');
+        return false;
       }
 
+      // Concrete migration logic must be added per schema pair. Until then only
+      // the metadata transition is recorded; callers must not infer data migration.
       this.metadata.schema_version = newVersion;
       this.saveMetadata();
-
-      console.log('[Versioning] Schema migration completed');
+      console.log('[Versioning] Schema metadata version updated');
       return true;
     } catch (e) {
       console.error('[Versioning] Schema migration failed:', e);
@@ -220,14 +252,12 @@ export class Versioning {
     last_upgrade: string;
     breaking_changes_count: number;
   } {
-    const breakingCount = this.metadata.changelog.filter(e => e.type === 'breaking').length;
-    const lastUpgrade = new Date(this.metadata.last_upgraded).toISOString();
-
+    const breakingCount = this.metadata.changelog.filter(entry => entry.type === 'breaking').length;
     return {
       current_version: this.getVersionString(),
       schema_version: this.metadata.schema_version,
       total_upgrades: this.metadata.changelog.length,
-      last_upgrade: lastUpgrade,
+      last_upgrade: new Date(this.metadata.last_upgraded).toISOString(),
       breaking_changes_count: breakingCount
     };
   }

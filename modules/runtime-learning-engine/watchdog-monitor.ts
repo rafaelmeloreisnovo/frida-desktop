@@ -2,9 +2,9 @@ import { WatchdogMonitor, WatchdogEvent, WatchdogState } from './types';
 import * as fs from 'fs';
 import * as path from 'path';
 
-const WATCHDOG_PATH = '/data/local/tmp/frida-learning/watchdog-events.json';
-const HEARTBEAT_INTERVAL = 1000;
-const EPOCH_TIMEOUT = 5000;
+const DEFAULT_STORAGE_PATH = '/data/local/tmp/frida-learning';
+const DEFAULT_HEARTBEAT_INTERVAL = 1000;
+const DEFAULT_EPOCH_TIMEOUT = 5000;
 
 interface WatchdogStore {
   events: WatchdogEvent[];
@@ -18,8 +18,17 @@ export class WatchdogMonitorImpl implements WatchdogMonitor {
   private current_epoch = 0;
   private trap_count = 0;
   private current_state: WatchdogState = 'STABLE';
-  private rollback_callback: (() => void) | null = null;
+  private rollback_callback: (() => void | Promise<void>) | null = null;
   private last_heartbeat_time: number = 0;
+  private watchdogPath: string;
+
+  constructor(
+    storagePath: string = DEFAULT_STORAGE_PATH,
+    private heartbeatInterval: number = DEFAULT_HEARTBEAT_INTERVAL,
+    private epochTimeout: number = DEFAULT_EPOCH_TIMEOUT
+  ) {
+    this.watchdogPath = path.join(storagePath, 'watchdog-events.json');
+  }
 
   async startWatchdog(): Promise<void> {
     if (this.monitoring) {
@@ -36,13 +45,15 @@ export class WatchdogMonitorImpl implements WatchdogMonitor {
 
     this.heartbeatTimer = setInterval(() => {
       this.heartbeat();
-    }, HEARTBEAT_INTERVAL);
+    }, this.heartbeatInterval);
 
     this.epochTimer = setInterval(() => {
       this.checkEpochTimeout();
-    }, EPOCH_TIMEOUT);
+    }, this.epochTimeout);
 
-    console.log('[WatchdogMonitor] Watchdog started');
+    console.log(
+      `[WatchdogMonitor] Watchdog started heartbeat=${this.heartbeatInterval}ms timeout=${this.epochTimeout}ms`
+    );
   }
 
   async stopWatchdog(): Promise<void> {
@@ -85,7 +96,7 @@ export class WatchdogMonitorImpl implements WatchdogMonitor {
 
   async recordEvent(event: WatchdogEvent): Promise<void> {
     try {
-      const watchdogDir = path.dirname(WATCHDOG_PATH);
+      const watchdogDir = path.dirname(this.watchdogPath);
 
       if (!fs.existsSync(watchdogDir)) {
         fs.mkdirSync(watchdogDir, { recursive: true });
@@ -93,12 +104,13 @@ export class WatchdogMonitorImpl implements WatchdogMonitor {
 
       let store: WatchdogStore = { events: [] };
 
-      if (fs.existsSync(WATCHDOG_PATH)) {
+      if (fs.existsSync(this.watchdogPath)) {
         try {
-          const data = fs.readFileSync(WATCHDOG_PATH, 'utf-8');
+          const data = fs.readFileSync(this.watchdogPath, 'utf-8');
           store = JSON.parse(data);
         } catch (e) {
-          console.warn('[WatchdogMonitor] Failed to read existing watchdog store');
+          console.warn('[WatchdogMonitor] Existing watchdog store unreadable; refusing silent overwrite');
+          return;
         }
       }
 
@@ -108,7 +120,7 @@ export class WatchdogMonitorImpl implements WatchdogMonitor {
         store.events = store.events.slice(-1000);
       }
 
-      fs.writeFileSync(WATCHDOG_PATH, JSON.stringify(store, null, 2), 'utf-8');
+      fs.writeFileSync(this.watchdogPath, JSON.stringify(store, null, 2), 'utf-8');
     } catch (e) {
       console.error('[WatchdogMonitor] Failed to record event:', e);
     }
@@ -120,10 +132,10 @@ export class WatchdogMonitorImpl implements WatchdogMonitor {
     const now = Date.now();
     const lastHeartbeatAge = now - this.last_heartbeat_time;
 
-    if (lastHeartbeatAge > EPOCH_TIMEOUT) {
+    if (lastHeartbeatAge > this.epochTimeout) {
       console.error(
         `[WatchdogMonitor] Epoch timeout detected! ` +
-        `Last heartbeat was ${lastHeartbeatAge}ms ago (timeout: ${EPOCH_TIMEOUT}ms). Triggering rollback...`
+        `Last heartbeat was ${lastHeartbeatAge}ms ago (timeout: ${this.epochTimeout}ms). Triggering rollback...`
       );
 
       this.current_state = 'FAILSAFE';
@@ -142,7 +154,9 @@ export class WatchdogMonitorImpl implements WatchdogMonitor {
       this.recordEvent(event).catch(e => console.error('[WatchdogMonitor] Failed to record timeout event:', e));
 
       if (this.rollback_callback) {
-        this.rollback_callback();
+        Promise.resolve(this.rollback_callback()).catch(e =>
+          console.error('[WatchdogMonitor] Rollback callback failed:', e)
+        );
       }
 
       this.current_epoch++;
@@ -161,7 +175,7 @@ export class WatchdogMonitorImpl implements WatchdogMonitor {
     this.trap_count++;
   }
 
-  setRollbackCallback(callback: () => void): void {
+  setRollbackCallback(callback: () => void | Promise<void>): void {
     this.rollback_callback = callback;
   }
 
@@ -171,7 +185,10 @@ export class WatchdogMonitorImpl implements WatchdogMonitor {
       heartbeat_count: this.heartbeat_count,
       current_epoch: this.current_epoch,
       trap_count: this.trap_count,
-      current_state: this.current_state
+      current_state: this.current_state,
+      last_heartbeat_time: this.last_heartbeat_time,
+      heartbeat_interval_ms: this.heartbeatInterval,
+      epoch_timeout_ms: this.epochTimeout
     };
   }
 }

@@ -3,34 +3,21 @@ import { AlertRulesEngine } from '../alert-rules-3-2';
 import * as fs from 'fs';
 import * as path from 'path';
 
-/**
- * Phase 3.2: Dashboard & Real-time Observability Testing
- *
- * Validates health check endpoint, metrics export, and alert rules.
- * Closes GAP_OBS_1: No dashboard or real-time SLA monitoring
- *
- * To run:
- * npm test -- --testNamePattern="Phase 3.2"
- */
-
 describe('Phase 3.2: Dashboard & Real-time Observability', () => {
-  let healthCheck: HealthCheckEndpoint;
-  let alertEngine: AlertRulesEngine;
   const testDir = '/tmp/phase-3-obs-test';
 
-  beforeAll(() => {
-    healthCheck = new HealthCheckEndpoint(testDir);
-    alertEngine = new AlertRulesEngine();
-
-    if (!fs.existsSync(testDir)) {
-      fs.mkdirSync(testDir, { recursive: true });
-    }
+  beforeEach(() => {
+    fs.rmSync(testDir, { recursive: true, force: true });
+    fs.mkdirSync(testDir, { recursive: true });
   });
 
-  describe('Phase 3.2.1: Health Check Endpoint', () => {
-    test('returns complete health status', () => {
-      const health = healthCheck.getHealth();
+  afterAll(() => {
+    fs.rmSync(testDir, { recursive: true, force: true });
+  });
 
+  describe('Health evidence semantics', () => {
+    test('returns complete health status', () => {
+      const health = new HealthCheckEndpoint(testDir).getHealth();
       expect(health).toHaveProperty('status');
       expect(health).toHaveProperty('engine_running');
       expect(health).toHaveProperty('uptime_ms');
@@ -42,327 +29,158 @@ describe('Phase 3.2: Dashboard & Real-time Observability', () => {
       expect(health).toHaveProperty('watchdog_state');
       expect(health).toHaveProperty('memory_usage_mb');
       expect(health).toHaveProperty('disk_free_mb');
-
-      console.log('[Phase3.2] Health status returned with all fields');
+      expect(health).toHaveProperty('evidence_gaps');
     });
 
-    test('status is healthy when no SLA violations', () => {
-      const health = healthCheck.getHealth();
-
-      if (health.sla_violations.critical === 0) {
-        expect(health.status).toBe('healthy');
-        console.log('[Phase3.2] Status is healthy (no violations)');
-      }
+    test('missing engine/watchdog evidence degrades instead of pretending STABLE', () => {
+      const health = new HealthCheckEndpoint(testDir).getHealth();
+      expect(health.engine_running).toBe(false);
+      expect(health.watchdog_state).toBe('UNKNOWN');
+      expect(health.evidence_gaps).toContain('engine_running=TOKEN_VAZIO');
+      expect(health.evidence_gaps).toContain('watchdog_state=TOKEN_VAZIO');
+      expect(health.status).toBe('degraded');
     });
 
-    test('HTTP response has correct status code for health status', () => {
-      const response = healthCheck.toHTTPResponse();
+    test('known running engine plus stable watchdog can be healthy', () => {
+      fs.writeFileSync(
+        path.join(testDir, 'watchdog-events.json'),
+        JSON.stringify({ events: [{ timestamp: Date.now(), state: 'STABLE' }] })
+      );
+      const health = new HealthCheckEndpoint(testDir, () => true).getHealth();
+      expect(health.engine_running).toBe(true);
+      expect(health.watchdog_state).toBe('STABLE');
+      expect(health.sla_violations.critical).toBe(0);
+      expect(health.status).toBe('healthy');
+    });
 
-      expect(response).toHaveProperty('statusCode');
-      expect(response).toHaveProperty('body');
-      expect(response).toHaveProperty('headers');
+    test('watchdog FAILSAFE is critical', () => {
+      fs.writeFileSync(
+        path.join(testDir, 'watchdog-events.json'),
+        JSON.stringify({ events: [{ timestamp: Date.now(), state: 'FAILSAFE' }] })
+      );
+      const health = new HealthCheckEndpoint(testDir, () => true).getHealth();
+      expect(health.watchdog_state).toBe('FAILSAFE');
+      expect(health.status).toBe('critical');
+    });
 
-      // Healthy = 200, degraded = 429, critical = 503
+    test('success rate uses 0-100 scale and participates in SLA evaluation', () => {
+      fs.writeFileSync(
+        path.join(testDir, 'watchdog-events.json'),
+        JSON.stringify({ events: [{ timestamp: Date.now(), state: 'STABLE' }] })
+      );
+      fs.writeFileSync(
+        path.join(testDir, 'metrics.json'),
+        JSON.stringify({ fixesApplied: 3, fixesRolledBack: 2 })
+      );
+      const health = new HealthCheckEndpoint(testDir, () => true).getHealth();
+      expect(health.success_rate).toBe(60);
+      expect(health.sla_violations.critical).toBeGreaterThan(0);
+      expect(health.status).toBe('critical');
+    });
+
+    test('HTTP body and headers come from the same health snapshot', () => {
+      fs.writeFileSync(
+        path.join(testDir, 'watchdog-events.json'),
+        JSON.stringify({ events: [{ timestamp: Date.now(), state: 'STABLE' }] })
+      );
+      const response = new HealthCheckEndpoint(testDir, () => true).toHTTPResponse();
+      const body = JSON.parse(response.body);
+      expect(response.headers['X-Engine-Status']).toBe(body.status);
+      expect(response.headers['X-Watchdog-State']).toBe(body.watchdog_state);
       expect([200, 429, 503]).toContain(response.statusCode);
-
-      expect(response.headers['Content-Type']).toBe('application/json');
-      expect(response.headers['Cache-Control']).toBe('no-cache');
-
-      console.log(`[Phase3.2] HTTP response: status ${response.statusCode}`);
     });
 
-    test('uptime increases over time', () => {
-      const health1 = healthCheck.getHealth();
-      const uptime1 = health1.uptime_ms;
-
-      // Wait a bit
-      const wait = new Promise(resolve => setTimeout(resolve, 100));
-      return wait.then(() => {
-        const health2 = healthCheck.getHealth();
-        const uptime2 = health2.uptime_ms;
-
-        expect(uptime2).toBeGreaterThanOrEqual(uptime1);
-        console.log(`[Phase3.2] Uptime: ${uptime1}ms → ${uptime2}ms`);
-      });
-    });
-
-    test('JSON serialization works', () => {
-      const json = healthCheck.toJSON();
-
-      expect(typeof json).toBe('string');
-      expect(() => JSON.parse(json)).not.toThrow();
-
-      const parsed = JSON.parse(json);
-      expect(parsed.engine_running).toBeDefined();
-
-      console.log('[Phase3.2] Health check serializes to valid JSON');
+    test('uptime is monotonic', async () => {
+      const healthCheck = new HealthCheckEndpoint(testDir);
+      const first = healthCheck.getHealth().uptime_ms;
+      await new Promise(resolve => setTimeout(resolve, 10));
+      const second = healthCheck.getHealth().uptime_ms;
+      expect(second).toBeGreaterThanOrEqual(first);
     });
   });
 
-  describe('Phase 3.2.2: Alert Rules Engine', () => {
-    test('initializes with 14 default alert rules', () => {
-      const rules = alertEngine.getAllRules();
-
-      expect(rules.length).toBe(14);
-      console.log(`[Phase3.2] Initialized ${rules.length} default alert rules`);
+  describe('Alert rules', () => {
+    test('initializes with 14 default rules', () => {
+      expect(new AlertRulesEngine().getAllRules()).toHaveLength(14);
     });
 
-    test('has both critical and warning severity rules', () => {
-      const criticalRules = alertEngine.getRulesBySeverity('critical');
-      const warningRules = alertEngine.getRulesBySeverity('warning');
-
-      expect(criticalRules.length).toBeGreaterThan(0);
-      expect(warningRules.length).toBeGreaterThan(0);
-      expect(criticalRules.length + warningRules.length).toBe(14);
-
-      console.log(`[Phase3.2] Rules: ${criticalRules.length} critical, ${warningRules.length} warning`);
+    test('contains critical and warning severities', () => {
+      const alerts = new AlertRulesEngine();
+      expect(alerts.getRulesBySeverity('critical').length).toBeGreaterThan(0);
+      expect(alerts.getRulesBySeverity('warning').length).toBeGreaterThan(0);
     });
 
-    test('covers all SLA metrics', () => {
-      const rules = alertEngine.getAllRules();
-      const metrics = new Set(rules.map(r => r.metric));
-
-      // Should have rules for: bug capture, pattern detection, fix app, success rate, memory, disk, watchdog
-      expect(metrics.size).toBeGreaterThanOrEqual(7);
-
-      console.log(`[Phase3.2] Alert rules cover ${metrics.size} metrics`);
-      metrics.forEach(m => console.log(`  - ${m}`));
+    test('triggers warning at 90ms bug capture latency', () => {
+      const conditions = new AlertRulesEngine().evaluateMetric('frida_bug_capture_latency_ms', 90);
+      expect(conditions.some(condition => condition.rule_id === 'sla_bug_capture_warning')).toBe(true);
     });
 
-    test('evaluates metrics against thresholds', () => {
-      // Test a metric that should trigger warning
-      const conditions = alertEngine.evaluateMetric('frida_bug_capture_latency_ms', 90);
-
-      if (conditions.length > 0) {
-        expect(conditions[0]).toHaveProperty('rule_id');
-        expect(conditions[0]).toHaveProperty('triggered', true);
-        expect(conditions[0]).toHaveProperty('current_value', 90);
-        expect(conditions[0]).toHaveProperty('message');
-        console.log(`[Phase3.2] Alert triggered: ${conditions[0].message}`);
-      }
+    test('does not trigger latency rules below thresholds', () => {
+      const conditions = new AlertRulesEngine().evaluateMetric('frida_bug_capture_latency_ms', 50);
+      expect(conditions).toHaveLength(0);
     });
 
-    test('does not trigger alert when metric is below threshold', () => {
-      const conditions = alertEngine.evaluateMetric('frida_bug_capture_latency_ms', 50);
-
-      // Should not trigger any alert rules (50ms < 80ms warning threshold)
-      const triggered = conditions.filter(c => c.triggered);
-      expect(triggered.length).toBe(0);
-
-      console.log('[Phase3.2] No alerts for latency 50ms (below thresholds)');
+    test('maintains triggered alert history', () => {
+      const alerts = new AlertRulesEngine();
+      alerts.evaluateMetric('frida_memory_usage_mb', 350);
+      alerts.evaluateMetric('frida_success_rate', 75);
+      expect(alerts.getAlertHistory().length).toBeGreaterThan(0);
     });
 
-    test('maintains alert history', () => {
-      alertEngine.clearAlertHistory();
-
-      alertEngine.evaluateMetric('frida_memory_usage_mb', 350); // Should trigger critical
-      alertEngine.evaluateMetric('frida_success_rate', 75); // Should trigger critical
-
-      const history = alertEngine.getAlertHistory();
-      expect(history.length).toBeGreaterThan(0);
-
-      console.log(`[Phase3.2] Alert history: ${history.length} alerts recorded`);
-    });
-
-    test('can register custom alert rules', () => {
-      const initialCount = alertEngine.getAllRules().length;
-
-      alertEngine.registerRule({
+    test('can register custom rules', () => {
+      const alerts = new AlertRulesEngine();
+      const before = alerts.getAllRules().length;
+      alerts.registerRule({
         id: 'test_custom_rule',
         name: 'Test Custom Alert',
-        description: 'A test custom alert for Phase 3.2',
+        description: 'test',
         metric: 'frida_bugs_captured_total',
         threshold: 1000,
         operator: '>',
         severity: 'warning',
         enabled: true
       });
-
-      const newCount = alertEngine.getAllRules().length;
-      expect(newCount).toBe(initialCount + 1);
-
-      console.log('[Phase3.2] Custom alert rule registered');
+      expect(alerts.getAllRules().length).toBe(before + 1);
     });
 
-    test('generates Prometheus alert rules in YAML format', () => {
-      const yaml = alertEngine.generatePrometheusAlertRules();
-
-      expect(yaml).toContain('groups:');
-      expect(yaml).toContain('frida_runtime_learning_engine');
-      expect(yaml).toContain('alert:');
-      expect(yaml).toContain('expr:');
-      expect(yaml).toContain('for:');
-      expect(yaml).toContain('labels:');
-      expect(yaml).toContain('severity:');
-
-      // Should have multiple alerts
-      const alertCount = (yaml.match(/- alert:/g) || []).length;
-      expect(alertCount).toBeGreaterThan(10);
-
-      console.log(`[Phase3.2] Prometheus YAML generated with ${alertCount} alert rules`);
+    test('Prometheus export uses canonical metric names exactly once', () => {
+      const yaml = new AlertRulesEngine().generatePrometheusAlertRules();
+      expect(yaml).toContain('expr: frida_bug_capture_latency_ms > 100');
+      expect(yaml).not.toContain('frida_frida_');
+      expect((yaml.match(/- alert:/g) || []).length).toBeGreaterThan(10);
     });
 
-    test('exports rules as JSON for configuration', () => {
-      const json = alertEngine.exportRulesJSON();
-
-      expect(typeof json).toBe('object');
-      expect(Object.keys(json).length).toBeGreaterThan(10);
-      expect(json).toHaveProperty('sla_bug_capture_critical');
+    test('JSON export preserves rule identity and severity', () => {
+      const json = new AlertRulesEngine().exportRulesJSON();
       expect(json.sla_bug_capture_critical.severity).toBe('critical');
+      expect(json.sla_success_rate_critical.threshold).toBe(80);
+      expect(json.sla_success_rate_warning.threshold).toBe(90);
+    });
 
-      console.log(`[Phase3.2] Exported ${Object.keys(json).length} rules as JSON`);
+    test('resource thresholds remain explicit', () => {
+      const rules = new AlertRulesEngine().getAllRules();
+      expect(rules.find(rule => rule.id === 'resource_memory_critical')?.threshold).toBe(300);
+      expect(rules.find(rule => rule.id === 'resource_disk_critical')?.threshold).toBe(50);
     });
   });
 
-  describe('Phase 3.2.3: SLA Compliance Alerting', () => {
-    test('critical SLA thresholds defined', () => {
-      const rules = alertEngine.getAllRules();
-
-      const latencyRules = rules.filter(
-        r =>
-          r.metric.includes('latency') &&
-          r.severity === 'critical' &&
-          r.threshold !== null
-      );
-
-      expect(latencyRules.length).toBeGreaterThan(0);
-
-      console.log('[Phase3.2] Critical SLA thresholds:');
-      latencyRules.forEach(r => {
-        console.log(`  - ${r.name}: ${r.threshold}ms`);
-      });
+  describe('Gap boundary', () => {
+    test('observability implementation artifacts exist', () => {
+      expect(fs.existsSync(path.join(__dirname, '../metrics-exporter.ts'))).toBe(true);
+      expect(fs.existsSync(path.join(__dirname, '../OBSERVABILITY_GUIDE.md'))).toBe(true);
+      expect(fs.existsSync(path.join(__dirname, '../runtime-safety-mesh.ts'))).toBe(true);
     });
 
-    test('success rate SLA monitoring', () => {
-      const successRules = alertEngine.getAllRules().filter(r => r.metric === 'frida_success_rate');
-
-      expect(successRules.length).toBeGreaterThanOrEqual(2);
-
-      const critical = successRules.find(r => r.severity === 'critical');
-      const warning = successRules.find(r => r.severity === 'warning');
-
-      expect(critical?.threshold).toBe(80); // < 80%
-      expect(warning?.threshold).toBe(90); // < 90%
-
-      console.log('[Phase3.2] Success rate SLAs: critical < 80%, warning < 90%');
-    });
-
-    test('resource monitoring (memory, disk)', () => {
-      const resourceRules = alertEngine
-        .getAllRules()
-        .filter(r => r.metric.includes('memory') || r.metric.includes('disk'));
-
-      expect(resourceRules.length).toBeGreaterThanOrEqual(4);
-
-      const memCrit = resourceRules.find(
-        r => r.metric === 'frida_memory_usage_mb' && r.severity === 'critical'
-      );
-      expect(memCrit?.threshold).toBe(300);
-
-      const diskCrit = resourceRules.find(
-        r => r.metric === 'frida_disk_free_mb' && r.severity === 'critical'
-      );
-      expect(diskCrit?.threshold).toBe(50);
-
-      console.log('[Phase3.2] Resource SLAs: memory < 300MB critical, disk < 50MB critical');
-    });
-  });
-
-  describe('Phase 3.2.4: Gap Closure Validation', () => {
-    test('closes GAP_OBS_1: Dashboard and alerting infrastructure', () => {
-      const gapResolution = {
-        gap: 'GAP_OBS_1',
-        problem: 'No real-time observability, no SLA alerts, no dashboard',
-        solution:
-          'Health endpoint + Prometheus metrics + Alert rules engine + Dashboard templates',
-        status: 'READY_FOR_DEPLOYMENT'
-      };
-
-      expect(gapResolution.gap).toBe('GAP_OBS_1');
-      expect(gapResolution.status).toBe('READY_FOR_DEPLOYMENT');
-
-      console.log('[Phase3.2] Gap Closure:');
-      console.log(`  Gap: ${gapResolution.gap}`);
-      console.log(`  Problem: ${gapResolution.problem}`);
-      console.log(`  Solution: ${gapResolution.solution}`);
-      console.log(`  Status: ✅ ${gapResolution.status}`);
-    });
-
-    test('Phase 3.2 readiness checklist', () => {
-      const metricsExporterExists = fs.existsSync(
-        path.join(__dirname, '../metrics-exporter.ts')
-      );
-
-      const readinessChecklist = {
-        healthCheckEndpointReady: typeof HealthCheckEndpoint !== 'undefined',
-        alertRulesEngineReady: typeof AlertRulesEngine !== 'undefined',
-        defaultRulesConfigured: alertEngine.getAllRules().length >= 10, // At least 10 rules
-        prometheusExportReady: metricsExporterExists,
-        observabilityGuideReady: fs.existsSync(
-          path.join(__dirname, '../OBSERVABILITY_GUIDE.md')
-        ),
-        slaThresholdsDocumented: true,
-        alertChannelsConfigurable: true
-      };
-
-      const readyCount = Object.values(readinessChecklist).filter(v => v === true).length;
-      const totalItems = Object.keys(readinessChecklist).length;
-
-      // At least 6 out of 7 items ready
-      expect(readyCount).toBeGreaterThanOrEqual(6);
-
-      console.log(
-        `[Phase3.2] Readiness: ${readyCount}/${totalItems} ✓`
-      );
-      console.log(`  Health check: ${readinessChecklist.healthCheckEndpointReady}`);
-      console.log(`  Alert engine: ${readinessChecklist.alertRulesEngineReady}`);
-      console.log(`  Rules configured: ${readinessChecklist.defaultRulesConfigured}`);
-      console.log(`  Prometheus export: ${readinessChecklist.prometheusExportReady}`);
-      console.log(`  Observability guide: ${readinessChecklist.observabilityGuideReady}`);
-    });
-  });
-
-  describe('Phase 3.2 Checklist', () => {
-    test('Phase 3.2 requirements documented', () => {
-      const requirements = [
-        'Health check endpoint (/health)',
-        'Prometheus metrics export (/metrics)',
-        'Alert rules engine with SLA thresholds',
-        'Critical and warning alert severities',
-        'Dashboard templates (Grafana/Datadog)',
-        'Slack/PagerDuty integration documentation',
-        'Email alerting documentation',
-        'CloudWatch/Stackdriver integration',
-        'Operational procedures (daily, escalation)',
-        'Troubleshooting guide'
-      ];
-
-      expect(requirements.length).toBeGreaterThan(0);
-      console.log('[Phase3.2] Requirements Checklist:');
-      requirements.forEach((req, i) => {
-        console.log(`  ${i + 1}. ${req}`);
-      });
-    });
-
-    test('Phase 3.2 success criteria', () => {
-      const criteria = [
-        'Health endpoint returns complete status',
-        'Prometheus metrics export 20+ metrics',
-        'Alert rules cover all 7 SLA areas',
-        'Critical thresholds trigger alerts',
-        'Warning thresholds trigger alerts',
-        'Dashboard templates provided',
-        'Slack/PagerDuty integrations tested',
-        'Observability guide complete',
-        'SLA compliance monitoring operational',
-        'Alert history tracking enabled'
-      ];
-
-      expect(criteria.length).toBeGreaterThan(0);
-      console.log('[Phase3.2] Success Criteria:');
-      criteria.forEach((c, i) => {
-        console.log(`  ${i + 1}. ${c}`);
-      });
+    test('implementation readiness does not claim physical runtime evidence', () => {
+      const state = {
+        implementation: 'IMPLEMENTED',
+        runtime_integration: 'PARTIAL_TO_INTEGRATED_BY_CURRENT_BRANCH',
+        physical_device_smoke: 'TOKEN_VAZIO',
+        claim_allowed: false
+      } as const;
+      expect(state.implementation).toBe('IMPLEMENTED');
+      expect(state.physical_device_smoke).toBe('TOKEN_VAZIO');
+      expect(state.claim_allowed).toBe(false);
     });
   });
 });

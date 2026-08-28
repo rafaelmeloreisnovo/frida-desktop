@@ -4,6 +4,7 @@ export type EventStatus = 'new' | 'captured' | 'pattern_detected' | 'fix_applied
 export type TestState = 'PASS' | 'FAIL' | 'SKIPPED';
 export type WatchdogState = 'STABLE' | 'OBSERVE' | 'DUMP' | 'FAILSAFE';
 export type Severity = 'critical' | 'high' | 'medium' | 'low' | 'info' | 'warning';
+export type RollbackCapability = 'hook_restore' | 'memory_journal' | 'non_reversible' | 'token_vazio';
 
 export interface BugEvent {
   id: string;
@@ -40,6 +41,8 @@ export interface FixEvent {
   status: 'applied' | 'rolled_back' | 'failed';
   test_results: TestResult[];
   rollback_reason?: string;
+  rollback_capability?: RollbackCapability;
+  rollback_verified?: boolean;
 }
 
 export interface TestResult {
@@ -117,10 +120,12 @@ export interface AutoFixer {
   tryCatchFallback(target: string): Promise<void>;
   monkeyPatch(pattern: BugPattern): Promise<void>;
   restartComponent(class_name: string): Promise<void>;
+  canRollbackFix(fixId: string): boolean;
+  rollbackFix(fixId: string): Promise<boolean>;
 }
 
 export interface RollbackEngine {
-  journalBefore(address: number, size: number): Promise<RollbackJournal>;
+  journalBefore(address: number, size: number, fixId?: string): Promise<RollbackJournal>;
   commitFix(journal: RollbackJournal, checksum_after: string): Promise<boolean>;
   rollback(journal: RollbackJournal): Promise<boolean>;
   verifyRollback(journal: RollbackJournal): Promise<boolean>;

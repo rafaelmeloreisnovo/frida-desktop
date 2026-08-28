@@ -1,4 +1,4 @@
-import { BugEvent, BugPattern, LearningEngineConfig, WatchdogState, FixEvent } from './types';
+import { BugEvent, BugPattern, LearningEngineConfig, FixEvent } from './types';
 import { BugCaptureImpl } from './bug-capture';
 import { BugStoreImpl } from './bug-store';
 import { PatternDetectorImpl } from './pattern-detector';
@@ -10,6 +10,7 @@ import { CompatibilityChecker } from './compatibility-checker';
 import { HealthCheckEndpoint } from './health-check-endpoint';
 import { MetricsCollector } from './metrics-exporter';
 import { AlertManager } from './alert-manager';
+import { RuntimeSafetyMesh, RuntimeSafetySnapshot } from './runtime-safety-mesh';
 import { generateEventId } from './utils';
 
 export class RuntimeLearningEngine {
@@ -25,10 +26,15 @@ export class RuntimeLearningEngine {
   private healthCheckEndpoint: HealthCheckEndpoint;
   private metricsCollector: MetricsCollector;
   private alertManager: AlertManager;
+  private safetyMesh: RuntimeSafetyMesh;
 
   private running = false;
   private recentBugs: BugEvent[] = [];
   private pendingRollbacks: Map<string, FixEvent> = new Map();
+  private patternsDetectedTotal = 0;
+  private fixesAppliedTotal = 0;
+  private rollbacksTriggeredTotal = 0;
+  private rollbackFailuresTotal = 0;
 
   constructor(config?: Partial<LearningEngineConfig>) {
     this.config = {
@@ -44,19 +50,28 @@ export class RuntimeLearningEngine {
     };
 
     this.bugCapture = new BugCaptureImpl();
-    this.bugStore = new BugStoreImpl();
+    this.bugStore = new BugStoreImpl(this.config.storage_path, this.config.bug_capacity);
     this.patternDetector = new PatternDetectorImpl({
       confidence_threshold: this.config.confidence_threshold,
       min_occurrences: this.config.min_occurrences_before_fix
     });
     this.autoFixer = new AutoFixerImpl();
-    this.rollbackEngine = new RollbackEngineImpl();
-    this.watchdogMonitor = new WatchdogMonitorImpl();
+    this.rollbackEngine = new RollbackEngineImpl(
+      this.config.storage_path,
+      this.config.journal_size,
+      this.config.max_rollback_attempts
+    );
+    this.watchdogMonitor = new WatchdogMonitorImpl(
+      this.config.storage_path,
+      this.config.heartbeat_interval_ms,
+      this.config.epoch_timeout_ms
+    );
     this.testSuite = new TestSuiteImpl();
     this.compatibilityChecker = new CompatibilityChecker(this.config.storage_path);
     this.healthCheckEndpoint = new HealthCheckEndpoint(this, this.config.storage_path);
     this.metricsCollector = new MetricsCollector(this.config.storage_path);
     this.alertManager = new AlertManager(this.config.storage_path);
+    this.safetyMesh = new RuntimeSafetyMesh(this.config.storage_path);
 
     this.setupWatchdogCallback();
   }
@@ -70,9 +85,8 @@ export class RuntimeLearningEngine {
     console.log('[RuntimeLearningEngine] Starting engine...');
 
     try {
-      // Pre-flight compatibility check
       console.log('[RuntimeLearningEngine] Running compatibility checks...');
-      const compatReport = await this.compatibilityChecker.checkCompatibility();
+      await this.compatibilityChecker.checkCompatibility();
 
       if (!this.compatibilityChecker.canProceedWithDeployment()) {
         console.error('[RuntimeLearningEngine] INCOMPATIBLE ENVIRONMENT - Cannot proceed with deployment');
@@ -83,16 +97,20 @@ export class RuntimeLearningEngine {
 
       console.log('[RuntimeLearningEngine] Compatibility check passed - proceeding with startup');
 
-      (this.bugCapture as any).setBugCapturedCallback(async (event: BugEvent) => {
+      this.bugCapture.setBugCapturedCallback(async (event: BugEvent) => {
         await this.captureBug(event);
       });
 
+      await this.alertManager.loadAlerts();
+
+      // Set running before hooks are installed so events emitted during hook
+      // activation cannot be silently dropped. Any startup failure resets it.
+      this.running = true;
       await this.bugCapture.startCapture();
       await this.watchdogMonitor.startWatchdog();
-
       await this.loadHistoryAndDetectPatterns();
+      await this.refreshObservability();
 
-      this.running = true;
       console.log('[RuntimeLearningEngine] Engine started successfully');
     } catch (e) {
       console.error('[RuntimeLearningEngine] Failed to start engine:', e);
@@ -108,6 +126,8 @@ export class RuntimeLearningEngine {
     try {
       await this.bugCapture.stopCapture();
       await this.watchdogMonitor.stopWatchdog();
+      await this.metricsCollector.exportMetrics('json');
+      await this.alertManager.saveAlerts();
 
       this.running = false;
       console.log('[RuntimeLearningEngine] Engine stopped');
@@ -122,6 +142,7 @@ export class RuntimeLearningEngine {
       return;
     }
 
+    const captureStartedAt = Date.now();
     const bugEvent: BugEvent = {
       id: generateEventId(),
       timestamp: Date.now(),
@@ -146,59 +167,151 @@ export class RuntimeLearningEngine {
         this.recentBugs.shift();
       }
 
+      const captureLatency = Date.now() - captureStartedAt;
+      this.metricsCollector.recordBugCapture(captureLatency);
+      this.healthCheckEndpoint.recordLatency('bug_capture', captureLatency);
+      this.healthCheckEndpoint.recordEvent('bug_capture');
+
       await this.processBugEvent(bugEvent);
+      await this.refreshObservability();
     } catch (e) {
       console.error('[RuntimeLearningEngine] Failed to capture bug:', e);
+      await this.refreshObservability();
     }
   }
 
   private async processBugEvent(event: BugEvent): Promise<void> {
+    const patternStartedAt = Date.now();
     const patterns = await this.patternDetector.detectPatterns(this.recentBugs);
+    const patternLatency = Date.now() - patternStartedAt;
+
+    this.patternsDetectedTotal += patterns.length;
+    const confidence = patterns.length > 0 ? Math.max(...patterns.map(pattern => pattern.confidence)) : 0;
+    this.metricsCollector.recordPatternDetection(patternLatency, confidence);
+    this.healthCheckEndpoint.recordLatency('pattern_detection', patternLatency);
+    if (patterns.length > 0) {
+      this.healthCheckEndpoint.recordEvent('pattern_detection');
+    }
 
     for (const pattern of patterns) {
       const shouldFix = await this.patternDetector.shouldApplyFix(pattern);
+      if (!shouldFix) continue;
 
-      if (shouldFix) {
-        await this.applyFixWithRollback(pattern);
+      const safety = this.getSafetySnapshot();
+      const mutationBlocked =
+        safety.memory.features_disabled.includes('fix_application') ||
+        safety.disk.evidence === 'FAILED' ||
+        safety.corruption.evidence === 'FAILED';
+
+      if (mutationBlocked) {
+        console.error(
+          `[RuntimeLearningEngine] Mutation gate blocked fix ${pattern.pattern_id}: ` +
+          `memory=${safety.memory.pressure_level}, disk=${safety.disk.evidence}, corruption=${safety.corruption.evidence}`
+        );
+        this.watchdogMonitor.setState('FAILSAFE');
+        continue;
       }
+
+      await this.applyFixWithRollback(pattern);
     }
   }
 
   private async applyFixWithRollback(pattern: BugPattern): Promise<void> {
-    const fixId = `fix_${Date.now()}`;
-
     console.log(`[RuntimeLearningEngine] Attempting fix for pattern: ${pattern.pattern_id}`);
+    const fixStartedAt = Date.now();
 
     try {
       this.watchdogMonitor.setState('OBSERVE');
 
       const fixEvent = await this.autoFixer.applyFix(pattern);
+      const fixLatency = Date.now() - fixStartedAt;
+
+      if (fixEvent.status === 'failed') {
+        this.metricsCollector.recordFixApplication(false, fixLatency);
+        this.healthCheckEndpoint.recordLatency('fix_application', fixLatency);
+        this.healthCheckEndpoint.recordFailure('fix_application');
+        this.watchdogMonitor.setState('FAILSAFE');
+        return;
+      }
 
       const testResults = await this.testSuite.runAfterFix(fixEvent);
-      const allTestsPassed = testResults.every(r => r.state === 'PASS' || r.state === 'SKIPPED');
+      fixEvent.test_results = testResults;
+      const allTestsPassed = testResults.every(result => result.state === 'PASS' || result.state === 'SKIPPED');
+
+      this.healthCheckEndpoint.recordLatency('fix_application', fixLatency);
 
       if (!allTestsPassed) {
-        console.warn('[RuntimeLearningEngine] Tests failed after fix, triggering rollback');
+        console.warn(`[RuntimeLearningEngine] Tests failed after ${fixEvent.fix_id}; executing rollback now`);
+        fixEvent.rollback_reason = 'post_fix_test_failure';
+        this.metricsCollector.recordFixApplication(false, fixLatency);
+        this.healthCheckEndpoint.recordFailure('fix_application');
 
-        this.watchdogMonitor.setState('FAILSAFE');
-        this.watchdogMonitor.incrementTrapCount();
-
-        this.pendingRollbacks.set(fixId, fixEvent);
-
-        console.log('[RuntimeLearningEngine] Rollback triggered due to test failure');
+        const rollbackVerified = await this.executeRollback(fixEvent);
+        if (!rollbackVerified) {
+          this.pendingRollbacks.set(fixEvent.fix_id, fixEvent);
+          this.watchdogMonitor.setState('FAILSAFE');
+          this.watchdogMonitor.incrementTrapCount();
+        }
       } else {
-        console.log('[RuntimeLearningEngine] Fix applied successfully, all tests passed');
-
-        this.watchdogMonitor.setState('STABLE');
-
+        console.log(`[RuntimeLearningEngine] Fix ${fixEvent.fix_id} passed post-fix tests`);
+        this.fixesAppliedTotal++;
         fixEvent.status = 'applied';
+        this.metricsCollector.recordFixApplication(true, fixLatency);
+        this.healthCheckEndpoint.recordSuccess('fix_application');
+        this.watchdogMonitor.setState('STABLE');
       }
     } catch (e) {
       console.error('[RuntimeLearningEngine] Error during fix application:', e);
-
       this.watchdogMonitor.setState('FAILSAFE');
       this.watchdogMonitor.incrementTrapCount();
+    } finally {
+      await this.refreshObservability();
     }
+  }
+
+  private async executeRollback(fixEvent: FixEvent): Promise<boolean> {
+    const rollbackStartedAt = Date.now();
+    this.rollbacksTriggeredTotal++;
+
+    let verified = false;
+
+    if (this.autoFixer.canRollbackFix(fixEvent.fix_id)) {
+      verified = await this.autoFixer.rollbackFix(fixEvent.fix_id);
+    }
+
+    if (!verified) {
+      const matchingJournals = this.rollbackEngine
+        .getAllJournals()
+        .filter(journal => journal.fix_id === fixEvent.fix_id);
+
+      for (const journal of matchingJournals) {
+        if (await this.rollbackEngine.rollback(journal)) {
+          verified = true;
+          break;
+        }
+      }
+    }
+
+    const rollbackLatency = Date.now() - rollbackStartedAt;
+    this.metricsCollector.recordRollback(verified, rollbackLatency);
+    this.healthCheckEndpoint.recordLatency('rollback', rollbackLatency);
+    this.healthCheckEndpoint.recordEvent('rollback');
+
+    fixEvent.rollback_verified = verified;
+
+    if (verified) {
+      fixEvent.status = 'rolled_back';
+      this.pendingRollbacks.delete(fixEvent.fix_id);
+      this.watchdogMonitor.setState('STABLE');
+      console.log(`[RuntimeLearningEngine] Rollback verified for ${fixEvent.fix_id}`);
+      return true;
+    }
+
+    this.rollbackFailuresTotal++;
+    console.error(
+      `[RuntimeLearningEngine] Rollback for ${fixEvent.fix_id} is not verified; remaining in FAILSAFE/TOKEN_VAZIO`
+    );
+    return false;
   }
 
   private async loadHistoryAndDetectPatterns(): Promise<void> {
@@ -215,6 +328,7 @@ export class RuntimeLearningEngine {
         this.recentBugs = store.events.slice(-10);
 
         const patterns = await this.patternDetector.detectPatterns(store.events);
+        this.patternsDetectedTotal += patterns.length;
 
         for (const pattern of patterns) {
           const updated = await this.patternDetector.updateConfidence(pattern);
@@ -231,38 +345,83 @@ export class RuntimeLearningEngine {
 
   private setupWatchdogCallback(): void {
     this.watchdogMonitor.setRollbackCallback(async () => {
-      console.log('[RuntimeLearningEngine] Watchdog triggered rollback!');
+      console.log('[RuntimeLearningEngine] Watchdog requested rollback of pending fixes');
 
-      for (const [fixId, fixEvent] of this.pendingRollbacks) {
+      const pending = Array.from(this.pendingRollbacks.values());
+      for (const fixEvent of pending) {
         try {
-          console.log(`[RuntimeLearningEngine] Rolling back fix ${fixId}`);
-
           this.watchdogMonitor.setState('FAILSAFE');
-
-          const journals = this.rollbackEngine.getAllJournals();
-          for (const journal of journals) {
-            if (journal.fix_id === fixId) {
-              const rollbackSuccess = await this.rollbackEngine.rollback(journal);
-              if (!rollbackSuccess) {
-                console.error(
-                  `[RuntimeLearningEngine] Rollback verification failed for ${fixId}. ` +
-                  'Staying in FAILSAFE mode.'
-                );
-              } else {
-                console.log(`[RuntimeLearningEngine] Rollback verified for ${fixId}`);
-              }
-            }
+          const verified = await this.executeRollback(fixEvent);
+          if (!verified) {
+            console.error(`[RuntimeLearningEngine] Watchdog rollback still unverified for ${fixEvent.fix_id}`);
           }
-
-          console.log(`[RuntimeLearningEngine] Rollback for ${fixId} completed`);
-
-          this.pendingRollbacks.delete(fixId);
         } catch (e) {
-          console.error(`[RuntimeLearningEngine] Rollback failed for ${fixId}:`, e);
+          console.error(`[RuntimeLearningEngine] Watchdog rollback failed for ${fixEvent.fix_id}:`, e);
           this.watchdogMonitor.setState('FAILSAFE');
         }
       }
+
+      await this.refreshObservability();
     });
+  }
+
+  private async refreshObservability(): Promise<void> {
+    try {
+      const watchdogStats = this.watchdogMonitor.getStats();
+      const safety = this.safetyMesh.snapshot(this.running, watchdogStats.current_state);
+      const health = await this.healthCheckEndpoint.getHealthStatus();
+      const metricsSnapshot = await this.healthCheckEndpoint.getMetricsSnapshot();
+
+      this.metricsCollector.recordSystemMetrics(
+        health.memory_usage_mb,
+        health.storage_used_mb,
+        watchdogStats.current_state
+      );
+      await this.metricsCollector.exportMetrics('json');
+
+      const rollbackAttempts = this.rollbacksTriggeredTotal;
+      const rollbackSuccessRate =
+        rollbackAttempts === 0
+          ? 100
+          : ((rollbackAttempts - this.rollbackFailuresTotal) / rollbackAttempts) * 100;
+
+      const normalizedMetrics: Record<string, any> = {
+        bug_capture_latency_ms: metricsSnapshot.avg_latencies.bug_capture_ms,
+        pattern_detection_latency_ms: metricsSnapshot.avg_latencies.pattern_detection_ms,
+        fix_application_latency_ms: metricsSnapshot.avg_latencies.fix_application_ms,
+        fix_success_rate: metricsSnapshot.fix_success_rate,
+        memory_usage_mb: health.memory_usage_mb,
+        storage_usage_mb: health.storage_used_mb,
+        watchdog_state: watchdogStats.current_state,
+        errors_last_hour: health.errors_last_hour,
+        rollback_success_rate: rollbackSuccessRate
+      };
+
+      const managerAlerts = this.alertManager.evaluateRules(normalizedMetrics);
+      if (managerAlerts.length > 0) {
+        await this.alertManager.saveAlerts();
+      }
+
+      const watchdogNumeric: Record<string, number> = {
+        STABLE: 1,
+        OBSERVE: 2,
+        DUMP: 3,
+        FAILSAFE: 4
+      };
+
+      this.safetyMesh.evaluateOperationalMetrics({
+        frida_bug_capture_latency_ms: metricsSnapshot.avg_latencies.bug_capture_ms,
+        frida_pattern_detection_latency_ms: metricsSnapshot.avg_latencies.pattern_detection_ms,
+        frida_fix_application_latency_ms: metricsSnapshot.avg_latencies.fix_application_ms,
+        frida_success_rate: metricsSnapshot.fix_success_rate,
+        frida_memory_usage_mb: health.memory_usage_mb,
+        frida_disk_free_mb: safety.disk.free_mb,
+        frida_watchdog_state: watchdogNumeric[watchdogStats.current_state],
+        frida_sla_total_violations: health.sla_violations.critical + health.sla_violations.warnings
+      });
+    } catch (e) {
+      console.error('[RuntimeLearningEngine] Observability refresh failed:', e);
+    }
   }
 
   isRunning(): boolean {
@@ -270,12 +429,24 @@ export class RuntimeLearningEngine {
   }
 
   getStats() {
+    const watchdogStats = this.watchdogMonitor.getStats();
     return {
       running: this.running,
       recentBugsCount: this.recentBugs.length,
       pendingRollbacks: this.pendingRollbacks.size,
-      watchdogStats: (this.watchdogMonitor as any).getStats?.() || {}
+      patternsCount: this.patternsDetectedTotal,
+      fixesApplied: this.fixesAppliedTotal,
+      rollbacksTriggered: this.rollbacksTriggeredTotal,
+      rollbackFailures: this.rollbackFailuresTotal,
+      lastHeartbeat: watchdogStats.last_heartbeat_time,
+      watchdogState: watchdogStats.current_state,
+      watchdogStats
     };
+  }
+
+  getSafetySnapshot(): RuntimeSafetySnapshot {
+    const watchdogState = this.watchdogMonitor.getStats().current_state;
+    return this.safetyMesh.snapshot(this.running, watchdogState);
   }
 
   async shutdown(): Promise<void> {
@@ -293,6 +464,10 @@ export class RuntimeLearningEngine {
 
   getAlertManager(): AlertManager {
     return this.alertManager;
+  }
+
+  getRuntimeSafetyMesh(): RuntimeSafetyMesh {
+    return this.safetyMesh;
   }
 }
 
@@ -321,9 +496,5 @@ export async function shutdownEngine(): Promise<void> {
   }
 }
 
-// Export observability components
-export { HealthCheckEndpoint, type HealthCheckResponse, type MetricsSnapshot } from './health-check-endpoint';
-export { MetricsExporter, MetricsCollector, type PrometheusMetric } from './metrics-exporter';
-export { AlertManager, type Alert, type AlertRule } from './alert-manager';
-
-console.log('[RuntimeLearningEngine] Module loaded, ready for initialization');
+export { RuntimeSafetyMesh } from './runtime-safety-mesh';
+export { AlertRulesEngine } from './alert-rules-3-2';

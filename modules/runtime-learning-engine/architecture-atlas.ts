@@ -8,6 +8,7 @@ export interface ComponentDoc {
   inputs: string[];
   outputs: string[];
   dependencies: string[];
+  evidence_boundary?: string;
 }
 
 export interface FlowStep {
@@ -17,7 +18,10 @@ export interface FlowStep {
   actions: string[];
 }
 
-export interface ArchitectureAtlas {
+/** Serializable atlas document. Kept distinct from the generator class so
+ * TypeScript declaration merging cannot accidentally require private class
+ * state on a plain data object. */
+export interface ArchitectureAtlasDocument {
   version: string;
   generated: string;
   title: string;
@@ -26,14 +30,16 @@ export interface ArchitectureAtlas {
   flows: { name: string; steps: FlowStep[] }[];
   slas: Record<string, { target: string; metric: string }>;
   data_flows: { from: string; to: string; data_type: string }[];
+  epistemic_boundary: {
+    physical_device_smoke: 'TOKEN_VAZIO';
+    claim_allowed: false;
+  };
 }
 
 export class ArchitectureAtlas {
-  private storagePath: string;
   private atlasPath: string;
 
-  constructor(storagePath: string = '/data/local/tmp/frida-learning') {
-    this.storagePath = storagePath;
+  constructor(private storagePath: string = '/data/local/tmp/frida-learning') {
     this.atlasPath = path.join(storagePath, 'atlas.md');
     this.ensureDirectory();
   }
@@ -44,180 +50,129 @@ export class ArchitectureAtlas {
     }
   }
 
-  generateAtlas(): ArchitectureAtlas {
-    const atlas: ArchitectureAtlas = {
-      version: '1.0.0',
+  generateAtlas(): ArchitectureAtlasDocument {
+    return {
+      version: '2.0.0',
       generated: new Date().toISOString(),
       title: 'Runtime Learning Engine Architecture',
-      overview: `The Runtime Learning Engine is a Frida-based system that automatically captures Android runtime bugs, learns patterns, applies fixes, and evolves over time without regression.`,
+      overview:
+        'Evidence-aware Frida runtime learning system: capture, pattern detection, safety gate, reversible fix, validation, rollback, metrics and alerts.',
       components: this.getComponentDocs(),
       flows: this.getFlows(),
       slas: this.getSLAs(),
-      data_flows: this.getDataFlows()
+      data_flows: this.getDataFlows(),
+      epistemic_boundary: {
+        physical_device_smoke: 'TOKEN_VAZIO',
+        claim_allowed: false
+      }
     };
-
-    return atlas;
   }
 
   private getComponentDocs(): ComponentDoc[] {
     return [
       {
         name: 'BugCapture',
-        description: 'Intercepts Java exceptions and runtime events using Frida hooks',
-        responsibilities: [
-          'Hook java.lang.Throwable.printStackTrace() for crashes',
-          'Hook android.os.Handler.post() for ANR detection',
-          'Hook java.lang.Runtime.gc() for memory pressure',
-          'Hook java.util.concurrent.locks.LockSupport.park() for deadlocks'
-        ],
-        inputs: ['Java method calls'],
-        outputs: ['BugEvent objects with stack traces and timestamps'],
-        dependencies: ['Frida API', 'utils.generateEventId()']
+        description: 'Captures supported Java/runtime events through Frida hooks.',
+        responsibilities: ['Install hooks', 'Emit BugEvent through callback', 'Stop hooks on shutdown'],
+        inputs: ['Frida Java/runtime events'],
+        outputs: ['BugEvent'],
+        dependencies: ['Frida Java API'],
+        evidence_boundary: 'Physical hook behavior requires Android/Frida runtime receipt.'
       },
       {
         name: 'BugStore',
-        description: 'Circular buffer storage of captured bugs in JSON format on device',
-        responsibilities: [
-          'Append events to circular buffer (capacity: 512)',
-          'Maintain FNV-1a 64 integrity checksum',
-          'Load history from persistent storage',
-          'Rotate old events when capacity exceeded'
-        ],
-        inputs: ['BugEvent objects'],
-        outputs: ['Serialized JSON to /data/local/tmp/frida-learning/bug-history.json'],
-        dependencies: ['fs module', 'utils.generateHash()']
+        description: 'Bounded persistent event history with integrity metadata and corruption quarantine.',
+        responsibilities: ['Append events', 'Bound history', 'Verify integrity', 'Quarantine corrupt history'],
+        inputs: ['BugEvent'],
+        outputs: ['bug-history.json', 'corruption quarantine metadata'],
+        dependencies: ['filesystem', 'FNV-1a integrity helper']
       },
       {
         name: 'PatternDetector',
-        description: 'Analyzes bug history to identify recurring patterns',
+        description: 'Derives recurring bug patterns and confidence from observed history.',
+        responsibilities: ['Detect patterns', 'Update confidence', 'Gate fix eligibility'],
+        inputs: ['BugEvent[]'],
+        outputs: ['BugPattern[]'],
+        dependencies: ['BugStore data']
+      },
+      {
+        name: 'RuntimeSafetyMesh',
+        description: 'Pre-mutation evidence and resource gate.',
         responsibilities: [
-          'Calculate bug frequency per class/method/exception',
-          'Compute confidence score (0.0-1.0) based on occurrences',
-          'Select fix strategy based on bug type and frequency',
-          'Filter patterns by confidence threshold (default 0.75)'
+          'Observe process memory',
+          'Observe filesystem free space when statfs is available',
+          'Inspect critical JSON files read-only',
+          'Evaluate canonical alert rules'
         ],
-        inputs: ['BugEvent array from BugStore'],
-        outputs: ['BugPattern objects with confidence and suggested strategy'],
-        dependencies: ['bug-store.ts', 'utils']
+        inputs: ['process/filesystem/runtime state'],
+        outputs: ['RuntimeSafetySnapshot', 'AlertCondition[]'],
+        dependencies: ['MemoryPressureHandler', 'DiskExhaustionHandler', 'CorruptionRecoveryHandler', 'AlertRulesEngine'],
+        evidence_boundary: 'Unknown observations remain TOKEN_VAZIO; no simulated lock is promoted to live safety evidence.'
       },
       {
         name: 'AutoFixer',
-        description: 'Applies automatic fixes using three strategies',
+        description: 'Applies Frida hook fixes and records their rollback capability by fix_id.',
         responsibilities: [
-          'Try-catch with fallback: wraps buggy methods in try-catch',
-          'Monkey-patch from journal: modifies method bytecode',
-          'Component restart: restarts failed Activity/Service',
-          'Generate type-aware fallback values'
+          'Apply try-catch hook wrapper',
+          'Apply method hook patch',
+          'Capture prior hook implementation',
+          'Restore reversible hooks by fix_id',
+          'Mark process/component restart as non-reversible'
         ],
-        inputs: ['BugPattern with fix strategy'],
-        outputs: ['FixEvent with applied status'],
-        dependencies: ['Frida API', 'Java.use()']
+        inputs: ['BugPattern'],
+        outputs: ['FixEvent'],
+        dependencies: ['Frida Java API'],
+        evidence_boundary: 'Hook restoration is distinct from raw-memory journal rollback.'
       },
       {
         name: 'RollbackEngine',
-        description: 'Manages safe rollback of applied fixes',
-        responsibilities: [
-          'Journal method state before patching',
-          'Verify integrity using checksums',
-          'Atomically commit or revert changes',
-          'Track rollback history for audit'
-        ],
-        inputs: ['Fix ID, original method bytes'],
-        outputs: ['RollbackJournal with verification status'],
-        dependencies: ['fs module', 'utils.generateHash()']
+        description: 'Fail-closed raw-memory journal rollback for addressable mutations.',
+        responsibilities: ['Journal bytes before mutation', 'Bind journal to fix_id', 'Restore bytes', 'Verify checksum'],
+        inputs: ['address', 'size', 'fix_id'],
+        outputs: ['RollbackJournal', 'verified boolean'],
+        dependencies: ['Frida Memory API'],
+        evidence_boundary: 'Missing Memory API returns false/TOKEN_VAZIO, never PASS.'
       },
       {
         name: 'WatchdogMonitor',
-        description: 'Continuous health monitoring with epoch-based timeout detection',
-        responsibilities: [
-          'Send heartbeats every 1000ms',
-          'Detect epoch timeout if heartbeat missing for 5000ms',
-          'Transition state: STABLE → OBSERVE → FAILSAFE',
-          'Trigger rollback callback on timeout'
-        ],
-        inputs: ['Monitored application state'],
-        outputs: ['WatchdogEvent, rollback trigger'],
-        dependencies: ['setInterval, fs module']
+        description: 'Configured heartbeat/epoch monitor with FAILSAFE rollback callback.',
+        responsibilities: ['Heartbeat', 'Persist events', 'Detect timeout', 'Request pending rollback'],
+        inputs: ['engine timing config'],
+        outputs: ['WatchdogEvent'],
+        dependencies: ['filesystem', 'timers']
       },
       {
-        name: 'TestSuite',
-        description: 'Post-fix validation with smoke, regression, and performance tests',
-        responsibilities: [
-          'Run smoke test: verify basic functionality',
-          'Run regression test: check memory, threads, null handling',
-          'Run performance test: verify no latency degradation',
-          'Fail if any test returns FAIL status'
-        ],
-        inputs: ['FixEvent to validate'],
-        outputs: ['TestResult[] with PASS/FAIL/SKIPPED'],
-        dependencies: ['Frida API', 'Java.use()']
+        name: 'MetricsCollector',
+        description: 'Lifecycle metrics and valid Prometheus histogram export.',
+        responsibilities: ['Record latency samples', 'Track fix/rollback success', 'Track SLA violations', 'Export JSON/Prometheus'],
+        inputs: ['lifecycle observations'],
+        outputs: ['metrics.json', 'prometheus-metrics.txt'],
+        dependencies: ['filesystem']
       },
       {
-        name: 'AuditLogger',
-        description: 'Structured audit trail of all critical operations',
-        responsibilities: [
-          'Log every action: BUG_CAPTURED, FIX_APPLIED, ROLLBACK_INITIATED',
-          'Rotate log when exceeds 5MB',
-          'Record success/failure and error context',
-          'Calculate audit statistics: success rate by action'
-        ],
-        inputs: ['AuditAction, resource_id, context, result'],
-        outputs: ['NDJSON to /data/local/tmp/frida-learning/audit.log'],
-        dependencies: ['fs module']
+        name: 'HealthCheckEndpoint',
+        description: 'Engine-bound health and SLA snapshot.',
+        responsibilities: ['Read engine stats', 'Compute health state', 'Persist health/metric snapshots'],
+        inputs: ['engine stats', 'latencies', 'audit log'],
+        outputs: ['HealthCheckResponse', 'MetricsSnapshot'],
+        dependencies: ['RuntimeLearningEngine']
       },
       {
-        name: 'ProvenanceTracker',
-        description: 'Node-edge graph tracking origin and lineage of bugs and fixes',
-        responsibilities: [
-          'Record BUG nodes from captured events',
-          'Record PATTERN nodes detected from bugs',
-          'Record FIX nodes applied to patterns',
-          'Record TEST and ROLLBACK nodes in chain',
-          'Enable full chain reconstruction: BUG→PATTERN→FIX→TEST→ROLLBACK'
-        ],
-        inputs: ['Bug IDs, Pattern IDs, Fix IDs, Test results'],
-        outputs: ['Graph JSON to /data/local/tmp/frida-learning/provenance.json'],
-        dependencies: ['fs module']
+        name: 'AlertManager + AlertRulesEngine',
+        description: 'Persistent alert queue plus canonical SLA threshold evaluation.',
+        responsibilities: ['Evaluate runtime metrics', 'Debounce alerts', 'Persist alerts', 'Export Prometheus alert rules'],
+        inputs: ['health and metric snapshots'],
+        outputs: ['Alert[]', 'AlertCondition[]'],
+        dependencies: ['filesystem']
       },
       {
-        name: 'IntegrityVerifier',
-        description: 'Continuous validation of data file integrity',
-        responsibilities: [
-          'Compute FNV-1a 64 checksums for 6 data files',
-          'Detect corruption: format validation + checksum mismatch',
-          'Alert on unexpected changes (was valid, now invalid)',
-          'Maintain integrity report history (100 most recent)'
-        ],
-        inputs: ['File paths to monitor'],
-        outputs: ['IntegrityReport JSON to /data/local/tmp/frida-learning/integrity-checks.json'],
-        dependencies: ['fs module', 'utils.generateHash()']
-      },
-      {
-        name: 'AutoOptimizer',
-        description: 'Automatic tuning of engine parameters based on feedback',
-        responsibilities: [
-          'Adjust confidence_threshold: ±0.05 based on success rate',
-          'Adjust min_occurrences: ±1 based on detection speed needed',
-          'Identify best-performing fix strategy per pattern',
-          'Run every 5 minutes to respond to metrics'
-        ],
-        inputs: ['Engine metrics from FeedbackCollector'],
-        outputs: ['OptimizationLog, updated OptimizationConfig'],
-        dependencies: ['feedback-collector.ts', 'fs module']
-      },
-      {
-        name: 'RolloutManager',
-        description: 'Staged canary deployment of new versions',
-        responsibilities: [
-          'Stage 1 (Canary): 5% traffic for 5 minutes',
-          'Stage 2 (Beta): 25% traffic for 5 minutes',
-          'Stage 3 (Wider Beta): 50% traffic for 5 minutes',
-          'Stage 4 (Stable): 100% traffic (complete)',
-          'Auto-rollback if error_rate > 5% or success_rate < 95%'
-        ],
-        inputs: ['Version string, request metrics'],
-        outputs: ['Rollout status, automatic rollback trigger'],
-        dependencies: ['fs module']
+        name: 'ConcurrentBugCaptureHandler',
+        description: 'Concurrency stress-test harness.',
+        responsibilities: ['Exercise parallel capture scenarios', 'Report race/deadlock counters'],
+        inputs: ['synthetic test concurrency levels'],
+        outputs: ['ConcurrentCaptureStats'],
+        dependencies: [],
+        evidence_boundary: 'TEST_HARNESS_ONLY: current lock/delay path is simulated and is not live hot-path synchronization.'
       }
     ];
   }
@@ -225,152 +180,60 @@ export class ArchitectureAtlas {
   private getFlows(): { name: string; steps: FlowStep[] }[] {
     return [
       {
-        name: 'Bug Capture → Fix Application → Validation',
+        name: 'Capture → Evidence Gate → Fix → Validate → Rollback/Commit',
         steps: [
           {
-            name: 'Bug occurs in app',
-            description: 'Java exception or ANR detected',
-            actor: 'Android Runtime',
-            actions: ['Exception thrown', 'Handler.post() called', 'GC triggered']
+            name: 'Capture and persist',
+            description: 'Observed bug becomes a bounded persistent event.',
+            actor: 'BugCapture + BugStore',
+            actions: ['Emit BugEvent', 'Append history', 'Record capture latency']
           },
           {
-            name: 'BugCapture intercepts',
-            description: 'Frida hook fires and creates BugEvent',
-            actor: 'BugCapture',
-            actions: [
-              'Generate unique event ID',
-              'Capture stacktrace hash',
-              'Record timestamp and severity',
-              'Invoke onBugCaptured callback'
-            ]
-          },
-          {
-            name: 'Engine captures and stores',
-            description: 'Event stored in circular buffer and persisted',
-            actor: 'BugStore',
-            actions: ['Append to bug-history.json', 'Calculate FNV-1a hash', 'Check capacity']
-          },
-          {
-            name: 'Pattern detection',
-            description: 'Analyze if this bug matches a recurring pattern',
+            name: 'Detect pattern',
+            description: 'History is evaluated for a fix-eligible pattern.',
             actor: 'PatternDetector',
-            actions: [
-              'Count occurrences',
-              'Calculate confidence score',
-              'Check against threshold (0.75)',
-              'Select fix strategy'
-            ]
+            actions: ['Detect pattern', 'Compute confidence', 'Check fix eligibility']
           },
           {
-            name: 'Fix application',
-            description: 'Apply one of three fix strategies',
-            actor: 'AutoFixer + RollbackEngine',
-            actions: [
-              'Journal original method state',
-              'Apply fix (try-catch / monkey-patch / restart)',
-              'Verify with checksum',
-              'Commit or rollback'
-            ]
+            name: 'Safety gate',
+            description: 'Mutation is blocked on critical resource/corruption evidence.',
+            actor: 'RuntimeSafetyMesh',
+            actions: ['Observe memory', 'Observe disk if available', 'Inspect corruption', 'Allow or block mutation']
           },
           {
-            name: 'Post-fix testing',
-            description: 'Validate fix does not regress',
-            actor: 'TestSuite',
-            actions: [
-              'Run smoke test (basic functionality)',
-              'Run regression test (memory, threads, null handling)',
-              'Run performance test (latency degradation)',
-              'Return test results'
-            ]
+            name: 'Apply reversible mutation',
+            description: 'Hook mutation is bound to the returned FixEvent.fix_id.',
+            actor: 'AutoFixer',
+            actions: ['Capture prior implementation', 'Apply hook', 'Record rollback capability']
           },
           {
-            name: 'Commit or rollback',
-            description: 'Based on test results, commit fix or rollback',
-            actor: 'RuntimeLearningEngine',
-            actions: [
-              'If tests pass: mark fix as applied, set state STABLE',
-              'If tests fail: trigger rollback, set state FAILSAFE',
-              'Record audit trail and provenance'
-            ]
+            name: 'Validate and decide',
+            description: 'Post-fix tests decide whether mutation remains active.',
+            actor: 'TestSuite + RuntimeLearningEngine',
+            actions: ['Run tests', 'Keep verified fix or immediately rollback', 'Enter FAILSAFE if rollback is unverified']
           }
         ]
       },
       {
-        name: 'Watchdog Monitoring & Epoch Timeout',
+        name: 'Observation → Health → Alerts',
         steps: [
           {
-            name: 'Heartbeat emission',
-            description: 'Send heartbeat every 1000ms',
-            actor: 'WatchdogMonitor',
-            actions: ['Increment counter', 'Record timestamp', 'Persist to watchdog-events.json']
+            name: 'Record lifecycle metrics',
+            description: 'Capture/pattern/fix/rollback observations become metrics.',
+            actor: 'MetricsCollector',
+            actions: ['Record histograms', 'Track success rates', 'Track SLA violation counters']
           },
           {
-            name: 'Epoch check',
-            description: 'Every 5000ms, check for timeout',
-            actor: 'WatchdogMonitor',
-            actions: [
-              'Calculate age: now - last_heartbeat_time',
-              'If age > 5000ms: timeout detected'
-            ]
+            name: 'Compute health',
+            description: 'Engine-bound health is derived from observed state.',
+            actor: 'HealthCheckEndpoint',
+            actions: ['Read engine stats', 'Evaluate thresholds', 'Persist snapshot']
           },
           {
-            name: 'Failsafe activation',
-            description: 'On timeout, transition to FAILSAFE',
-            actor: 'WatchdogMonitor',
-            actions: [
-              'Increment trap_count',
-              'Set state = FAILSAFE',
-              'Invoke rollback callback',
-              'Log timeout event'
-            ]
-          }
-        ]
-      },
-      {
-        name: 'Continuous Evolution Cycle',
-        steps: [
-          {
-            name: 'Collect feedback',
-            description: 'Record metrics for each fix attempt',
-            actor: 'FeedbackCollector',
-            actions: [
-              'Track success/failure',
-              'Measure fix latency',
-              'Detect regressions',
-              'Calculate success rate per pattern'
-            ]
-          },
-          {
-            name: 'Analyze metrics',
-            description: 'Every 5 minutes, evaluate performance',
-            actor: 'AutoOptimizer',
-            actions: [
-              'If success_rate < 70%: reduce confidence_threshold',
-              'If success_rate < 60%: reduce min_occurrences',
-              'If rollback_rate > 30%: reduce confidence_threshold'
-            ]
-          },
-          {
-            name: 'Log optimizations',
-            description: 'Track all parameter adjustments',
-            actor: 'AutoOptimizer',
-            actions: [
-              'Record change: old value → new value',
-              'Reason and metrics for change',
-              'Persist to optimization-log.json'
-            ]
-          },
-          {
-            name: 'Prepare rollout',
-            description: 'Stage new version with canary rollout',
-            actor: 'RolloutManager',
-            actions: [
-              '5% traffic (Canary) for 5 min',
-              '25% traffic (Beta) for 5 min',
-              '50% traffic (Wider) for 5 min',
-              '100% traffic (Stable)',
-              'Auto-rollback if errors > 5%'
-            ]
+            name: 'Evaluate alerts',
+            description: 'Normalized metrics flow to persistent and canonical alert engines.',
+            actor: 'AlertManager + AlertRulesEngine',
+            actions: ['Evaluate rules', 'Persist active alerts', 'Expose canonical Prometheus rules']
           }
         ]
       }
@@ -379,34 +242,14 @@ export class ArchitectureAtlas {
 
   private getSLAs(): Record<string, { target: string; metric: string }> {
     return {
-      'bug-capture-latency': {
-        target: '< 100ms from exception to BugEvent creation',
-        metric: 'Time from hook fire to event object instantiation'
-      },
-      'pattern-detection-latency': {
-        target: '< 500ms to detect pattern after nth bug',
-        metric: 'Time from bug append to pattern.confidence >= threshold'
-      },
-      'fix-application-latency': {
-        target: '< 1000ms to apply fix',
-        metric: 'Time from AutoFixer.applyFix() call to return'
-      },
-      'rollback-completion': {
-        target: '< 500ms to complete rollback',
-        metric: 'Time from rollback trigger to state = STABLE or FAILSAFE'
-      },
-      'overall-success-rate': {
-        target: '> 80% of fixes succeed without regression',
-        metric: 'successful_fixes / total_fixes_attempted'
-      },
-      'data-integrity': {
-        target: 'Zero corruption across all 6 monitored files',
-        metric: 'FNV-1a 64 checksums match and format validation passes'
-      },
-      'audit-completeness': {
-        target: '100% of actions logged with context',
-        metric: 'All critical operations recorded in audit.log'
-      }
+      'bug-capture-latency': { target: '<= 100ms critical boundary', metric: 'frida_bug_capture_latency_ms' },
+      'pattern-detection-latency': { target: '<= 500ms critical boundary', metric: 'frida_pattern_detection_latency_ms' },
+      'fix-application-latency': { target: '<= 1000ms critical boundary', metric: 'frida_fix_application_latency_ms' },
+      'rollback-completion': { target: '<= 500ms critical boundary', metric: 'frida_rollback_latency_ms' },
+      'fix-success-rate': { target: '>= 80%', metric: 'frida_success_rate' },
+      'memory': { target: '<= 300MB critical boundary', metric: 'frida_memory_usage_mb' },
+      'disk-free': { target: '>= 50MB critical boundary when observable', metric: 'frida_disk_free_mb' },
+      'rollback-verification': { target: 'true or FAILSAFE/TOKEN_VAZIO', metric: 'FixEvent.rollback_verified' }
     };
   }
 
@@ -414,71 +257,67 @@ export class ArchitectureAtlas {
     return [
       { from: 'BugCapture', to: 'BugStore', data_type: 'BugEvent' },
       { from: 'BugStore', to: 'PatternDetector', data_type: 'BugEvent[]' },
-      { from: 'PatternDetector', to: 'AutoFixer', data_type: 'BugPattern' },
+      { from: 'PatternDetector', to: 'RuntimeSafetyMesh', data_type: 'BugPattern + runtime observations' },
+      { from: 'RuntimeSafetyMesh', to: 'AutoFixer', data_type: 'mutation gate' },
       { from: 'AutoFixer', to: 'TestSuite', data_type: 'FixEvent' },
-      { from: 'TestSuite', to: 'RuntimeLearningEngine', data_type: 'TestResult[]' },
-      { from: 'RuntimeLearningEngine', to: 'RollbackEngine', data_type: 'FixEvent' },
-      { from: 'RollbackEngine', to: 'WatchdogMonitor', data_type: 'RollbackJournal' },
-      { from: 'WatchdogMonitor', to: 'RuntimeLearningEngine', data_type: 'WatchdogEvent' },
-      { from: 'AutoFixer', to: 'AuditLogger', data_type: 'AuditEntry' },
-      { from: 'RuntimeLearningEngine', to: 'ProvenanceTracker', data_type: 'ProvenanceNode' },
-      { from: 'FeedbackCollector', to: 'AutoOptimizer', data_type: 'EngineMetrics' },
-      { from: 'AutoOptimizer', to: 'RuntimeLearningEngine', data_type: 'OptimizationConfig' },
-      { from: 'RuntimeLearningEngine', to: 'RolloutManager', data_type: 'Version' }
+      { from: 'TestSuite', to: 'AutoFixer.rollbackFix', data_type: 'post-fix failure' },
+      { from: 'RuntimeLearningEngine', to: 'RollbackEngine', data_type: 'fix_id-bound memory journal fallback' },
+      { from: 'RuntimeLearningEngine', to: 'MetricsCollector', data_type: 'lifecycle observations' },
+      { from: 'MetricsCollector', to: 'HealthCheckEndpoint', data_type: 'metrics' },
+      { from: 'HealthCheckEndpoint', to: 'AlertManager', data_type: 'normalized health metrics' },
+      { from: 'RuntimeSafetyMesh', to: 'AlertRulesEngine', data_type: 'canonical SLA metrics' }
     ];
   }
 
   async generateMarkdownAtlas(): Promise<string> {
     const atlas = this.generateAtlas();
+    const lines: string[] = [
+      `# ${atlas.title}`,
+      '',
+      `**Generated**: ${atlas.generated}`,
+      `**Version**: ${atlas.version}`,
+      '',
+      atlas.overview,
+      '',
+      '## Components',
+      ''
+    ];
 
-    let markdown = `# ${atlas.title}\n\n`;
-    markdown += `**Generated**: ${atlas.generated}\n`;
-    markdown += `**Version**: ${atlas.version}\n\n`;
-
-    markdown += `## Overview\n\n${atlas.overview}\n\n`;
-
-    markdown += `## Architecture\n\n### Components\n\n`;
     for (const component of atlas.components) {
-      markdown += `#### ${component.name}\n\n`;
-      markdown += `${component.description}\n\n`;
-      markdown += `**Responsibilities:**\n`;
-      for (const r of component.responsibilities) {
-        markdown += `- ${r}\n`;
-      }
-      markdown += `\n**Inputs:** ${component.inputs.join(', ')}\n\n`;
-      markdown += `**Outputs:** ${component.outputs.join(', ')}\n\n`;
-      markdown += `**Dependencies:** ${component.dependencies.join(', ')}\n\n`;
+      lines.push(`### ${component.name}`, '', component.description, '');
+      lines.push(`- Responsibilities: ${component.responsibilities.join('; ')}`);
+      lines.push(`- Inputs: ${component.inputs.join(', ') || 'none'}`);
+      lines.push(`- Outputs: ${component.outputs.join(', ') || 'none'}`);
+      lines.push(`- Dependencies: ${component.dependencies.join(', ') || 'none'}`);
+      if (component.evidence_boundary) lines.push(`- Evidence boundary: ${component.evidence_boundary}`);
+      lines.push('');
     }
 
-    markdown += `## Workflows\n\n`;
+    lines.push('## Workflows', '');
     for (const flow of atlas.flows) {
-      markdown += `### ${flow.name}\n\n`;
-      for (let i = 0; i < flow.steps.length; i++) {
-        const step = flow.steps[i];
-        markdown += `${i + 1}. **${step.name}** (${step.actor})\n\n`;
-        markdown += `   ${step.description}\n\n`;
-        for (const action of step.actions) {
-          markdown += `   - ${action}\n`;
-        }
-        markdown += `\n`;
-      }
+      lines.push(`### ${flow.name}`, '');
+      flow.steps.forEach((step, index) => {
+        lines.push(`${index + 1}. **${step.name}** — ${step.actor}: ${step.description}`);
+        step.actions.forEach(action => lines.push(`   - ${action}`));
+      });
+      lines.push('');
     }
 
-    markdown += `## SLAs\n\n`;
+    lines.push('## SLAs', '');
     for (const [name, sla] of Object.entries(atlas.slas)) {
-      markdown += `### ${name}\n\n`;
-      markdown += `- **Target**: ${sla.target}\n`;
-      markdown += `- **Metric**: ${sla.metric}\n\n`;
+      lines.push(`- **${name}**: ${sla.target} — \`${sla.metric}\``);
     }
 
-    markdown += `## Data Flows\n\n`;
-    markdown += `\`\`\`\n`;
+    lines.push('', '## Data Flows', '', '```');
     for (const flow of atlas.data_flows) {
-      markdown += `${flow.from} --[${flow.data_type}]--> ${flow.to}\n`;
+      lines.push(`${flow.from} --[${flow.data_type}]--> ${flow.to}`);
     }
-    markdown += `\`\`\`\n\n`;
+    lines.push('```', '', '## Evidence Boundary', '');
+    lines.push(`- physical_device_smoke: ${atlas.epistemic_boundary.physical_device_smoke}`);
+    lines.push(`- claim_allowed: ${atlas.epistemic_boundary.claim_allowed}`);
+    lines.push('');
 
-    return markdown;
+    return lines.join('\n');
   }
 
   async saveAtlas(): Promise<void> {

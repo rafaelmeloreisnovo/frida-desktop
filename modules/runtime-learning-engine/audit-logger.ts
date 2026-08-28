@@ -23,6 +23,12 @@ export interface AuditEntry {
   error?: string;
 }
 
+export interface AuditStats {
+  totalEntries: number;
+  byAction: Partial<Record<AuditAction, number>>;
+  successRate: number;
+}
+
 export class AuditLogger {
   private auditPath: string;
   private maxFileSize = 5 * 1024 * 1024;
@@ -34,9 +40,7 @@ export class AuditLogger {
 
   private ensureDirectory(): void {
     const dir = path.dirname(this.auditPath);
-    if (!fs.existsSync(dir)) {
-      fs.mkdirSync(dir, { recursive: true });
-    }
+    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
   }
 
   async log(
@@ -56,7 +60,6 @@ export class AuditLogger {
         result,
         error
       };
-
       this.writeEntry(entry);
       this.rotateIfNeeded();
     } catch (e) {
@@ -65,9 +68,8 @@ export class AuditLogger {
   }
 
   private writeEntry(entry: AuditEntry): void {
-    const line = JSON.stringify(entry);
     try {
-      fs.appendFileSync(this.auditPath, line + '\n', 'utf-8');
+      fs.appendFileSync(this.auditPath, JSON.stringify(entry) + '\n', 'utf-8');
     } catch (e) {
       console.error('[AuditLogger] Failed to write audit entry:', e);
     }
@@ -76,11 +78,9 @@ export class AuditLogger {
   private rotateIfNeeded(): void {
     try {
       if (!fs.existsSync(this.auditPath)) return;
-
       const stats = fs.statSync(this.auditPath);
       if (stats.size > this.maxFileSize) {
-        const timestamp = Date.now();
-        const backupPath = `${this.auditPath}.${timestamp}`;
+        const backupPath = `${this.auditPath}.${Date.now()}`;
         fs.renameSync(this.auditPath, backupPath);
         console.log(`[AuditLogger] Rotated audit log to ${backupPath}`);
       }
@@ -92,46 +92,42 @@ export class AuditLogger {
   async readAuditTrail(limit: number = 100): Promise<AuditEntry[]> {
     try {
       if (!fs.existsSync(this.auditPath)) return [];
-
       const data = fs.readFileSync(this.auditPath, 'utf-8');
-      const lines = data.trim().split('\n').filter(l => l.length > 0);
-
-      return lines.slice(-limit).map(line => {
-        try {
-          return JSON.parse(line);
-        } catch {
-          return null;
-        }
-      }).filter((e): e is AuditEntry => e !== null);
+      return data
+        .trim()
+        .split('\n')
+        .filter(line => line.length > 0)
+        .slice(-limit)
+        .map(line => {
+          try {
+            return JSON.parse(line) as AuditEntry;
+          } catch {
+            return null;
+          }
+        })
+        .filter((entry): entry is AuditEntry => entry !== null);
     } catch (e) {
       console.error('[AuditLogger] Failed to read audit trail:', e);
       return [];
     }
   }
 
-  async getAuditStats(): Promise<{
-    totalEntries: number;
-    byAction: Record<AuditAction, number>;
-    successRate: number;
-  }> {
+  async getAuditStats(): Promise<AuditStats> {
     try {
       const entries = await this.readAuditTrail(10000);
-
-      const stats = {
-        totalEntries: entries.length,
-        byAction: {} as Record<AuditAction, number>,
-        successRate: 0
-      };
-
+      const byAction: Partial<Record<AuditAction, number>> = {};
       let successCount = 0;
+
       for (const entry of entries) {
-        stats.byAction[entry.action] = (stats.byAction[entry.action] || 0) + 1;
+        byAction[entry.action] = (byAction[entry.action] || 0) + 1;
         if (entry.result === 'success') successCount++;
       }
 
-      stats.successRate = entries.length > 0 ? (successCount / entries.length) * 100 : 0;
-
-      return stats;
+      return {
+        totalEntries: entries.length,
+        byAction,
+        successRate: entries.length > 0 ? (successCount / entries.length) * 100 : 0
+      };
     } catch (e) {
       console.error('[AuditLogger] Failed to calculate audit stats:', e);
       return { totalEntries: 0, byAction: {}, successRate: 0 };
