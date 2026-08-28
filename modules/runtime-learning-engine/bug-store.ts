@@ -1,15 +1,24 @@
 import { BugEvent, BugHistoryStore, BugStore } from './types';
-import { generateHash, calculateFNV1a64 } from './utils';
+import { calculateFNV1a64 } from './utils';
+import { CorruptionRecoveryHandler } from './corruption-recovery';
 import * as fs from 'fs';
 import * as path from 'path';
 
-const STORAGE_PATH = '/data/local/tmp/frida-learning';
-const HISTORY_FILE = path.join(STORAGE_PATH, 'bug-history.json');
-const MAX_EVENTS = 512;
+const DEFAULT_STORAGE_PATH = '/data/local/tmp/frida-learning';
+const DEFAULT_MAX_EVENTS = 512;
 
 export class BugStoreImpl implements BugStore {
   private store: BugHistoryStore | null = null;
   private initialized = false;
+  private historyFile: string;
+  private corruptionRecovery = new CorruptionRecoveryHandler();
+
+  constructor(
+    private storagePath: string = DEFAULT_STORAGE_PATH,
+    private maxEvents: number = DEFAULT_MAX_EVENTS
+  ) {
+    this.historyFile = path.join(storagePath, 'bug-history.json');
+  }
 
   async loadHistory(): Promise<BugHistoryStore> {
     if (this.store && this.initialized) {
@@ -17,21 +26,26 @@ export class BugStoreImpl implements BugStore {
     }
 
     try {
-      console.log(`[BugStore] Loading history from ${HISTORY_FILE}`);
+      console.log(`[BugStore] Loading history from ${this.historyFile}`);
 
-      if (!fs.existsSync(STORAGE_PATH)) {
-        fs.mkdirSync(STORAGE_PATH, { recursive: true });
+      if (!fs.existsSync(this.storagePath)) {
+        fs.mkdirSync(this.storagePath, { recursive: true });
       }
 
       let store: BugHistoryStore;
 
-      if (fs.existsSync(HISTORY_FILE)) {
-        const data = fs.readFileSync(HISTORY_FILE, 'utf-8');
-        store = JSON.parse(data);
-
-        if (!this.verifyIntegrity(store)) {
-          console.warn('[BugStore] Integrity check failed, creating fresh store');
+      if (fs.existsSync(this.historyFile)) {
+        const data = fs.readFileSync(this.historyFile, 'utf-8');
+        const jsonFinding = this.corruptionRecovery.detectInvalidJSON(data);
+        if (jsonFinding.detected) {
+          this.quarantineExistingHistory(jsonFinding.error_message);
           store = this.createEmptyStore();
+        } else {
+          store = JSON.parse(data) as BugHistoryStore;
+          if (!this.verifyIntegrity(store)) {
+            this.quarantineExistingHistory('integrity_hash mismatch');
+            store = this.createEmptyStore();
+          }
         }
       } else {
         console.log('[BugStore] No existing history, creating fresh store');
@@ -43,6 +57,9 @@ export class BugStoreImpl implements BugStore {
       return store;
     } catch (e) {
       console.error('[BugStore] Failed to load history:', e);
+      if (fs.existsSync(this.historyFile)) {
+        this.quarantineExistingHistory(`load failure: ${e}`);
+      }
       this.store = this.createEmptyStore();
       this.initialized = true;
       return this.store;
@@ -51,14 +68,16 @@ export class BugStoreImpl implements BugStore {
 
   async saveHistory(store: BugHistoryStore): Promise<void> {
     try {
-      if (!fs.existsSync(STORAGE_PATH)) {
-        fs.mkdirSync(STORAGE_PATH, { recursive: true });
+      if (!fs.existsSync(this.storagePath)) {
+        fs.mkdirSync(this.storagePath, { recursive: true });
       }
 
       store.last_updated = Date.now();
       store.integrity_hash = this.calculateStoreHash(store);
 
-      fs.writeFileSync(HISTORY_FILE, JSON.stringify(store, null, 2), 'utf-8');
+      const temporaryPath = `${this.historyFile}.tmp`;
+      fs.writeFileSync(temporaryPath, JSON.stringify(store, null, 2), 'utf-8');
+      fs.renameSync(temporaryPath, this.historyFile);
       this.store = store;
 
       console.log(`[BugStore] History saved (${store.events.length} events)`);
@@ -73,7 +92,7 @@ export class BugStoreImpl implements BugStore {
 
       store.events.push(event);
 
-      if (store.events.length > MAX_EVENTS) {
+      if (store.events.length > this.maxEvents) {
         console.log('[BugStore] Circular buffer full, removing oldest event');
         store.events.shift();
       }
@@ -131,12 +150,43 @@ export class BugStoreImpl implements BugStore {
 
       console.warn('[BugStore] Integrity mismatch:', {
         expected: expectedHash,
-        actual: store.integrity_hash
+        actual: store.integrity_hash || 'TOKEN_VAZIO'
       });
       return false;
     } catch (e) {
       console.error('[BugStore] Failed integrity check:', e);
       return false;
+    }
+  }
+
+  private quarantineExistingHistory(reason: string): void {
+    try {
+      if (!fs.existsSync(this.historyFile)) return;
+
+      const timestamp = Date.now();
+      const quarantinePath = path.join(this.storagePath, `bug-history.corrupt.${timestamp}.json`);
+      fs.renameSync(this.historyFile, quarantinePath);
+      fs.writeFileSync(
+        `${quarantinePath}.meta.json`,
+        JSON.stringify(
+          {
+            schema: 'rafaelia.runtime.corruption-quarantine.v1',
+            source: this.historyFile,
+            quarantined_path: quarantinePath,
+            timestamp,
+            reason,
+            destructive_recovery_performed: false,
+            evidence_state: 'PRESERVED_FOR_INSPECTION',
+            claim_allowed: false
+          },
+          null,
+          2
+        ),
+        'utf-8'
+      );
+      console.error(`[BugStore] Corrupted history quarantined at ${quarantinePath}: ${reason}`);
+    } catch (e) {
+      console.error('[BugStore] Failed to quarantine corrupted history:', e);
     }
   }
 }
