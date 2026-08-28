@@ -185,38 +185,117 @@ export class TestSuiteImpl implements TestSuite {
   }
 
   private async testMemoryAccess(): Promise<void> {
-    const buf = Java.use('java.nio.ByteBuffer').allocate(1024);
-    buf.put(0, 42);
+    try {
+      const buf = Java.use('java.nio.ByteBuffer').allocate(1024);
+      buf.put(0, 42);
+      buf.put(10, 100);
+      buf.put(100, 200);
 
-    if (buf.get(0) !== 42) {
-      throw new Error('Memory access test failed');
+      const val0 = buf.get(0);
+      const val10 = buf.get(10);
+      const val100 = buf.get(100);
+
+      if (val0 !== 42) {
+        throw new Error(`Memory test failed at index 0: expected 42, got ${val0}`);
+      }
+      if (val10 !== 100) {
+        throw new Error(`Memory test failed at index 10: expected 100, got ${val10}`);
+      }
+      if (val100 !== 200) {
+        throw new Error(`Memory test failed at index 100: expected 200, got ${val100}`);
+      }
+
+      console.log('[TestSuite] Memory access validation passed');
+    } catch (e) {
+      throw new Error(`Memory access test failed: ${e}`);
     }
   }
 
   private async testThreadSafety(): Promise<void> {
-    const lock = new java.lang.Object();
+    try {
+      const threadClass = Java.use('java.lang.Thread');
+      const runnableClass = Java.use('java.lang.Runnable');
 
-    Java.use('java.lang.Object').notifyAll.call(lock);
+      let executionCount = 0;
+      const runnable = Java.registerClass({
+        name: 'com.frida.test.TestRunnable',
+        implements: ['java.lang.Runnable'],
+        methods: {
+          run() {
+            executionCount++;
+          }
+        }
+      });
+
+      const t1 = threadClass.$new(runnable.$new());
+      const t2 = threadClass.$new(runnable.$new());
+
+      t1.start();
+      t2.start();
+
+      threadClass.sleep(100);
+
+      if (executionCount < 1) {
+        throw new Error(`Thread execution test failed: expected threads to execute, got ${executionCount} executions`);
+      }
+
+      console.log('[TestSuite] Thread safety validation passed');
+    } catch (e) {
+      throw new Error(`Thread safety test failed: ${e}`);
+    }
   }
 
   private async testNullPointerHandling(): Promise<void> {
-    const nullObj = null;
-
     try {
-      Java.use('java.lang.String').valueOf(nullObj);
+      const stringClass = Java.use('java.lang.String');
+      const nullPointerExceptionClass = Java.use('java.lang.NullPointerException');
+
+      try {
+        stringClass.valueOf(null);
+        throw new Error('Null pointer test failed: expected NullPointerException was not thrown');
+      } catch (e) {
+        const exceptionMsg = String(e);
+        const isNPE = exceptionMsg.includes('NullPointerException') ||
+                     exceptionMsg.includes('null') ||
+                     exceptionMsg.includes('TypeError');
+
+        if (!isNPE) {
+          throw new Error(`Null pointer test failed: wrong exception type: ${exceptionMsg}`);
+        }
+
+        console.log('[TestSuite] Null pointer correctly caught and identified');
+      }
     } catch (e) {
-      console.log('[TestSuite] Null pointer correctly caught');
+      throw new Error(`Null pointer handling test failed: ${e}`);
     }
   }
 
   private async testExceptionPropagation(): Promise<void> {
     try {
-      throw new Error('Test exception');
-    } catch (e) {
-      if (!String(e).includes('Test exception')) {
-        throw new Error('Exception propagation failed');
+      const testMsg = 'Test exception propagation';
+
+      try {
+        this.throwTestException(testMsg);
+      } catch (e) {
+        const errStr = String(e);
+
+        if (!errStr.includes(testMsg)) {
+          throw new Error(`Exception message lost: expected "${testMsg}", got "${errStr}"`);
+        }
+
+        if (!errStr.includes('Error') && !errStr.includes('Exception')) {
+          throw new Error(`Exception type information lost: ${errStr}`);
+        }
+
+        console.log('[TestSuite] Exception propagation validation passed');
       }
+    } catch (e) {
+      throw new Error(`Exception propagation test failed: ${e}`);
     }
+  }
+
+  private throwTestException(msg: string): void {
+    throw new Error(msg);
   }
 
   private waitForProcess(process: any, timeout: number): Promise<void> {

@@ -76,8 +76,9 @@ export class AutoFixerImpl implements AutoFixer {
       this.activePatches.set(target, { type: 'try_catch', target });
       console.log(`[AutoFixer] Try-catch fallback applied to ${target}`);
     } catch (e) {
-      console.error(`[AutoFixer] Failed to apply try-catch fallback:`, e);
-      throw e;
+      const errorContext = `Failed to apply try-catch fallback to ${target}: ${e}`;
+      console.error(`[AutoFixer] ${errorContext}`);
+      throw new Error(errorContext);
     }
   }
 
@@ -126,8 +127,9 @@ export class AutoFixerImpl implements AutoFixer {
 
       console.log(`[AutoFixer] Monkey patch applied to ${pattern.class}.${pattern.method}`);
     } catch (e) {
-      console.error(`[AutoFixer] Failed to apply monkey patch:`, e);
-      throw e;
+      const errorContext = `Failed to apply monkey patch to ${pattern.class}.${pattern.method} (pattern ${pattern.pattern_id}): ${e}`;
+      console.error(`[AutoFixer] ${errorContext}`);
+      throw new Error(errorContext);
     }
   }
 
@@ -158,20 +160,21 @@ export class AutoFixerImpl implements AutoFixer {
         restart_time: Date.now()
       });
     } catch (e) {
-      console.error(`[AutoFixer] Failed to restart component:`, e);
-      throw e;
+      const errorContext = `Failed to restart component ${class_name}: ${e}`;
+      console.error(`[AutoFixer] ${errorContext}`);
+      throw new Error(errorContext);
     }
   }
 
   private getDefaultValue(original: any): any {
     if (original === null || original === undefined) {
-      if (typeof original === 'number') return 0;
-      if (typeof original === 'boolean') return false;
-      if (Array.isArray(original)) return [];
-      if (typeof original === 'object') return {};
-      return '';
+      return null;
     }
-    return original;
+    if (typeof original === 'number') return 0;
+    if (typeof original === 'boolean') return false;
+    if (Array.isArray(original)) return [];
+    if (typeof original === 'object') return {};
+    return '';
   }
 
   private createFallbackResult(methodName: string): any {
