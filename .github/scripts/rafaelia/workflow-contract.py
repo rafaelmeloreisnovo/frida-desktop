@@ -26,12 +26,11 @@ CUSTOM_WORKFLOWS = {
     "android17-apk-elf-dex.yml",
     "android17-rfl-selftest.yml",
     "runtime-aided-debugger-hardening.yml",
+    "runtime-learning-engine.yml",
     "workflow-contract.yml",
 }
 UPSTREAM_RELEASE_WORKFLOW = "ci.yml"
 
-# Full commit pins make the external layer identity-stable for a given change.
-# Versions are documentary labels for review; the SHA is the enforced identity.
 CATALYST_PINS = {
     "actions/checkout": {
         "sha": "de0fac2e4500dabe0009e67214ff5f5447ce83dd",
@@ -71,6 +70,10 @@ CUSTOM_ACTION_ALLOWLIST = {
         "actions/upload-artifact",
     },
     "runtime-aided-debugger-hardening.yml": {
+        "actions/checkout",
+        "actions/upload-artifact",
+    },
+    "runtime-learning-engine.yml": {
         "actions/checkout",
         "actions/upload-artifact",
     },
@@ -210,7 +213,6 @@ def check_custom(path: Path, text: str, findings: list[Finding]) -> None:
                 f"{action} must be pinned to {policy['sha']} ({policy['version']}, {policy['runtime']}), observed {ref}",
             )
 
-    # Checkout is a mandatory workspace catalyst for every custom workflow.
     if "actions/checkout" not in observed_names:
         add(findings, "ERROR", path, "CATALYST_CHECKOUT_REQUIRED", "pinned checkout catalyst is missing")
 
@@ -231,12 +233,32 @@ def check_custom(path: Path, text: str, findings: list[Finding]) -> None:
                 "setup-android must expose tooling only; package resolution belongs to android-lab-ci.sh",
             )
 
+    if path.name == "runtime-learning-engine.yml":
+        required_runtime_tokens = (
+            '"modules/runtime-learning-engine/**"',
+            ".github/scripts/rafaelia/runtime-learning-engine-ci.sh",
+            "evidence/runtime-learning-engine/",
+        )
+        for token in required_runtime_tokens:
+            if token not in text:
+                add(
+                    findings,
+                    "ERROR",
+                    path,
+                    "RUNTIME_ENGINE_GATE_CONTRACT",
+                    f"runtime learning engine workflow missing required routing/evidence token: {token}",
+                )
+        if "actions/upload-artifact" not in observed_names:
+            add(
+                findings,
+                "ERROR",
+                path,
+                "RUNTIME_ENGINE_EVIDENCE_TRANSPORT",
+                "runtime learning engine gate must upload its evidence receipt",
+            )
+
 
 def check_upstream_ci(path: Path, text: str, findings: list[Finding]) -> None:
-    # This large workflow is retained as the upstream release/build graph.
-    # We gate its sensitive trigger boundary instead of mixing RAFAELIA lab
-    # implementation into it. Its dependency migration has a separate risk
-    # surface and is not silently coupled to the custom lab workflows.
     required = [
         "name: CI",
         "on: push",
