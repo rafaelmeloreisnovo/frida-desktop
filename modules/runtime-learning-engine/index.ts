@@ -7,6 +7,9 @@ import { RollbackEngineImpl } from './rollback-engine';
 import { WatchdogMonitorImpl } from './watchdog-monitor';
 import { TestSuiteImpl } from './test-suite';
 import { CompatibilityChecker } from './compatibility-checker';
+import { HealthCheckEndpoint } from './health-check-endpoint';
+import { MetricsCollector } from './metrics-exporter';
+import { AlertManager } from './alert-manager';
 import { generateEventId } from './utils';
 
 export class RuntimeLearningEngine {
@@ -19,6 +22,9 @@ export class RuntimeLearningEngine {
   private watchdogMonitor: WatchdogMonitorImpl;
   private testSuite: TestSuiteImpl;
   private compatibilityChecker: CompatibilityChecker;
+  private healthCheckEndpoint: HealthCheckEndpoint;
+  private metricsCollector: MetricsCollector;
+  private alertManager: AlertManager;
 
   private running = false;
   private recentBugs: BugEvent[] = [];
@@ -48,6 +54,9 @@ export class RuntimeLearningEngine {
     this.watchdogMonitor = new WatchdogMonitorImpl();
     this.testSuite = new TestSuiteImpl();
     this.compatibilityChecker = new CompatibilityChecker(this.config.storage_path);
+    this.healthCheckEndpoint = new HealthCheckEndpoint(this, this.config.storage_path);
+    this.metricsCollector = new MetricsCollector(this.config.storage_path);
+    this.alertManager = new AlertManager(this.config.storage_path);
 
     this.setupWatchdogCallback();
   }
@@ -273,6 +282,18 @@ export class RuntimeLearningEngine {
     await this.stop();
     console.log('[RuntimeLearningEngine] Engine shutdown complete');
   }
+
+  getHealthCheckEndpoint(): HealthCheckEndpoint {
+    return this.healthCheckEndpoint;
+  }
+
+  getMetricsCollector(): MetricsCollector {
+    return this.metricsCollector;
+  }
+
+  getAlertManager(): AlertManager {
+    return this.alertManager;
+  }
 }
 
 let engine: RuntimeLearningEngine | null = null;
@@ -299,5 +320,10 @@ export async function shutdownEngine(): Promise<void> {
     engine = null;
   }
 }
+
+// Export observability components
+export { HealthCheckEndpoint, type HealthCheckResponse, type MetricsSnapshot } from './health-check-endpoint';
+export { MetricsExporter, MetricsCollector, type PrometheusMetric } from './metrics-exporter';
+export { AlertManager, type Alert, type AlertRule } from './alert-manager';
 
 console.log('[RuntimeLearningEngine] Module loaded, ready for initialization');
