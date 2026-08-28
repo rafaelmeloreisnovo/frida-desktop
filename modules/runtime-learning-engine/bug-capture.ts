@@ -3,7 +3,7 @@ import { generateHash, generateEventId } from './utils';
 
 export class BugCaptureImpl implements BugCapture {
   private capturing = false;
-  private hooks: Map<string, ReturnType<typeof NativeFunction.attach>> = new Map();
+  private hooks: Map<string, any> = new Map();
   private onBugCaptured: ((event: BugEvent) => Promise<void>) | null = null;
 
   async startCapture(): Promise<void> {

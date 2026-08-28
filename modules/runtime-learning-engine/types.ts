@@ -3,7 +3,7 @@ export type FixStrategy = 'try_catch_with_fallback' | 'monkey_patch_from_journal
 export type EventStatus = 'new' | 'captured' | 'pattern_detected' | 'fix_applied' | 'fix_rolled_back' | 'resolved';
 export type TestState = 'PASS' | 'FAIL' | 'SKIPPED';
 export type WatchdogState = 'STABLE' | 'OBSERVE' | 'DUMP' | 'FAILSAFE';
-export type Severity = 'critical' | 'high' | 'medium' | 'low';
+export type Severity = 'critical' | 'high' | 'medium' | 'low' | 'info' | 'warning';
 
 export interface BugEvent {
   id: string;

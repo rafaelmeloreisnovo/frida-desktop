@@ -1,5 +1,5 @@
 import { RuntimeLearningEngine, initializeEngine, shutdownEngine } from '../index';
-import { BugEvent } from '../types';
+import { BugEvent, Severity } from '../types';
 import {
   setupFridaMock,
   teardownFridaMock,
@@ -239,7 +239,7 @@ describe('RuntimeLearningEngine E2E Flows', () => {
   });
 
   test('Different severity levels captured correctly', async () => {
-    const severities = ['critical', 'warning', 'info'];
+    const severities: Array<Severity> = ['critical', 'warning', 'info'];
 
     for (const severity of severities) {
       const bugEvent: Partial<BugEvent> = {

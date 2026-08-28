@@ -68,7 +68,7 @@ export class MockMethod {
     this.lastCallArgs = args;
     for (const callback of this.hookCallbacks) {
       try {
-        callback(...args);
+        (callback as any).apply(null, args);
       } catch (e) {
         console.warn('[MockMethod] Callback error:', e);
       }

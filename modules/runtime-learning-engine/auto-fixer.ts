@@ -56,12 +56,13 @@ export class AutoFixerImpl implements AutoFixer {
 
           for (let i = 0; i < overloads.length; i++) {
             const original = overloads[i];
-            const wrapped = function(...args: any[]) {
+            const self = this;
+            const wrapped = function(this: any, ...args: any[]) {
               try {
                 return original.apply(this, args);
               } catch (e) {
                 console.log(`[AutoFixer] Caught exception in ${target}.${methodName}: ${e}`);
-                return this.createFallbackResult(methodName);
+                return self.createFallbackResult(methodName);
               }
             };
 
@@ -98,14 +99,15 @@ export class AutoFixerImpl implements AutoFixer {
         throw new Error(`Method ${methodName} not found in ${pattern.class}`);
       }
 
-      const patchedMethod = function(...args: any[]) {
+      const self = this;
+      const patchedMethod = function(this: any, ...args: any[]) {
         console.log(`[AutoFixer] Executing patched version of ${pattern.class}.${methodName}`);
 
         if (pattern.exception_type === 'NullPointerException') {
           for (let i = 0; i < args.length; i++) {
             if (args[i] === null || args[i] === undefined) {
               console.log(`[AutoFixer] Null argument detected at index ${i}, using default value`);
-              args[i] = this.getDefaultValue(args[i]);
+              args[i] = self.getDefaultValue(args[i]);
             }
           }
         }
@@ -114,7 +116,7 @@ export class AutoFixerImpl implements AutoFixer {
           return originalMethod.apply(this, args);
         } catch (e) {
           console.log(`[AutoFixer] Patched method caught exception: ${e}`);
-          return this.createFallbackResult(methodName);
+          return self.createFallbackResult(methodName);
         }
       };
 
