@@ -1,0 +1,53 @@
+name: Runtime Learning Engine Integration Gate
+
+on:
+  pull_request:
+    paths:
+      - "modules/runtime-learning-engine/**"
+      - ".github/workflows/runtime-learning-engine.yml"
+      - ".github/scripts/rafaelia/runtime-learning-engine-ci.sh"
+      - ".github/scripts/rafaelia/workflow-contract.py"
+  push:
+    branches:
+      - main
+    paths:
+      - "modules/runtime-learning-engine/**"
+      - ".github/workflows/runtime-learning-engine.yml"
+      - ".github/scripts/rafaelia/runtime-learning-engine-ci.sh"
+      - ".github/scripts/rafaelia/workflow-contract.py"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: runtime-learning-engine-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  runtime-learning-engine:
+    name: Build + tests + evidence receipt
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2, Node 24
+        with:
+          fetch-depth: 2
+          persist-credentials: false
+
+      - name: Run repository-owned Runtime Learning Engine gate
+        run: .github/scripts/rafaelia/runtime-learning-engine-ci.sh
+
+      - name: Upload Runtime Learning Engine evidence
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1, Node 24
+        with:
+          name: runtime-learning-engine-${{ github.run_id }}
+          path: evidence/runtime-learning-engine/
+          if-no-files-found: error
+          retention-days: 14
