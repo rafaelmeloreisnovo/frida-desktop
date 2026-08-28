@@ -6,6 +6,7 @@ import { AutoFixerImpl } from './auto-fixer';
 import { RollbackEngineImpl } from './rollback-engine';
 import { WatchdogMonitorImpl } from './watchdog-monitor';
 import { TestSuiteImpl } from './test-suite';
+import { CompatibilityChecker } from './compatibility-checker';
 import { generateEventId } from './utils';
 
 export class RuntimeLearningEngine {
@@ -17,6 +18,7 @@ export class RuntimeLearningEngine {
   private rollbackEngine: RollbackEngineImpl;
   private watchdogMonitor: WatchdogMonitorImpl;
   private testSuite: TestSuiteImpl;
+  private compatibilityChecker: CompatibilityChecker;
 
   private running = false;
   private recentBugs: BugEvent[] = [];
@@ -45,6 +47,7 @@ export class RuntimeLearningEngine {
     this.rollbackEngine = new RollbackEngineImpl();
     this.watchdogMonitor = new WatchdogMonitorImpl();
     this.testSuite = new TestSuiteImpl();
+    this.compatibilityChecker = new CompatibilityChecker(this.config.storage_path);
 
     this.setupWatchdogCallback();
   }
@@ -58,6 +61,19 @@ export class RuntimeLearningEngine {
     console.log('[RuntimeLearningEngine] Starting engine...');
 
     try {
+      // Pre-flight compatibility check
+      console.log('[RuntimeLearningEngine] Running compatibility checks...');
+      const compatReport = await this.compatibilityChecker.checkCompatibility();
+
+      if (!this.compatibilityChecker.canProceedWithDeployment()) {
+        console.error('[RuntimeLearningEngine] INCOMPATIBLE ENVIRONMENT - Cannot proceed with deployment');
+        console.error('[RuntimeLearningEngine] See compatibility-report.json for details');
+        this.running = false;
+        return;
+      }
+
+      console.log('[RuntimeLearningEngine] Compatibility check passed - proceeding with startup');
+
       (this.bugCapture as any).setBugCapturedCallback(async (event: BugEvent) => {
         await this.captureBug(event);
       });
