@@ -42,7 +42,7 @@ jobs:
           persist-credentials: false
 
       - name: Run repository-owned Runtime Learning Engine gate
-        run: .github/scripts/rafaelia/runtime-learning-engine-ci.sh
+        run: bash .github/scripts/rafaelia/runtime-learning-engine-ci.sh
 
       - name: Upload Runtime Learning Engine evidence
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1, Node 24
