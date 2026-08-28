@@ -58,6 +58,10 @@ export class RuntimeLearningEngine {
     console.log('[RuntimeLearningEngine] Starting engine...');
 
     try {
+      (this.bugCapture as any).setBugCapturedCallback(async (event: BugEvent) => {
+        await this.captureBug(event);
+      });
+
       await this.bugCapture.startCapture();
       await this.watchdogMonitor.startWatchdog();
 
