@@ -58,6 +58,10 @@ export class RuntimeLearningEngine {
     console.log('[RuntimeLearningEngine] Starting engine...');
 
     try {
+      (this.bugCapture as any).setBugCapturedCallback(async (event: BugEvent) => {
+        await this.captureBug(event);
+      });
+
       await this.bugCapture.startCapture();
       await this.watchdogMonitor.startWatchdog();
 
@@ -210,11 +214,27 @@ export class RuntimeLearningEngine {
 
           this.watchdogMonitor.setState('FAILSAFE');
 
+          const journals = this.rollbackEngine.getAllJournals();
+          for (const journal of journals) {
+            if (journal.fix_id === fixId) {
+              const rollbackSuccess = await this.rollbackEngine.rollback(journal);
+              if (!rollbackSuccess) {
+                console.error(
+                  `[RuntimeLearningEngine] Rollback verification failed for ${fixId}. ` +
+                  'Staying in FAILSAFE mode.'
+                );
+              } else {
+                console.log(`[RuntimeLearningEngine] Rollback verified for ${fixId}`);
+              }
+            }
+          }
+
           console.log(`[RuntimeLearningEngine] Rollback for ${fixId} completed`);
 
           this.pendingRollbacks.delete(fixId);
         } catch (e) {
           console.error(`[RuntimeLearningEngine] Rollback failed for ${fixId}:`, e);
+          this.watchdogMonitor.setState('FAILSAFE');
         }
       }
     });

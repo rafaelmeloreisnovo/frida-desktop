@@ -96,6 +96,7 @@ export interface BugCapture {
   captureBug(event: BugEvent): Promise<void>;
   startCapture(): Promise<void>;
   stopCapture(): Promise<void>;
+  setBugCapturedCallback(callback: (event: BugEvent) => Promise<void>): void;
 }
 
 export interface BugStore {
