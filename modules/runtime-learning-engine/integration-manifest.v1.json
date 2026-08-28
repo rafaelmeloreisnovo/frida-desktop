@@ -1,0 +1,153 @@
+{
+  "schema": "rafaelia.runtime-learning-engine.integration-manifest.v1",
+  "generated_from": "repository audit retrofeedback 2026-08-28",
+  "epistemic_contract": {
+    "vision_not_artifact": true,
+    "artifact_not_execution": true,
+    "execution_not_physical_evidence": true,
+    "token_vazio_not_zero": true,
+    "claim_allowed": false
+  },
+  "operational_graph": [
+    {
+      "from": "BugCaptureImpl",
+      "to": "BugStoreImpl",
+      "edge": "captured_event_callback",
+      "state": "CONNECTED"
+    },
+    {
+      "from": "BugStoreImpl",
+      "to": "PatternDetectorImpl",
+      "edge": "recent_and_persisted_events",
+      "state": "CONNECTED"
+    },
+    {
+      "from": "PatternDetectorImpl",
+      "to": "RuntimeSafetyMesh",
+      "edge": "pre_mutation_gate",
+      "state": "CONNECTED"
+    },
+    {
+      "from": "RuntimeSafetyMesh",
+      "to": "AutoFixerImpl",
+      "edge": "allow_or_block_fix_application",
+      "state": "CONNECTED"
+    },
+    {
+      "from": "AutoFixerImpl",
+      "to": "TestSuiteImpl",
+      "edge": "fix_event_with_fix_id_and_rollback_capability",
+      "state": "CONNECTED"
+    },
+    {
+      "from": "TestSuiteImpl",
+      "to": "AutoFixerImpl.rollbackFix",
+      "edge": "immediate_hook_restore_on_test_failure",
+      "state": "CONNECTED"
+    },
+    {
+      "from": "TestSuiteImpl",
+      "to": "RollbackEngineImpl",
+      "edge": "memory_journal_fallback_only_when_fix_id_matches",
+      "state": "CONNECTED_FAIL_CLOSED"
+    },
+    {
+      "from": "RuntimeLearningEngine",
+      "to": "MetricsCollector",
+      "edge": "lifecycle_latency_success_rollback_metrics",
+      "state": "CONNECTED"
+    },
+    {
+      "from": "MetricsCollector",
+      "to": "HealthCheckEndpoint",
+      "edge": "normalized_runtime_observation",
+      "state": "CONNECTED"
+    },
+    {
+      "from": "HealthCheckEndpoint",
+      "to": "AlertManager",
+      "edge": "normalized_operational_metrics",
+      "state": "CONNECTED"
+    },
+    {
+      "from": "RuntimeSafetyMesh",
+      "to": "AlertRulesEngine",
+      "edge": "canonical_sla_metric_evaluation",
+      "state": "CONNECTED"
+    },
+    {
+      "from": "MemoryPressureHandler",
+      "to": "RuntimeLearningEngine",
+      "edge": "disable_fix_application_under_pressure",
+      "state": "CONNECTED_REAL_OBSERVATION"
+    },
+    {
+      "from": "DiskExhaustionHandler",
+      "to": "RuntimeLearningEngine",
+      "edge": "block_mutation_on_critical_observed_free_space",
+      "state": "CONNECTED_WHEN_STATFS_AVAILABLE"
+    },
+    {
+      "from": "CorruptionRecoveryHandler",
+      "to": "RuntimeLearningEngine",
+      "edge": "read_only_corruption_gate_before_mutation",
+      "state": "CONNECTED"
+    },
+    {
+      "from": "CorruptionRecoveryHandler",
+      "to": "BugStoreImpl",
+      "edge": "quarantine_corrupt_history_without_destructive_recovery",
+      "state": "CONNECTED"
+    }
+  ],
+  "component_boundaries": [
+    {
+      "component": "ConcurrentBugCaptureHandler",
+      "state": "TEST_HARNESS_ONLY",
+      "reason": "current implementation contains simulated lock and delay behavior; it is not promoted to live hot path"
+    },
+    {
+      "component": "health-check.ts",
+      "state": "COMPATIBILITY_OBSERVER",
+      "reason": "engine-bound primary health surface is health-check-endpoint.ts; compatibility observer is fail-closed for unknown evidence"
+    },
+    {
+      "component": "component_restart AutoFix strategy",
+      "state": "NON_REVERSIBLE",
+      "reason": "process/component restart cannot be truthfully represented as hook restoration"
+    },
+    {
+      "component": "RollbackEngineImpl",
+      "state": "MEMORY_JOURNAL_ONLY",
+      "reason": "raw-memory rollback requires Frida Memory API and a fix_id-bound journal; absence fails closed"
+    }
+  ],
+  "gaps": [
+    {
+      "id": "GAP_CI_RUNTIME_ENGINE",
+      "state": "IMPLEMENTED_AWAITING_RUN",
+      "falsifier": "runtime-learning-engine GitHub Actions run fails build/tests/receipt"
+    },
+    {
+      "id": "GAP_DEPENDENCY_LOCK",
+      "state": "TOKEN_VAZIO",
+      "falsifier": "package-lock.json exists and npm ci reproduces the dependency graph"
+    },
+    {
+      "id": "GAP_PHYSICAL_DEVICE",
+      "state": "TOKEN_VAZIO",
+      "falsifier": "physical Android/Frida receipt with device identity, hashes, runtime logs and SLA measurements"
+    },
+    {
+      "id": "GAP_PHYSICAL_PERFORMANCE",
+      "state": "TOKEN_VAZIO",
+      "falsifier": "repeated ARM32/ARM64 measurements with raw timing evidence"
+    },
+    {
+      "id": "GAP_LICENSE_BOUNDARY",
+      "state": "OPEN_REVIEW",
+      "falsifier": "file-level provenance and licensing map separates upstream Frida, derived modifications and RAFAELIA-original files"
+    }
+  ],
+  "next_verifiable_step": "GitHub Actions must execute the Runtime Learning Engine gate; only then may hosted build/test state move from TOKEN_VAZIO to PASS. Physical-device claims remain closed independently."
+}
