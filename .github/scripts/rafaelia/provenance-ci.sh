@@ -18,6 +18,7 @@ d = json.loads(p.read_text())
 assert d['schema'] == 'rafaelia.delta-inventory-evidence.v1'
 assert d['claim_allowed'] is False
 assert d['ownership_claimed'] is False
+assert d['governance_required_checks_enforced'] is False
 assert d['total_changed_paths'] > 0
 assert 'TOKEN_VAZIO' in d['hunk_origin_state']
 assert len(d['entries']) == d['total_changed_paths']
@@ -68,6 +69,13 @@ d['authorial_delta']['hunk_origin']['state'] = 'PASS'
 d['authorial_delta']['hunk_origin']['ownership_claimed'] = True
 cases['premature-hunk-promotion'] = d
 
+d = deepcopy(source)
+d['governance']['main_branch_protection']['state'] = 'OBSERVED_ENFORCED'
+d['governance']['main_branch_protection']['observed_protected'] = True
+d['governance']['main_branch_protection']['observed_ruleset_count'] = 1
+d['governance']['main_branch_protection']['required_checks_enforced'] = True
+cases['premature-governance-promotion'] = d
+
 for name, payload in cases.items():
     Path(f'/tmp/{name}.json').write_text(json.dumps(payload, indent=2) + '\n')
 PY
@@ -76,6 +84,7 @@ PY
   expect_fail license-blob-drift /tmp/license-blob-drift.json
   expect_fail invalid-baseline /tmp/invalid-baseline.json
   expect_fail premature-hunk-promotion /tmp/premature-hunk-promotion.json
+  expect_fail premature-governance-promotion /tmp/premature-governance-promotion.json
 
   # Re-run the canonical manifest last. Negative fixtures may never mutate it.
   python3 tools/validate-rafaelia-provenance.py --manifest "$MANIFEST" --evidence /tmp/final.evidence.json
