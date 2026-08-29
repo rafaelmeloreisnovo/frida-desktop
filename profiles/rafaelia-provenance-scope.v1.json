@@ -76,6 +76,15 @@
     "state": "TOKEN_VAZIO_REVIEW_PER_DELTA",
     "instrumentation_capability_is_security_claim": false
   },
+  "governance": {
+    "main_branch_protection": {
+      "state": "TOKEN_VAZIO_NOT_ENFORCED",
+      "observed_protected": false,
+      "observed_ruleset_count": 0,
+      "required_checks_enforced": false,
+      "meaning": "workflow success is evidence, but is not mandatory merge policy until GitHub branch/ruleset configuration proves enforcement"
+    }
+  },
   "gates": [
     {
       "id": "UPSTREAM_LICENSE_PRESERVED",
@@ -101,6 +110,11 @@
       "id": "THIRD_PARTY_RECONCILED",
       "state": "TOKEN_VAZIO",
       "falsifier": "submodule/dependency material lacks governing terms"
+    },
+    {
+      "id": "MAIN_REQUIRED_CHECKS_ENFORCED",
+      "state": "TOKEN_VAZIO",
+      "falsifier": "GitHub branch/ruleset API does not show main protected with intended required checks"
     }
   ],
   "risk": {
@@ -113,7 +127,8 @@
       "path delta is explicitly not treated as exclusive authorship evidence",
       "unknown hunk origin remains TOKEN_VAZIO",
       "unknown dependency/submodule rights remain TOKEN_VAZIO",
-      "runtime and security claims remain separate from source presence"
+      "runtime and security claims remain separate from source presence",
+      "workflow success is not represented as mandatory merge enforcement while main remains unprotected"
     ]
   },
   "rollback": {
