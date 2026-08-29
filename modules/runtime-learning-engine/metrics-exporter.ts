@@ -46,8 +46,8 @@ export class MetricsExporter {
     this.registerMetric('frida_sla_total_violations', 'Total observed SLA violations', 'counter');
 
     this.registerMetric('frida_engine_uptime_seconds', 'Engine uptime in seconds', 'gauge');
-    this.registerMetric('frida_memory_usage_mb', 'Memory usage in MB', 'gauge');
-    this.registerMetric('frida_storage_usage_mb', 'Storage usage in MB', 'gauge');
+    this.registerMetric('frida_memory_usage_mb', 'Observed target runtime memory usage in MB; omitted when not observed', 'gauge');
+    this.registerMetric('frida_storage_usage_mb', 'Observed tracked storage usage in MB', 'gauge');
     this.registerMetric('frida_disk_free_mb', 'Observed free filesystem space in MB', 'gauge');
 
     this.registerMetric('frida_watchdog_state', 'Watchdog state (1=STABLE, 2=OBSERVE, 3=DUMP, 4=FAILSAFE)', 'gauge');
@@ -74,6 +74,10 @@ export class MetricsExporter {
   }
 
   recordGauge(metricName: string, value: number, labels?: Record<string, string>): void {
+    if (!Number.isFinite(value)) {
+      console.warn(`[MetricsExporter] Refusing non-finite gauge ${metricName}: ${value}`);
+      return;
+    }
     const metric = this.metrics.get(metricName);
     if (!metric) {
       console.warn(`[MetricsExporter] Metric ${metricName} not registered`);
@@ -86,6 +90,10 @@ export class MetricsExporter {
   }
 
   recordHistogram(metricName: string, value: number, labels?: Record<string, string>): void {
+    if (!Number.isFinite(value)) {
+      console.warn(`[MetricsExporter] Refusing non-finite histogram sample ${metricName}: ${value}`);
+      return;
+    }
     const metric = this.metrics.get(metricName);
     if (!metric || metric.type !== 'histogram') {
       console.warn(`[MetricsExporter] Histogram ${metricName} not registered`);
@@ -122,8 +130,6 @@ export class MetricsExporter {
   }
 
   private exportHistogram(metric: PrometheusMetric): string {
-    // Current engine uses unlabeled latency histograms. If labels are introduced,
-    // this still preserves them while computing bucket counts per sample set.
     const samples = metric.metrics;
     const sum = samples.reduce((total, sample) => total + sample.value, 0);
     let output = '';
@@ -283,14 +289,25 @@ export class MetricsCollector {
   ): void {
     const uptimeSeconds = Math.round((Date.now() - this.startTime) / 1000);
     this.exporter.recordGauge('frida_engine_uptime_seconds', uptimeSeconds);
-    this.exporter.recordGauge('frida_memory_usage_mb', memoryMb);
-    this.exporter.recordGauge('frida_storage_usage_mb', storageMb);
+
+    // Negative values are evidence sentinels (TOKEN_VAZIO), not measurements.
+    // Omit them entirely instead of encoding "unknown" as a physically meaningful
+    // numeric gauge that dashboards, alerts, or downstream math might consume.
+    if (Number.isFinite(memoryMb) && memoryMb >= 0) {
+      this.exporter.recordGauge('frida_memory_usage_mb', memoryMb);
+    }
+    if (Number.isFinite(storageMb) && storageMb >= 0) {
+      this.exporter.recordGauge('frida_storage_usage_mb', storageMb);
+    }
     if (typeof diskFreeMb === 'number' && Number.isFinite(diskFreeMb) && diskFreeMb >= 0) {
       this.exporter.recordGauge('frida_disk_free_mb', diskFreeMb);
     }
 
     const stateMap: Record<string, number> = { STABLE: 1, OBSERVE: 2, DUMP: 3, FAILSAFE: 4 };
-    this.exporter.recordGauge('frida_watchdog_state', stateMap[watchdogState] || 0);
+    const watchdogNumeric = stateMap[watchdogState];
+    if (typeof watchdogNumeric === 'number') {
+      this.exporter.recordGauge('frida_watchdog_state', watchdogNumeric);
+    }
   }
 
   recordError(): void {
