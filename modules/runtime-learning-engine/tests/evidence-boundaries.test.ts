@@ -33,6 +33,18 @@ describe('Runtime evidence boundaries', () => {
     expect(health.evidence_gaps).toContain('target_memory_usage_mb=TOKEN_VAZIO');
   });
 
+  test('unknown target memory is omitted from numeric metric exports', async () => {
+    const health = await engine.getHealthCheckEndpoint().getHealthStatus();
+    expect(health.memory_usage_mb).toBe(-1);
+
+    await engine.getMetricsCollector().exportMetrics('json');
+    const metrics = JSON.parse(fs.readFileSync(`${testDir}/metrics.json`, 'utf-8'));
+
+    expect(metrics).not.toHaveProperty('frida_memory_usage_mb');
+    expect(metrics).toHaveProperty('frida_engine_uptime_seconds');
+    expect(Object.values(metrics).some(value => value === -1)).toBe(false);
+  });
+
   test('host memory does not consume target-memory alert debounce', () => {
     const alerts = engine.getAlertManager().evaluateRules({ memory_usage_mb: 600 });
 
