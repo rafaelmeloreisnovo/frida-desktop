@@ -3,6 +3,7 @@ import * as path from 'path';
 
 export interface HealthStatus {
   status: 'healthy' | 'degraded' | 'critical';
+  evidence_status: 'COMPLETE' | 'PARTIAL';
   engine_running: boolean;
   uptime_ms: number;
   bugs_captured: number;
@@ -16,7 +17,11 @@ export interface HealthStatus {
     critical: number;
     warnings: number;
   };
+  /** Target runtime memory. -1 means TOKEN_VAZIO / not observed. */
   memory_usage_mb: number;
+  /** Memory of this host/controller Node process only. */
+  host_process_memory_usage_mb: number;
+  memory_usage_source: 'HOST_PROCESS_ONLY' | 'UNKNOWN';
   disk_free_mb: number;
   last_bug_capture_ms: number;
   last_pattern_detection_ms: number;
@@ -27,7 +32,7 @@ export interface HealthStatus {
 /**
  * File-backed compatibility health observer used by Phase 3.2 tests and
  * external tooling. The engine-bound primary surface is health-check-endpoint.ts.
- * Unknown evidence is never silently promoted to STABLE/true.
+ * Host/controller observations are never promoted to Android target evidence.
  */
 export class HealthCheckEndpoint {
   private startTime: number = Date.now();
@@ -53,16 +58,20 @@ export class HealthCheckEndpoint {
     if (!this.engineRunningProvider) evidenceGaps.push('engine_running=TOKEN_VAZIO');
     if (watchdog.state === 'UNKNOWN') evidenceGaps.push('watchdog_state=TOKEN_VAZIO');
 
-    const memoryUsage = this.getMemoryUsage();
-    if (memoryUsage < 0) evidenceGaps.push('memory_usage_mb=TOKEN_VAZIO');
+    // This compatibility observer has no target-memory transport. Keep target
+    // memory explicitly unknown and observe the host process in a separate field.
+    const targetMemoryUsage = -1;
+    const hostMemoryUsage = this.getHostProcessMemoryUsage();
+    evidenceGaps.push('target_memory_usage_mb=TOKEN_VAZIO');
 
     const diskFree = this.getDiskFree();
     if (diskFree < 0) evidenceGaps.push('disk_free_mb=TOKEN_VAZIO');
 
-    const overallStatus = this.determineStatus(slaViolations, watchdog.state, evidenceGaps);
+    const overallStatus = this.determineStatus(slaViolations, watchdog.state);
 
     const health: HealthStatus = {
       status: overallStatus,
+      evidence_status: evidenceGaps.length > 0 ? 'PARTIAL' : 'COMPLETE',
       engine_running: engineRunning,
       uptime_ms: now - this.startTime,
       bugs_captured: metrics.bugsCaptured || 0,
@@ -73,7 +82,9 @@ export class HealthCheckEndpoint {
       last_heartbeat: watchdog.lastHeartbeat,
       watchdog_state: watchdog.state,
       sla_violations: slaViolations,
-      memory_usage_mb: memoryUsage,
+      memory_usage_mb: targetMemoryUsage,
+      host_process_memory_usage_mb: hostMemoryUsage,
+      memory_usage_source: hostMemoryUsage >= 0 ? 'HOST_PROCESS_ONLY' : 'UNKNOWN',
       disk_free_mb: diskFree,
       last_bug_capture_ms: metrics.lastBugCaptureLatency || 0,
       last_pattern_detection_ms: metrics.lastPatternDetectionLatency || 0,
@@ -168,11 +179,10 @@ export class HealthCheckEndpoint {
 
   private determineStatus(
     slaViolations: { critical: number; warnings: number },
-    watchdogState: HealthStatus['watchdog_state'],
-    evidenceGaps: string[]
+    watchdogState: HealthStatus['watchdog_state']
   ): 'healthy' | 'degraded' | 'critical' {
     if (watchdogState === 'FAILSAFE' || slaViolations.critical > 0) return 'critical';
-    if (watchdogState === 'UNKNOWN' || slaViolations.warnings > 0 || evidenceGaps.length > 0) return 'degraded';
+    if (watchdogState === 'UNKNOWN' || slaViolations.warnings > 0) return 'degraded';
     return 'healthy';
   }
 
@@ -184,13 +194,13 @@ export class HealthCheckEndpoint {
     return (applied / total) * 100;
   }
 
-  private getMemoryUsage(): number {
+  private getHostProcessMemoryUsage(): number {
     try {
       if (typeof process !== 'undefined' && typeof process.memoryUsage === 'function') {
         return Math.round(process.memoryUsage().heapUsed / 1024 / 1024);
       }
     } catch (e) {
-      console.error('[HealthCheck] Failed to get memory usage:', e);
+      console.error('[HealthCheck] Failed to get host process memory usage:', e);
     }
     return -1;
   }
@@ -233,6 +243,7 @@ export class HealthCheckEndpoint {
         'Content-Type': 'application/json',
         'Cache-Control': 'no-cache',
         'X-Engine-Status': health.status,
+        'X-Evidence-Status': health.evidence_status,
         'X-Watchdog-State': health.watchdog_state
       }
     };
