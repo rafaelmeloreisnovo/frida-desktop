@@ -1,4 +1,5 @@
 import { initializeEngine, shutdownEngine, RuntimeLearningEngine } from '../index';
+import { HealthCheckEndpoint as FileHealthCheckEndpoint } from '../health-check';
 import { setupFridaMock, teardownFridaMock } from '../test-utils/frida-mock';
 import * as fs from 'fs';
 
@@ -26,6 +27,16 @@ describe('Runtime evidence boundaries', () => {
     const health = await engine.getHealthCheckEndpoint().getHealthStatus();
 
     expect(health.status).toBe('healthy');
+    expect(health.evidence_status).toBe('PARTIAL');
+    expect(health.memory_usage_mb).toBe(-1);
+    expect(health.host_process_memory_usage_mb).toBeGreaterThanOrEqual(0);
+    expect(health.memory_usage_source).toBe('HOST_PROCESS_ONLY');
+    expect(health.evidence_gaps).toContain('target_memory_usage_mb=TOKEN_VAZIO');
+  });
+
+  test('file-backed compatibility health uses the same target-memory boundary', () => {
+    const health = new FileHealthCheckEndpoint(testDir, () => true).getHealth();
+
     expect(health.evidence_status).toBe('PARTIAL');
     expect(health.memory_usage_mb).toBe(-1);
     expect(health.host_process_memory_usage_mb).toBeGreaterThanOrEqual(0);
