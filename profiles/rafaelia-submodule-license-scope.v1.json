@@ -1,0 +1,127 @@
+{
+  "schema": "rafaelia.first-level-submodule-license-scope.v1",
+  "repository": "rafaelmeloreisnovo/frida-desktop",
+  "scope": "FIRST_LEVEL_GIT_SUBMODULES_ONLY",
+  "source_of_structure": ".gitmodules + HEAD gitlinks",
+  "entries": [
+    {
+      "name": "frida-gum",
+      "path": "subprojects/frida-gum",
+      "url": "https://github.com/frida/frida-gum.git",
+      "gitlink_commit": "8d617ec99bcf35f0da8c4b3b076e91cc29208c5b",
+      "license_source_path": "COPYING",
+      "license_source_state": "OBSERVED_AT_PINNED_REVISION",
+      "license_summary": "wxWindows Library Licence 3.1 with additional embedded BSD-style notices for incorporated portions",
+      "notice_complexity": "MULTI_NOTICE_WITHIN_COMPONENT",
+      "compatibility_proven": false
+    },
+    {
+      "name": "frida-core",
+      "path": "subprojects/frida-core",
+      "url": "https://github.com/frida/frida-core.git",
+      "gitlink_commit": "6d002ed9ceac75d08fa165969291b77d1bc13b74",
+      "license_source_path": "COPYING",
+      "license_source_state": "OBSERVED_AT_PINNED_REVISION",
+      "license_summary": "wxWindows Library Licence 3.1",
+      "notice_complexity": "PRIMARY_LICENSE_TEXT_OBSERVED",
+      "compatibility_proven": false
+    },
+    {
+      "name": "frida-python",
+      "path": "subprojects/frida-python",
+      "url": "https://github.com/frida/frida-python.git",
+      "gitlink_commit": "6033dd09042edda482f8d68db0296f414a6b0c0b",
+      "license_source_path": "COPYING",
+      "license_source_state": "OBSERVED_AT_PINNED_REVISION",
+      "license_summary": "wxWindows Library Licence 3.1",
+      "notice_complexity": "PRIMARY_LICENSE_TEXT_OBSERVED",
+      "compatibility_proven": false
+    },
+    {
+      "name": "frida-node",
+      "path": "subprojects/frida-node",
+      "url": "https://github.com/frida/frida-node.git",
+      "gitlink_commit": "9ca96e603cb4d186cbe3866a7c4300cda122c1aa",
+      "license_source_path": "package.json",
+      "license_source_state": "OBSERVED_AT_PINNED_REVISION",
+      "license_summary": "LGPL-2.0 WITH WxWindows-exception-3.1",
+      "notice_complexity": "PACKAGE_METADATA_LICENSE_FIELD_OBSERVED_TOP_LEVEL_COPYING_ABSENT",
+      "compatibility_proven": false
+    },
+    {
+      "name": "frida-swift",
+      "path": "subprojects/frida-swift",
+      "url": "https://github.com/frida/frida-swift.git",
+      "gitlink_commit": "eb4d08e970c3809b92f313db16bd268719bc4554",
+      "license_source_path": "COPYING",
+      "license_source_state": "OBSERVED_AT_PINNED_REVISION",
+      "license_summary": "wxWindows Library Licence 3.1",
+      "notice_complexity": "PRIMARY_LICENSE_TEXT_OBSERVED",
+      "compatibility_proven": false
+    },
+    {
+      "name": "frida-clr",
+      "path": "subprojects/frida-clr",
+      "url": "https://github.com/frida/frida-clr.git",
+      "gitlink_commit": "c152cd5fa4209debd65ae0891347109fc3c62f33",
+      "license_source_path": "COPYING",
+      "license_source_state": "OBSERVED_AT_PINNED_REVISION",
+      "license_summary": "wxWindows Library Licence 3.1",
+      "notice_complexity": "PRIMARY_LICENSE_TEXT_OBSERVED",
+      "compatibility_proven": false
+    },
+    {
+      "name": "frida-qml",
+      "path": "subprojects/frida-qml",
+      "url": "https://github.com/frida/frida-qml.git",
+      "gitlink_commit": "e58861e31979704e94bc34bc10eff9f18fdda545",
+      "license_source_path": "COPYING",
+      "license_source_state": "OBSERVED_AT_PINNED_REVISION",
+      "license_summary": "wxWindows Library Licence 3.1",
+      "notice_complexity": "PRIMARY_LICENSE_TEXT_OBSERVED",
+      "compatibility_proven": false
+    },
+    {
+      "name": "frida-tools",
+      "path": "subprojects/frida-tools",
+      "url": "https://github.com/frida/frida-tools.git",
+      "gitlink_commit": "1558a2db3a6342a84b0a8c255f0d6476e1cdd055",
+      "license_source_path": "COPYING",
+      "license_source_state": "OBSERVED_AT_PINNED_REVISION",
+      "license_summary": "wxWindows Library Licence 3.1",
+      "notice_complexity": "PRIMARY_LICENSE_TEXT_OBSERVED",
+      "compatibility_proven": false
+    },
+    {
+      "name": "frida-go",
+      "path": "subprojects/frida-go",
+      "url": "https://github.com/frida/frida-go",
+      "gitlink_commit": "fd52f64f49fbbde2820e02e6e6dd3aafd1ac0ce6",
+      "license_source_path": "LICENSE",
+      "license_source_state": "OBSERVED_AT_PINNED_REVISION",
+      "license_summary": "ISC License",
+      "notice_complexity": "DISTINCT_FIRST_LEVEL_LICENSE",
+      "compatibility_proven": false
+    },
+    {
+      "name": "releng",
+      "path": "releng",
+      "url": "https://github.com/frida/releng.git",
+      "gitlink_commit": "a76acfc2b5f42ec11a630b98ee86fb494764ca6c",
+      "license_source_path": null,
+      "license_source_state": "TOKEN_VAZIO_LICENSE_SOURCE_NOT_OBSERVED_AT_ROOT",
+      "license_summary": null,
+      "notice_complexity": "UNRESOLVED_AT_FIRST_LEVEL_ROOT",
+      "compatibility_proven": false
+    }
+  ],
+  "first_level_submodule_count": 10,
+  "observed_license_source_count": 9,
+  "unresolved_license_source_count": 1,
+  "all_gitlinks_pinned": true,
+  "single_license_flattening_allowed": false,
+  "license_compatibility_proven": false,
+  "transitive_submodule_and_dependency_reconciliation": "TOKEN_VAZIO_NOT_PROVEN",
+  "claim_allowed": false,
+  "interpretation_boundary": "This registry records first-level gitlink identity and license-source observations at the pinned revisions. It is not a legal opinion, does not prove compatibility, does not cover nested submodules or all vendored/dependency notices, and must not be used to flatten distinct component terms into one license claim."
+}
