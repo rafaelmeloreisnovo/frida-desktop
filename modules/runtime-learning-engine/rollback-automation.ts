@@ -6,6 +6,10 @@ import * as path from 'path';
  *
  * Monitors metrics continuously and triggers automatic rollback
  * when thresholds are exceeded to prevent cascading failures.
+ *
+ * The built-in rollback steps are deterministic simulations only. Real traffic
+ * shifting/restoration must be supplied by a deployment adapter; hosted tests
+ * never sleep for production-scale intervals or use randomness as evidence.
  */
 
 export interface RollbackTrigger {
@@ -42,75 +46,19 @@ export interface RollbackHistory {
     successfulRollbacks: number;
     failedRollbacks: number;
     averageRollbackTime: number;
-    mttc: number; // Mean Time To Correct
+    mttc: number;
   };
 }
 
 export const DEFAULT_ROLLBACK_TRIGGERS: RollbackTrigger[] = [
-  {
-    id: 'success_rate_critical',
-    metric: 'fix_success_rate',
-    threshold: 70,
-    comparison: '<',
-    severity: 'critical',
-    enabled: true
-  },
-  {
-    id: 'error_rate_critical',
-    metric: 'errors_per_hour',
-    threshold: 50,
-    comparison: '>',
-    severity: 'critical',
-    enabled: true
-  },
-  {
-    id: 'memory_growth_warning',
-    metric: 'memory_growth_mb_per_min',
-    threshold: 10,
-    comparison: '>',
-    severity: 'warning',
-    enabled: true
-  },
-  {
-    id: 'rollback_success_rate_critical',
-    metric: 'rollback_success_rate',
-    threshold: 80,
-    comparison: '<',
-    severity: 'critical',
-    enabled: true
-  },
-  {
-    id: 'corruption_detected_critical',
-    metric: 'corruption_count',
-    threshold: 0,
-    comparison: '!=',
-    severity: 'critical',
-    enabled: true
-  },
-  {
-    id: 'watchdog_failsafe',
-    metric: 'watchdog_state',
-    threshold: 4, // FAILSAFE = 4
-    comparison: '==',
-    severity: 'critical',
-    enabled: true
-  },
-  {
-    id: 'storage_critical',
-    metric: 'storage_used_mb',
-    threshold: 900,
-    comparison: '>',
-    severity: 'critical',
-    enabled: true
-  },
-  {
-    id: 'bug_capture_latency_sla',
-    metric: 'bug_capture_latency_ms',
-    threshold: 200, // 2x the SLA threshold
-    comparison: '>',
-    severity: 'warning',
-    enabled: true
-  }
+  { id: 'success_rate_critical', metric: 'fix_success_rate', threshold: 70, comparison: '<', severity: 'critical', enabled: true },
+  { id: 'error_rate_critical', metric: 'errors_per_hour', threshold: 50, comparison: '>', severity: 'critical', enabled: true },
+  { id: 'memory_growth_warning', metric: 'memory_growth_mb_per_min', threshold: 10, comparison: '>', severity: 'warning', enabled: true },
+  { id: 'rollback_success_rate_critical', metric: 'rollback_success_rate', threshold: 80, comparison: '<', severity: 'critical', enabled: true },
+  { id: 'corruption_detected_critical', metric: 'corruption_count', threshold: 0, comparison: '!=', severity: 'critical', enabled: true },
+  { id: 'watchdog_failsafe', metric: 'watchdog_state', threshold: 4, comparison: '==', severity: 'critical', enabled: true },
+  { id: 'storage_critical', metric: 'storage_used_mb', threshold: 900, comparison: '>', severity: 'critical', enabled: true },
+  { id: 'bug_capture_latency_sla', metric: 'bug_capture_latency_ms', threshold: 200, comparison: '>', severity: 'warning', enabled: true }
 ];
 
 export class RollbackAutomation {
@@ -118,8 +66,6 @@ export class RollbackAutomation {
   private triggers: RollbackTrigger[];
   private history: RollbackHistory;
   private storagePath: string;
-  private lastMetricsCheck: number = 0;
-  private metricsCheckInterval: number = 5000; // 5 seconds
 
   constructor(
     deploymentId: string,
@@ -127,7 +73,7 @@ export class RollbackAutomation {
     storagePath: string = '/tmp/rollback-automation'
   ) {
     this.deploymentId = deploymentId;
-    this.triggers = triggers || DEFAULT_ROLLBACK_TRIGGERS;
+    this.triggers = triggers ? triggers.map(trigger => ({ ...trigger })) : DEFAULT_ROLLBACK_TRIGGERS.map(trigger => ({ ...trigger }));
     this.storagePath = storagePath;
 
     this.history = {
@@ -151,9 +97,6 @@ export class RollbackAutomation {
     }
   }
 
-  /**
-   * Check if any rollback triggers are activated
-   */
   checkTriggers(metrics: Record<string, number | string>): {
     triggered: boolean;
     triggeringMetrics: string[];
@@ -168,29 +111,20 @@ export class RollbackAutomation {
       const value = metrics[trigger.metric];
       if (value === undefined) continue;
 
-      let conditionMet = false;
-      const numValue = typeof value === 'number' ? value : parseFloat(String(value));
+      const numValue = typeof value === 'number' ? value : Number(value);
+      if (!Number.isFinite(numValue)) continue;
 
+      let conditionMet = false;
       switch (trigger.comparison) {
-        case '<':
-          conditionMet = numValue < trigger.threshold;
-          break;
-        case '>':
-          conditionMet = numValue > trigger.threshold;
-          break;
-        case '==':
-          conditionMet = numValue === trigger.threshold;
-          break;
-        case '!=':
-          conditionMet = numValue !== trigger.threshold;
-          break;
+        case '<': conditionMet = numValue < trigger.threshold; break;
+        case '>': conditionMet = numValue > trigger.threshold; break;
+        case '==': conditionMet = numValue === trigger.threshold; break;
+        case '!=': conditionMet = numValue !== trigger.threshold; break;
       }
 
       if (conditionMet) {
         activeTriggers.push(trigger.id);
-        if (trigger.severity === 'critical') {
-          maxSeverity = 'critical';
-        }
+        if (trigger.severity === 'critical') maxSeverity = 'critical';
       }
     }
 
@@ -201,14 +135,11 @@ export class RollbackAutomation {
     };
   }
 
-  /**
-   * Execute rollback procedure
-   */
   async executeRollback(reason: string): Promise<RollbackEvent> {
     const rollbackStartTime = Date.now();
     const event: RollbackEvent = {
       timestamp: rollbackStartTime,
-      eventId: `rollback-${rollbackStartTime}`,
+      eventId: `rollback-${rollbackStartTime}-${this.history.events.length + 1}`,
       triggered: true,
       triggeringMetrics: [],
       triggeringValues: {},
@@ -221,50 +152,39 @@ export class RollbackAutomation {
     console.error(`[RollbackAutomation] ROLLBACK TRIGGERED: ${reason}`);
 
     try {
-      // Step 1: Disable new version traffic
       console.log('[RollbackAutomation] Step 1: Disabling new version traffic...');
       await this.disableNewVersionTraffic();
 
-      // Step 2: Restore previous version
       console.log('[RollbackAutomation] Step 2: Restoring previous version...');
       await this.restorePreviousVersion();
 
-      // Step 3: Verify recovery
       console.log('[RollbackAutomation] Step 3: Verifying recovery...');
       const recoveryTime = await this.verifyRecovery();
 
       event.rollbackExecuted = true;
       event.rollbackSuccess = true;
-      event.rollbackDuration = Date.now() - rollbackStartTime;
+      event.rollbackDuration = Math.max(1, Date.now() - rollbackStartTime);
       event.recoveryTime = recoveryTime;
-
       this.history.statistics.rollbacksExecuted++;
       this.history.statistics.successfulRollbacks++;
 
-      console.log(`[RollbackAutomation] Rollback completed successfully in ${event.rollbackDuration}ms`);
-
+      console.log(`[RollbackAutomation] Rollback simulation completed in ${event.rollbackDuration}ms`);
     } catch (e: any) {
       event.rollbackExecuted = true;
       event.rollbackSuccess = false;
-      event.rollbackDuration = Date.now() - rollbackStartTime;
+      event.rollbackDuration = Math.max(1, Date.now() - rollbackStartTime);
       event.reason = `${reason} (Rollback failed: ${e.message})`;
-
       this.history.statistics.rollbacksExecuted++;
       this.history.statistics.failedRollbacks++;
-
       console.error(`[RollbackAutomation] Rollback FAILED: ${e.message}`);
     }
 
     this.history.events.push(event);
     this.updateStatistics();
     this.saveHistory();
-
     return event;
   }
 
-  /**
-   * Monitor metrics continuously
-   */
   async startMonitoring(metricsProvider: () => Promise<Record<string, number>>, interval: number = 5000): Promise<void> {
     console.log('[RollbackAutomation] Starting continuous monitoring...');
 
@@ -272,75 +192,43 @@ export class RollbackAutomation {
       try {
         const metrics = await metricsProvider();
         this.history.statistics.totalChecks++;
-
         const check = this.checkTriggers(metrics);
 
         if (check.triggered) {
           this.history.statistics.triggersDetected++;
           console.warn(`[RollbackAutomation] Triggers detected: ${check.triggeringMetrics.join(', ')}`);
-
           if (check.severity === 'critical') {
             clearInterval(monitor);
             await this.executeRollback(`Critical triggers: ${check.triggeringMetrics.join(', ')}`);
           }
         }
-
       } catch (e: any) {
         console.error('[RollbackAutomation] Monitoring error:', e.message);
       }
     }, interval);
 
-    return new Promise(() => {}); // Runs forever until cleared
+    return new Promise(() => {});
   }
 
-  /**
-   * Disable new version traffic (simulated)
-   */
   private async disableNewVersionTraffic(): Promise<void> {
-    // In production, this would:
-    // - Update load balancer rules
-    // - Stop accepting new requests to new version
-    // - Drain existing connections
-    return new Promise(resolve => setTimeout(resolve, 1000));
+    // Deterministic simulation boundary. Production adapters must perform the
+    // actual load-balancer operation and return their own evidence.
+    await Promise.resolve();
   }
 
-  /**
-   * Restore previous version (simulated)
-   */
   private async restorePreviousVersion(): Promise<void> {
-    // In production, this would:
-    // - Activate previous version deployment
-    // - Re-route traffic back to stable version
-    // - Verify connectivity
-    return new Promise(resolve => setTimeout(resolve, 2000));
+    await Promise.resolve();
   }
 
-  /**
-   * Verify recovery (simulated)
-   */
   private async verifyRecovery(): Promise<number> {
-    // In production, this would:
-    // - Check health endpoints
-    // - Verify error rates returning to baseline
-    // - Monitor metrics for improvement
     const startTime = Date.now();
-    let recovered = false;
-    let attempts = 0;
-    const maxAttempts = 10;
-
-    while (!recovered && attempts < maxAttempts) {
-      // Simulate health check
-      await new Promise(resolve => setTimeout(resolve, 500));
-      attempts++;
-      recovered = Math.random() > 0.3; // 70% chance of recovery
-    }
-
-    return Date.now() - startTime;
+    // No random success/failure in the repository-owned hosted gate. A real
+    // recovery verifier belongs to the physical/runtime adapter and remains a
+    // separate evidence surface.
+    await Promise.resolve();
+    return Math.max(1, Date.now() - startTime);
   }
 
-  /**
-   * Update statistics
-   */
   private updateStatistics(): void {
     const successfulRollbacks = this.history.events.filter(e => e.rollbackSuccess);
     if (successfulRollbacks.length > 0) {
@@ -352,24 +240,15 @@ export class RollbackAutomation {
     }
   }
 
-  /**
-   * Save history to disk
-   */
   private saveHistory(): void {
     const historyPath = path.join(this.storagePath, `rollback-history-${this.deploymentId}.json`);
     fs.writeFileSync(historyPath, JSON.stringify(this.history, null, 2));
   }
 
-  /**
-   * Get history
-   */
   getHistory(): RollbackHistory {
     return this.history;
   }
 
-  /**
-   * Generate report
-   */
   generateReport(): string {
     const stats = this.history.statistics;
     const lines = [
@@ -395,41 +274,10 @@ export class RollbackAutomation {
       lines.push(`Status: ${event.rollbackSuccess ? 'SUCCESS ✅' : 'FAILED ❌'}`);
       lines.push(`Duration: ${event.rollbackDuration}ms`);
       lines.push(`Reason: ${event.reason}`);
-      if (event.recoveryTime) {
-        lines.push(`Recovery Time: ${event.recoveryTime}ms`);
-      }
+      if (event.recoveryTime) lines.push(`Recovery Time: ${event.recoveryTime}ms`);
     }
 
     lines.push('');
-
     return lines.join('\n');
   }
 }
-
-/**
- * Usage example:
- *
- * const automation = new RollbackAutomation('deployment-001');
- *
- * // Define metrics provider
- * const metricsProvider = async () => ({
- *   fix_success_rate: 72,
- *   errors_per_hour: 45,
- *   memory_growth_mb_per_min: 5,
- *   rollback_success_rate: 95,
- *   corruption_count: 0,
- *   watchdog_state: 1,
- *   storage_used_mb: 450,
- *   bug_capture_latency_ms: 60
- * });
- *
- * // Start monitoring
- * automation.startMonitoring(metricsProvider, 5000);
- *
- * // Check triggers manually
- * const metrics = await metricsProvider();
- * const check = automation.checkTriggers(metrics);
- * if (check.triggered) {
- *   await automation.executeRollback(`Detected: ${check.triggeringMetrics.join(', ')}`);
- * }
- */
