@@ -15,6 +15,7 @@ MODULE="$ROOT/modules/runtime-learning-engine"
 EVIDENCE="$ROOT/evidence/runtime-learning-engine"
 DEPENDENCY_EVIDENCE="$EVIDENCE/direct-dependency-evidence.json"
 STATIC_GAP_EVIDENCE="$EVIDENCE/static-gap-inventory.json"
+SURFACE_INPUTS="$EVIDENCE/runtime-surface-inputs.txt"
 
 rafaelia_need_cmd node
 rafaelia_need_cmd npm
@@ -29,6 +30,28 @@ rafaelia_need_file "$ROOT/tools/scan-runtime-gaps.py"
 
 rm -rf "$EVIDENCE"
 mkdir -p "$EVIDENCE"
+
+GIT_SHA="$(git -C "$ROOT" rev-parse HEAD)"
+TREE_SHA="$(git -C "$ROOT" rev-parse HEAD^{tree})"
+
+# Bind the receipt to the executable/test surface rather than only to the whole
+# commit. This lets later evidence distinguish a material runtime change from an
+# unrelated documentation/provenance-only commit without weakening the gate.
+runtime_surface_paths=(
+  "modules/runtime-learning-engine"
+  ".github/scripts/rafaelia/runtime-learning-engine-ci.sh"
+  ".github/scripts/rafaelia/ci-common.sh"
+  ".github/workflows/runtime-learning-engine.yml"
+  "tools/scan-runtime-gaps.py"
+  "tools/collect-node-direct-dependency-evidence.py"
+)
+: > "$SURFACE_INPUTS"
+for relative_path in "${runtime_surface_paths[@]}"; do
+  object_id="$(git -C "$ROOT" rev-parse "HEAD:${relative_path}")"
+  object_type="$(git -C "$ROOT" cat-file -t "$object_id")"
+  printf '%s\t%s\t%s\n' "$relative_path" "$object_type" "$object_id" >> "$SURFACE_INPUTS"
+done
+RUNTIME_SURFACE_FINGERPRINT="$(sha256sum "$SURFACE_INPUTS" | cut -d' ' -f1)"
 
 NODE_VERSION="$(node --version)"
 NPM_VERSION="$(npm --version)"
@@ -55,6 +78,11 @@ BUILD_RC=0
 TEST_RC=0
 OPEN_HANDLE_DETECTED="false"
 TEST_TIMEOUT_SECONDS=600
+
+rafaelia_group_begin "Runtime surface fingerprint"
+printf 'git_sha=%s\nruntime_surface_fingerprint=%s\n' "$GIT_SHA" "$RUNTIME_SURFACE_FINGERPRINT"
+cat "$SURFACE_INPUTS"
+rafaelia_group_end
 
 rafaelia_group_begin "Static gap inventory and zombie-test gate"
 set +e
@@ -142,16 +170,15 @@ else
     "$STATIC_GAP_STATUS" "$INSTALL_STATUS" "$BUILD_STATUS" > "$EVIDENCE/test.log"
 fi
 
-GIT_SHA="$(git -C "$ROOT" rev-parse HEAD)"
-TREE_SHA="$(git -C "$ROOT" rev-parse HEAD^{tree})"
-
 python3 - \
   "$EVIDENCE/receipt.json" \
   "$EVIDENCE/jest-results.json" \
   "$DEPENDENCY_EVIDENCE" \
   "$STATIC_GAP_EVIDENCE" \
+  "$SURFACE_INPUTS" \
   "$GIT_SHA" \
   "$TREE_SHA" \
+  "$RUNTIME_SURFACE_FINGERPRINT" \
   "$NODE_VERSION" \
   "$NPM_VERSION" \
   "$DEPENDENCY_LOCK" \
@@ -178,8 +205,10 @@ from datetime import datetime, timezone
     jest_path,
     dependency_evidence_path,
     static_gap_path,
+    surface_inputs_path,
     git_sha,
     tree_sha,
+    runtime_surface_fingerprint,
     node_version,
     npm_version,
     dependency_lock,
@@ -209,9 +238,31 @@ def load_json(path):
         return {'parse_error': str(exc)}
 
 
+def load_surface(path):
+    values = []
+    if not os.path.exists(path):
+        return values
+    with open(path, 'r', encoding='utf-8') as f:
+        for line in f:
+            line = line.rstrip('\n')
+            if not line:
+                continue
+            parts = line.split('\t')
+            if len(parts) != 3:
+                raise RuntimeError(f'malformed runtime surface row: {line!r}')
+            relative_path, object_type, object_id = parts
+            values.append({
+                'path': relative_path,
+                'git_object_type': object_type,
+                'git_object_id': object_id,
+            })
+    return values
+
+
 jest = load_json(jest_path)
 dependency_evidence = load_json(dependency_evidence_path)
 static_gap = load_json(static_gap_path)
+surface_objects = load_surface(surface_inputs_path)
 
 failed_tests = []
 for suite in jest.get('testResults', []) if isinstance(jest, dict) else []:
@@ -224,10 +275,13 @@ for suite in jest.get('testResults', []) if isinstance(jest, dict) else []:
             })
 
 receipt = {
-    'schema': 'rafaelia.runtime-learning-engine.ci-receipt.v5',
+    'schema': 'rafaelia.runtime-learning-engine.ci-receipt.v6',
     'timestamp': datetime.now(timezone.utc).isoformat(),
     'git_sha': git_sha,
     'tree_sha': tree_sha,
+    'runtime_surface_fingerprint_sha256': runtime_surface_fingerprint,
+    'runtime_surface_objects': surface_objects,
+    'runtime_surface_binding_state': 'OBSERVED_GIT_OBJECTS_AND_SHA256_FINGERPRINT',
     'runner_surface': 'HOSTED_TYPESCRIPT_NODE',
     'node_version': node_version,
     'npm_version': npm_version,
@@ -284,10 +338,10 @@ receipt = {
     'transitive_dependency_license_compatibility': 'TOKEN_VAZIO',
     'claim_allowed': False,
     'boundary': (
-        'CI PASS proves this hosted build/test run, static no-zombie-test scan, and direct installed dependency metadata only. '
-        'Declared textual gaps remain inventory, not automatic proof of missing behavior. Loopback DEVICE_IP is a no-device sentinel. '
-        'Direct package metadata is not transitive license compatibility or a lockfile. Open handles and timeouts are fail-closed. '
-        'Neither PASS nor FAIL is Android physical evidence.'
+        'CI PASS is bound to the listed runtime/test Git objects and SHA-256 surface fingerprint, and proves this hosted build/test run, '
+        'static no-zombie-test scan, and direct installed dependency metadata only. Declared textual gaps remain inventory, not automatic proof of missing behavior. '
+        'Loopback DEVICE_IP is a no-device sentinel. Direct package metadata is not transitive license compatibility or a lockfile. '
+        'Open handles and timeouts are fail-closed. Neither PASS nor FAIL is Android physical evidence.'
     ),
 }
 with open(out, 'w', encoding='utf-8') as f:
@@ -297,6 +351,7 @@ PY
 
 manifest_inputs=(
   "$EVIDENCE/receipt.json"
+  "$SURFACE_INPUTS"
   "$EVIDENCE/static-gap-scan.log"
   "$EVIDENCE/npm-install.log"
   "$EVIDENCE/dependency-evidence.log"
@@ -309,10 +364,10 @@ manifest_inputs=(
 rafaelia_write_sha256_manifest "$EVIDENCE/SHA256SUMS" "${manifest_inputs[@]}"
 
 if [[ $STATIC_GAP_RC -eq 0 && $INSTALL_RC -eq 0 && $DEPENDENCY_EVIDENCE_RC -eq 0 && $BUILD_RC -eq 0 && $TEST_RC -eq 0 ]]; then
-  rafaelia_notice "RUNTIME_LEARNING_ENGINE_GATE_PASS sha=$GIT_SHA static_gap=$STATIC_GAP_STATUS dependency_lock=$DEPENDENCY_LOCK direct_dependency_evidence=$DEPENDENCY_EVIDENCE_STATUS device_target=$DEVICE_TARGET_STATE open_handles=$OPEN_HANDLE_DETECTED physical_device=TOKEN_VAZIO claim_allowed=false"
+  rafaelia_notice "RUNTIME_LEARNING_ENGINE_GATE_PASS sha=$GIT_SHA surface_sha256=$RUNTIME_SURFACE_FINGERPRINT static_gap=$STATIC_GAP_STATUS dependency_lock=$DEPENDENCY_LOCK direct_dependency_evidence=$DEPENDENCY_EVIDENCE_STATUS device_target=$DEVICE_TARGET_STATE open_handles=$OPEN_HANDLE_DETECTED physical_device=TOKEN_VAZIO claim_allowed=false"
   exit 0
 fi
 
 rafaelia_error \
-  "RUNTIME_LEARNING_ENGINE_GATE_FAIL sha=$GIT_SHA static_gap=$STATIC_GAP_STATUS install=$INSTALL_STATUS dependency_evidence=$DEPENDENCY_EVIDENCE_STATUS build=$BUILD_STATUS tests=$TEST_STATUS test_rc=$TEST_RC open_handles=$OPEN_HANDLE_DETECTED evidence=$EVIDENCE device_target=$DEVICE_TARGET_STATE physical_device=TOKEN_VAZIO claim_allowed=false"
+  "RUNTIME_LEARNING_ENGINE_GATE_FAIL sha=$GIT_SHA surface_sha256=$RUNTIME_SURFACE_FINGERPRINT static_gap=$STATIC_GAP_STATUS install=$INSTALL_STATUS dependency_evidence=$DEPENDENCY_EVIDENCE_STATUS build=$BUILD_STATUS tests=$TEST_STATUS test_rc=$TEST_RC open_handles=$OPEN_HANDLE_DETECTED evidence=$EVIDENCE device_target=$DEVICE_TARGET_STATE physical_device=TOKEN_VAZIO claim_allowed=false"
 exit 1
