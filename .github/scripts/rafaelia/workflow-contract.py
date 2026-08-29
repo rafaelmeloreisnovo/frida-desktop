@@ -25,6 +25,7 @@ EVIDENCE_DIR = ROOT / "evidence" / "workflow-contract"
 CUSTOM_WORKFLOWS = {
     "android17-apk-elf-dex.yml",
     "android17-rfl-selftest.yml",
+    "rafaelia-provenance-gate.yml",
     "runtime-aided-debugger-hardening.yml",
     "runtime-learning-engine.yml",
     "workflow-contract.yml",
@@ -66,6 +67,10 @@ CUSTOM_ACTION_ALLOWLIST = {
         "android-actions/setup-android",
     },
     "android17-rfl-selftest.yml": {
+        "actions/checkout",
+        "actions/upload-artifact",
+    },
+    "rafaelia-provenance-gate.yml": {
         "actions/checkout",
         "actions/upload-artifact",
     },
@@ -255,6 +260,31 @@ def check_custom(path: Path, text: str, findings: list[Finding]) -> None:
                 path,
                 "RUNTIME_ENGINE_EVIDENCE_TRANSPORT",
                 "runtime learning engine gate must upload its evidence receipt",
+            )
+
+    if path.name == "rafaelia-provenance-gate.yml":
+        required_provenance_tokens = (
+            ".github/scripts/rafaelia/provenance-ci.sh",
+            "fetch-depth: 0",
+            "persist-credentials: false",
+            "evidence/provenance/delta-inventory.v1.json",
+        )
+        for token in required_provenance_tokens:
+            if token not in text:
+                add(
+                    findings,
+                    "ERROR",
+                    path,
+                    "PROVENANCE_GATE_CONTRACT",
+                    f"provenance workflow missing required fail-closed control: {token}",
+                )
+        if "actions/upload-artifact" not in observed_names:
+            add(
+                findings,
+                "ERROR",
+                path,
+                "PROVENANCE_EVIDENCE_TRANSPORT",
+                "provenance gate must upload its deterministic path inventory",
             )
 
 
