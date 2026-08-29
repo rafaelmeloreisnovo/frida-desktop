@@ -5,12 +5,16 @@ on:
     paths:
       - ".github/workflows/**"
       - ".github/scripts/rafaelia/**"
+      - "tools/validate-rafaelia-provenance.py"
+      - "profiles/rafaelia-provenance-scope.v1.json"
   push:
     branches:
       - main
     paths:
       - ".github/workflows/**"
       - ".github/scripts/rafaelia/**"
+      - "tools/validate-rafaelia-provenance.py"
+      - "profiles/rafaelia-provenance-scope.v1.json"
   workflow_dispatch:
 
 permissions:
@@ -46,7 +50,9 @@ jobs:
           bash -n .github/scripts/rafaelia/rfl-neon4096-selftest.sh
           bash -n .github/scripts/rafaelia/runtime-aided-hardening.sh
           bash -n .github/scripts/rafaelia/runtime-learning-engine-ci.sh
+          bash -n .github/scripts/rafaelia/provenance-ci.sh
           python3 -m py_compile .github/scripts/rafaelia/workflow-contract.py
+          python3 -m py_compile tools/validate-rafaelia-provenance.py
 
       - name: Run fail-closed workflow + catalyst contract
         run: python3 .github/scripts/rafaelia/workflow-contract.py

@@ -1,42 +1,37 @@
-name: RAFAELIA Provenance Gate
+name: RAFAELIA Provenance Non-Regression Gate
 
 on:
   push:
-    paths:
-      - 'profiles/rafaelia-provenance-scope.v1.json'
-      - 'tools/validate-rafaelia-provenance.py'
-      - '.github/workflows/rafaelia-provenance-gate.yml'
   pull_request:
-    paths:
-      - 'profiles/rafaelia-provenance-scope.v1.json'
-      - 'tools/validate-rafaelia-provenance.py'
-      - '.github/workflows/rafaelia-provenance-gate.yml'
+  workflow_dispatch:
 
 permissions:
   contents: read
 
+concurrency:
+  group: rafaelia-provenance-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   provenance:
+    name: provenance / fail-closed delta boundary
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v4
-      - name: Validate fail-closed provenance scope
-        run: python3 tools/validate-rafaelia-provenance.py
-      - name: Negative gate — premature authorship promotion must fail
-        run: |
-          cp profiles/rafaelia-provenance-scope.v1.json /tmp/provenance.json
-          python3 - <<'PY'
-          import json
-          from pathlib import Path
-          p = Path('profiles/rafaelia-provenance-scope.v1.json')
-          d = json.loads(p.read_text())
-          d['authorial_delta']['state'] = 'PASS'
-          d['authorial_delta']['ownership_claimed_by_this_manifest'] = True
-          p.write_text(json.dumps(d))
-          PY
-          if python3 tools/validate-rafaelia-provenance.py; then
-            echo 'FAIL: premature authorial promotion accepted' >&2
-            exit 1
-          fi
-          mv /tmp/provenance.json profiles/rafaelia-provenance-scope.v1.json
-          python3 tools/validate-rafaelia-provenance.py
+      - name: Checkout full ancestry
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Validate provenance, evidence, and negative falsifiers
+        run: bash .github/scripts/rafaelia/provenance-ci.sh all
+
+      - name: Upload deterministic provenance evidence
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: rafaelia-provenance-${{ github.run_id }}
+          path: evidence/provenance/delta-inventory.v1.json
+          if-no-files-found: error
+          retention-days: 30
