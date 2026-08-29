@@ -18,6 +18,7 @@ rafaelia_need_cmd node
 rafaelia_need_cmd npm
 rafaelia_need_cmd python3
 rafaelia_need_cmd sha256sum
+rafaelia_need_cmd timeout
 rafaelia_need_dir "$MODULE"
 rafaelia_need_file "$MODULE/package.json"
 rafaelia_need_file "$MODULE/tsconfig.json"
@@ -32,9 +33,9 @@ if [[ ! -f "$MODULE/package-lock.json" ]]; then
   DEPENDENCY_LOCK="TOKEN_VAZIO"
 fi
 
-# The test suite already treats loopback as its explicit no-physical-device
-# sentinel. Export it when DEVICE_IP is absent so optional-device tests are
-# deterministic without pretending that a real Android target exists.
+# The test suite treats loopback as an explicit no-physical-device sentinel.
+# Export it when DEVICE_IP is absent so optional-device tests are deterministic
+# without pretending that a real Android target exists.
 export DEVICE_IP="${DEVICE_IP:-127.0.0.1}"
 DEVICE_TARGET_STATE="HOSTED_NO_PHYSICAL_DEVICE_SENTINEL"
 if [[ "$DEVICE_IP" != "127.0.0.1" ]]; then
@@ -47,6 +48,8 @@ TEST_STATUS="SKIPPED"
 INSTALL_RC=0
 BUILD_RC=0
 TEST_RC=0
+OPEN_HANDLE_DETECTED="false"
+TEST_TIMEOUT_SECONDS=600
 
 rafaelia_group_begin "Runtime Learning Engine dependency bootstrap"
 set +e
@@ -55,8 +58,8 @@ set +e
   if [[ -f package-lock.json ]]; then
     npm ci --ignore-scripts --no-audit --no-fund
   else
-    # Explicitly avoid manufacturing a lockfile in CI. The receipt records the
-    # missing lock as TOKEN_VAZIO instead of pretending dependency reproducibility.
+    # Do not manufacture a lockfile in CI. The receipt records the missing lock
+    # as TOKEN_VAZIO instead of pretending dependency reproducibility.
     npm install --package-lock=false --ignore-scripts --no-audit --no-fund
   fi
 ) 2>&1 | tee "$EVIDENCE/npm-install.log"
@@ -85,10 +88,26 @@ if [[ $INSTALL_RC -eq 0 && $BUILD_RC -eq 0 ]]; then
   set +e
   (
     cd "$MODULE"
-    npm test -- --runInBand --json --outputFile="$EVIDENCE/jest-results.json"
+    timeout --signal=TERM --kill-after=15s "${TEST_TIMEOUT_SECONDS}s" \
+      npm test -- \
+        --runInBand \
+        --detectOpenHandles \
+        --testTimeout=10000 \
+        --json \
+        --outputFile="$EVIDENCE/jest-results.json"
   ) 2>&1 | tee "$EVIDENCE/test.log"
   TEST_RC=${PIPESTATUS[0]}
   set -e
+
+  # Open handles are a lifecycle regression, not a reason to force-exit and
+  # pretend success. Keep them fail-closed and visible in the receipt.
+  if grep -Eqi 'Jest has detected the following.*open handle|open handle potentially keeping Jest from exiting' "$EVIDENCE/test.log"; then
+    OPEN_HANDLE_DETECTED="true"
+    if [[ $TEST_RC -eq 0 ]]; then
+      TEST_RC=71
+    fi
+  fi
+
   TEST_STATUS="$([[ $TEST_RC -eq 0 ]] && printf PASS || printf FAIL)"
   rafaelia_group_end
 else
@@ -113,7 +132,9 @@ python3 - \
   "$TEST_STATUS" \
   "$INSTALL_RC" \
   "$BUILD_RC" \
-  "$TEST_RC" <<'PY'
+  "$TEST_RC" \
+  "$OPEN_HANDLE_DETECTED" \
+  "$TEST_TIMEOUT_SECONDS" <<'PY'
 import json
 import os
 import sys
@@ -134,6 +155,8 @@ from datetime import datetime, timezone
     install_rc,
     build_rc,
     test_rc,
+    open_handle_detected,
+    test_timeout_seconds,
 ) = sys.argv[1:]
 
 jest = {}
@@ -155,7 +178,7 @@ for suite in jest.get("testResults", []) if isinstance(jest, dict) else []:
             })
 
 receipt = {
-    "schema": "rafaelia.runtime-learning-engine.ci-receipt.v2",
+    "schema": "rafaelia.runtime-learning-engine.ci-receipt.v3",
     "timestamp": datetime.now(timezone.utc).isoformat(),
     "git_sha": git_sha,
     "tree_sha": tree_sha,
@@ -167,6 +190,9 @@ receipt = {
     "dependency_install": install_status,
     "build": build_status,
     "tests": test_status,
+    "test_timeout_seconds": int(test_timeout_seconds),
+    "test_timeout_triggered": int(test_rc) in (124, 137),
+    "open_handle_detected": open_handle_detected.lower() == "true",
     "return_codes": {
         "dependency_install": int(install_rc),
         "build": int(build_rc),
@@ -189,7 +215,7 @@ receipt = {
     "android_frida_runtime_verified": False,
     "physical_performance_verified": False,
     "claim_allowed": False,
-    "boundary": "CI PASS proves this hosted build/test run only; loopback DEVICE_IP is a no-device sentinel. Neither PASS nor FAIL is Android physical evidence.",
+    "boundary": "CI PASS proves this hosted build/test run only; loopback DEVICE_IP is a no-device sentinel. Open handles and test timeouts are fail-closed. Neither PASS nor FAIL is Android physical evidence.",
 }
 with open(out, "w", encoding="utf-8") as f:
     json.dump(receipt, f, indent=2, sort_keys=True)
@@ -208,10 +234,10 @@ fi
 rafaelia_write_sha256_manifest "$EVIDENCE/SHA256SUMS" "${manifest_inputs[@]}"
 
 if [[ $INSTALL_RC -eq 0 && $BUILD_RC -eq 0 && $TEST_RC -eq 0 ]]; then
-  rafaelia_notice "RUNTIME_LEARNING_ENGINE_GATE_PASS sha=$GIT_SHA dependency_lock=$DEPENDENCY_LOCK device_target=$DEVICE_TARGET_STATE physical_device=TOKEN_VAZIO claim_allowed=false"
+  rafaelia_notice "RUNTIME_LEARNING_ENGINE_GATE_PASS sha=$GIT_SHA dependency_lock=$DEPENDENCY_LOCK device_target=$DEVICE_TARGET_STATE open_handles=$OPEN_HANDLE_DETECTED physical_device=TOKEN_VAZIO claim_allowed=false"
   exit 0
 fi
 
 rafaelia_error \
-  "RUNTIME_LEARNING_ENGINE_GATE_FAIL sha=$GIT_SHA install=$INSTALL_STATUS build=$BUILD_STATUS tests=$TEST_STATUS evidence=$EVIDENCE device_target=$DEVICE_TARGET_STATE physical_device=TOKEN_VAZIO claim_allowed=false"
+  "RUNTIME_LEARNING_ENGINE_GATE_FAIL sha=$GIT_SHA install=$INSTALL_STATUS build=$BUILD_STATUS tests=$TEST_STATUS test_rc=$TEST_RC open_handles=$OPEN_HANDLE_DETECTED evidence=$EVIDENCE device_target=$DEVICE_TARGET_STATE physical_device=TOKEN_VAZIO claim_allowed=false"
 exit 1
