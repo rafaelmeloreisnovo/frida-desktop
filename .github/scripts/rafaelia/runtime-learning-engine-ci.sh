@@ -32,6 +32,15 @@ if [[ ! -f "$MODULE/package-lock.json" ]]; then
   DEPENDENCY_LOCK="TOKEN_VAZIO"
 fi
 
+# The test suite already treats loopback as its explicit no-physical-device
+# sentinel. Export it when DEVICE_IP is absent so optional-device tests are
+# deterministic without pretending that a real Android target exists.
+export DEVICE_IP="${DEVICE_IP:-127.0.0.1}"
+DEVICE_TARGET_STATE="HOSTED_NO_PHYSICAL_DEVICE_SENTINEL"
+if [[ "$DEVICE_IP" != "127.0.0.1" ]]; then
+  DEVICE_TARGET_STATE="EXTERNAL_DEVICE_ADDRESS_SUPPLIED_NOT_VERIFIED_BY_THIS_GATE"
+fi
+
 INSTALL_STATUS="SKIPPED"
 BUILD_STATUS="SKIPPED"
 TEST_STATUS="SKIPPED"
@@ -98,6 +107,7 @@ python3 - \
   "$NODE_VERSION" \
   "$NPM_VERSION" \
   "$DEPENDENCY_LOCK" \
+  "$DEVICE_TARGET_STATE" \
   "$INSTALL_STATUS" \
   "$BUILD_STATUS" \
   "$TEST_STATUS" \
@@ -117,6 +127,7 @@ from datetime import datetime, timezone
     node_version,
     npm_version,
     dependency_lock,
+    device_target_state,
     install_status,
     build_status,
     test_status,
@@ -152,6 +163,7 @@ receipt = {
     "node_version": node_version,
     "npm_version": npm_version,
     "dependency_lock": dependency_lock,
+    "device_target_state": device_target_state,
     "dependency_install": install_status,
     "build": build_status,
     "tests": test_status,
@@ -177,7 +189,7 @@ receipt = {
     "android_frida_runtime_verified": False,
     "physical_performance_verified": False,
     "claim_allowed": False,
-    "boundary": "CI PASS proves this hosted build/test run only; FAIL is retained as evidence. Neither state is Android physical evidence.",
+    "boundary": "CI PASS proves this hosted build/test run only; loopback DEVICE_IP is a no-device sentinel. Neither PASS nor FAIL is Android physical evidence.",
 }
 with open(out, "w", encoding="utf-8") as f:
     json.dump(receipt, f, indent=2, sort_keys=True)
@@ -196,10 +208,10 @@ fi
 rafaelia_write_sha256_manifest "$EVIDENCE/SHA256SUMS" "${manifest_inputs[@]}"
 
 if [[ $INSTALL_RC -eq 0 && $BUILD_RC -eq 0 && $TEST_RC -eq 0 ]]; then
-  rafaelia_notice "RUNTIME_LEARNING_ENGINE_GATE_PASS sha=$GIT_SHA dependency_lock=$DEPENDENCY_LOCK physical_device=TOKEN_VAZIO claim_allowed=false"
+  rafaelia_notice "RUNTIME_LEARNING_ENGINE_GATE_PASS sha=$GIT_SHA dependency_lock=$DEPENDENCY_LOCK device_target=$DEVICE_TARGET_STATE physical_device=TOKEN_VAZIO claim_allowed=false"
   exit 0
 fi
 
 rafaelia_error \
-  "RUNTIME_LEARNING_ENGINE_GATE_FAIL sha=$GIT_SHA install=$INSTALL_STATUS build=$BUILD_STATUS tests=$TEST_STATUS evidence=$EVIDENCE physical_device=TOKEN_VAZIO claim_allowed=false"
+  "RUNTIME_LEARNING_ENGINE_GATE_FAIL sha=$GIT_SHA install=$INSTALL_STATUS build=$BUILD_STATUS tests=$TEST_STATUS evidence=$EVIDENCE device_target=$DEVICE_TARGET_STATE physical_device=TOKEN_VAZIO claim_allowed=false"
 exit 1
