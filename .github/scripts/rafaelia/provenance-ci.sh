@@ -7,6 +7,7 @@ cd "$ROOT"
 
 MANIFEST='profiles/rafaelia-provenance-scope.v1.json'
 EVIDENCE='evidence/provenance/delta-inventory.v1.json'
+LINEAGE='evidence/provenance/commit-lineage.v1.json'
 
 validate_evidence_contract() {
   python3 - <<'PY'
@@ -26,10 +27,38 @@ print(f"PASS: evidence contract; paths={d['total_changed_paths']}")
 PY
 }
 
+validate_lineage_contract() {
+  python3 - <<'PY'
+import json
+from pathlib import Path
+
+delta = json.loads(Path('evidence/provenance/delta-inventory.v1.json').read_text())
+lineage = json.loads(Path('evidence/provenance/commit-lineage.v1.json').read_text())
+assert lineage['schema'] == 'rafaelia.commit-lineage-evidence.v1'
+assert lineage['baseline_commit'] == delta['baseline_commit']
+assert lineage['head_commit'] == delta['head_commit']
+assert lineage['path_count'] == delta['total_changed_paths']
+assert len(lineage['paths']) == lineage['path_count']
+assert lineage['ownership_claimed'] is False
+assert lineage['copyright_ownership_proven'] is False
+assert lineage['claim_allowed'] is False
+assert 'TOKEN_VAZIO' in lineage['hunk_origin_state']
+assert all(p['authorship_claimed'] is False for p in lineage['paths'])
+assert all('TOKEN_VAZIO' in p['hunk_origin_state'] for p in lineage['paths'])
+assert all(p['lineage_state'] == 'OBSERVED_PATH_TOUCH_HISTORY_NOT_HUNK_AUTHORSHIP' for p in lineage['paths'])
+print(
+    'PASS: commit-lineage contract; '
+    f"paths={lineage['path_count']} unique_commits={lineage['unique_touch_commits_observed']}"
+)
+PY
+}
+
 validate() {
-  python3 -m py_compile tools/validate-rafaelia-provenance.py
+  python3 -m py_compile tools/validate-rafaelia-provenance.py tools/generate-rafaelia-commit-lineage.py
   python3 tools/validate-rafaelia-provenance.py --manifest "$MANIFEST" --evidence "$EVIDENCE"
+  python3 tools/generate-rafaelia-commit-lineage.py --manifest "$MANIFEST" --delta "$EVIDENCE" --output "$LINEAGE"
   validate_evidence_contract
+  validate_lineage_contract
 }
 
 expect_fail() {
