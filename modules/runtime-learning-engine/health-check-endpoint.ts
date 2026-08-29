@@ -2,8 +2,11 @@ import { RuntimeLearningEngine } from './index';
 import * as fs from 'fs';
 import * as path from 'path';
 
+export type MemoryObservationSource = 'TARGET_RUNTIME' | 'HOST_PROCESS_ONLY' | 'UNKNOWN';
+
 export interface HealthCheckResponse {
   status: 'healthy' | 'degraded' | 'critical';
+  evidence_status: 'COMPLETE' | 'PARTIAL';
   timestamp: number;
   engine_running: boolean;
   uptime_ms: number;
@@ -18,7 +21,11 @@ export interface HealthCheckResponse {
   };
   last_heartbeat: number;
   watchdog_state: string;
+  /** Target-runtime memory only. -1 means TOKEN_VAZIO / not observed. */
   memory_usage_mb: number;
+  /** Host/controller process memory is informational and never promoted to Android target evidence. */
+  host_process_memory_usage_mb: number;
+  memory_usage_source: MemoryObservationSource;
   storage_used_mb: number;
   errors_last_hour: number;
   evidence_gaps: string[];
@@ -45,17 +52,27 @@ export interface MetricsSnapshot {
   };
 }
 
+interface MemoryObservation {
+  target_mb: number;
+  host_process_mb: number;
+  source: MemoryObservationSource;
+}
+
 export class HealthCheckEndpoint {
   private startTime: number;
   private metrics: Map<string, any> = new Map();
 
-  constructor(private engine: RuntimeLearningEngine, private storagePath: string) {
+  constructor(
+    private engine: RuntimeLearningEngine,
+    private storagePath: string,
+    private targetMemoryProvider?: () => number | null | undefined
+  ) {
     this.startTime = Date.now();
   }
 
   async getHealthStatus(): Promise<HealthCheckResponse> {
     const stats = this.engine.getStats();
-    const memoryUsageMb = this.getMemoryUsageMb();
+    const memory = this.getMemoryObservation();
     const storageUsed = this.calculateStorageUsage();
     const errorsLastHour = this.countErrorsLastHour();
     const bugCaptureLatency = this.getAverageLatency('bug_capture');
@@ -65,7 +82,7 @@ export class HealthCheckEndpoint {
 
     if (!stats.lastHeartbeat) evidenceGaps.push('last_heartbeat=TOKEN_VAZIO');
     if (watchdogState === 'UNKNOWN') evidenceGaps.push('watchdog_state=TOKEN_VAZIO');
-    if (memoryUsageMb < 0) evidenceGaps.push('memory_usage_mb=TOKEN_VAZIO');
+    if (memory.source !== 'TARGET_RUNTIME') evidenceGaps.push('target_memory_usage_mb=TOKEN_VAZIO');
 
     let criticalViolations = 0;
     let warningViolations = 0;
@@ -76,8 +93,13 @@ export class HealthCheckEndpoint {
     if (success.attempts > 0 && success.rate < 80) criticalViolations++;
     else if (success.attempts > 0 && success.rate < 90) warningViolations++;
 
-    if (memoryUsageMb > 300) criticalViolations++;
-    else if (memoryUsageMb > 250) warningViolations++;
+    // Memory thresholds are meaningful only when the observed value belongs to
+    // the target runtime. Node/Jest controller memory must never be promoted to
+    // Android/device memory evidence or trigger target-memory SLA alerts.
+    if (memory.source === 'TARGET_RUNTIME' && memory.target_mb >= 0) {
+      if (memory.target_mb > 300) criticalViolations++;
+      else if (memory.target_mb > 250) warningViolations++;
+    }
 
     if (storageUsed > 900) criticalViolations++;
     if (errorsLastHour > 20) warningViolations++;
@@ -85,11 +107,15 @@ export class HealthCheckEndpoint {
     else if (watchdogState === 'UNKNOWN') warningViolations++;
     if (!this.engine.isRunning()) warningViolations++;
 
+    // Operational health and epistemic completeness are orthogonal. Missing
+    // physical evidence remains visible in evidence_status/evidence_gaps but is
+    // not itself fabricated into an operational failure.
     const status: HealthCheckResponse['status'] =
-      criticalViolations > 0 ? 'critical' : warningViolations > 0 || evidenceGaps.length > 0 ? 'degraded' : 'healthy';
+      criticalViolations > 0 ? 'critical' : warningViolations > 0 ? 'degraded' : 'healthy';
 
     const healthResponse: HealthCheckResponse = {
       status,
+      evidence_status: evidenceGaps.length > 0 ? 'PARTIAL' : 'COMPLETE',
       timestamp: Date.now(),
       engine_running: this.engine.isRunning(),
       uptime_ms: Date.now() - this.startTime,
@@ -104,7 +130,9 @@ export class HealthCheckEndpoint {
       },
       last_heartbeat: stats.lastHeartbeat || 0,
       watchdog_state: watchdogState,
-      memory_usage_mb: memoryUsageMb,
+      memory_usage_mb: memory.target_mb,
+      host_process_memory_usage_mb: memory.host_process_mb,
+      memory_usage_source: memory.source,
       storage_used_mb: storageUsed,
       errors_last_hour: errorsLastHour,
       evidence_gaps: evidenceGaps
@@ -170,13 +198,39 @@ export class HealthCheckEndpoint {
     }
   }
 
-  private getMemoryUsageMb(): number {
-    try {
-      return Math.round(process.memoryUsage().heapUsed / 1024 / 1024);
-    } catch (e) {
-      console.warn('[HealthCheckEndpoint] Memory observation unavailable:', e);
-      return -1;
+  private getMemoryObservation(): MemoryObservation {
+    if (this.targetMemoryProvider) {
+      try {
+        const target = Number(this.targetMemoryProvider());
+        if (Number.isFinite(target) && target >= 0) {
+          return {
+            target_mb: Math.round(target * 100) / 100,
+            host_process_mb: this.getHostProcessMemoryMb(),
+            source: 'TARGET_RUNTIME'
+          };
+        }
+      } catch (e) {
+        console.warn('[HealthCheckEndpoint] Target memory provider failed:', e);
+      }
     }
+
+    const host = this.getHostProcessMemoryMb();
+    return {
+      target_mb: -1,
+      host_process_mb: host,
+      source: host >= 0 ? 'HOST_PROCESS_ONLY' : 'UNKNOWN'
+    };
+  }
+
+  private getHostProcessMemoryMb(): number {
+    try {
+      if (typeof process !== 'undefined' && typeof process.memoryUsage === 'function') {
+        return Math.round((process.memoryUsage().heapUsed / 1024 / 1024) * 100) / 100;
+      }
+    } catch (e) {
+      console.warn('[HealthCheckEndpoint] Host memory observation unavailable:', e);
+    }
+    return -1;
   }
 
   private getAverageLatency(metricType: string): number {
