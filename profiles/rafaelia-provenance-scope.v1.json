@@ -1,18 +1,42 @@
 {
   "schema": "rafaelia.upstream-delta-provenance.v1",
   "repository": "rafaelmeloreisnovo/frida-desktop",
-  "observed_commit": "72c95d353d68bf5722157e5ef66e16a73f90ff61",
-  "classification": "UPSTREAM_DERIVATIVE_REQUIRES_DELTA_PROVENANCE",
+  "observed_commit": "997b6499d84838093f8a0fc2f5c88f51b571e30c",
+  "classification": "UPSTREAM_DERIVATIVE_WITH_VERIFIED_PATH_DELTA_AND_OPEN_HUNK_ORIGIN",
+  "baseline": {
+    "repository": "wojcikiewicz17/frida",
+    "commit": "281ad2176c165e4fd3cf4c64befbabe5d7302a66",
+    "relationship": "PINNED_PARENT_FORK_BASELINE",
+    "state": "OBSERVED_AND_ANCESTRY_VALIDATED"
+  },
   "upstream_license": {
-    "state": "OBSERVED",
+    "state": "OBSERVED_AND_BLOB_PINNED",
     "path": "COPYING",
     "blob": "b01d49c670e55dbff638eb294ac1a52416fb32e8",
     "name": "wxWindows Library Licence 3.1",
     "preserved": true
   },
   "authorial_delta": {
-    "state": "TOKEN_VAZIO_NEEDS_UPSTREAM_DIFF",
+    "state": "PARTIAL_PATH_DIFF_BOUND_HUNK_ORIGIN_TOKEN_VAZIO",
     "ownership_claimed_by_this_manifest": false,
+    "path_diff": {
+      "state": "IMPLEMENTED_AUTOMATED",
+      "method": "git diff --name-status --find-renames <pinned-baseline>..HEAD",
+      "evidence": "evidence/provenance/delta-inventory.v1.json",
+      "meaning": "proves fork-relative path delta only; does not prove exclusive authorship"
+    },
+    "hunk_origin": {
+      "state": "TOKEN_VAZIO_REQUIRES_ORIGIN_REVIEW",
+      "ownership_claimed": false,
+      "required_classes": [
+        "upstream",
+        "project-authored",
+        "AI-assisted-or-generated",
+        "third-party",
+        "mixed",
+        "unknown"
+      ]
+    },
     "candidate_paths_observed_from_readme": [
       "docs/freestanding-profile.md",
       "tools/chipquantum-basic-commands.c",
@@ -25,11 +49,17 @@
       "docs/runtime-stability-recorder.md",
       "profiles/runtime-stability-recorder.json"
     ],
+    "closed_controls": [
+      "identify and pin parent-fork baseline commit",
+      "produce deterministic path-level diff against baseline",
+      "bind upstream COPYING to exact Git blob",
+      "separate fork delta from authorship claim"
+    ],
     "required_closure": [
-      "identify upstream repository and baseline commit",
-      "produce path-level diff against baseline",
-      "classify each changed hunk as upstream, authorial, generated or third-party",
-      "preserve applicable upstream notices",
+      "classify changed hunks by origin where an authorship/license claim is intended",
+      "reconcile dependency and submodule governing terms",
+      "preserve all applicable upstream and third-party notices",
+      "record AI-assisted/generated provenance where known",
       "only then decide whether any compatible authorial notice is appropriate"
     ]
   },
@@ -50,12 +80,22 @@
     {
       "id": "UPSTREAM_LICENSE_PRESERVED",
       "state": "IMPLEMENTED",
-      "falsifier": "COPYING missing or manifest no longer binds its exact observed blob"
+      "falsifier": "COPYING missing or Git blob differs from pinned manifest blob"
     },
     {
-      "id": "AUTHORIAL_DELTA_BOUND",
+      "id": "BASELINE_ANCESTRY_BOUND",
+      "state": "IMPLEMENTED",
+      "falsifier": "pinned baseline commit is absent or is not an ancestor of HEAD"
+    },
+    {
+      "id": "FORK_DELTA_PATH_INVENTORY",
+      "state": "IMPLEMENTED",
+      "falsifier": "deterministic baseline-to-HEAD path inventory cannot be generated"
+    },
+    {
+      "id": "AUTHORIAL_HUNK_ORIGIN",
       "state": "TOKEN_VAZIO",
-      "falsifier": "candidate path has no upstream-baseline diff and origin classification"
+      "falsifier": "ownership is promoted from path-delta evidence without hunk-origin evidence"
     },
     {
       "id": "THIRD_PARTY_RECONCILED",
@@ -65,17 +105,20 @@
   ],
   "risk": {
     "severity": "HIGH",
-    "primary": "accidental ownership or license claim over upstream Frida/submodule material",
+    "primary": "accidental ownership or license claim over upstream, AI-assisted, generated, mixed-origin, or third-party material",
     "mitigations": [
-      "COPYING remains unmodified authority for its scope",
-      "candidate delta paths are not declared authorial until diff evidence exists",
+      "COPYING remains unmodified authority for its scope and is blob-pinned",
+      "baseline ancestry is machine-validated",
+      "every path changed since the pinned baseline is inventoried automatically",
+      "path delta is explicitly not treated as exclusive authorship evidence",
+      "unknown hunk origin remains TOKEN_VAZIO",
       "unknown dependency/submodule rights remain TOKEN_VAZIO",
       "runtime and security claims remain separate from source presence"
     ]
   },
   "rollback": {
     "available": true,
-    "procedure": "revert only this provenance-gate branch/commit; upstream source and COPYING remain untouched"
+    "procedure": "revert only the provenance hardening commits; upstream source and COPYING remain untouched"
   },
   "claim_allowed": false
 }
