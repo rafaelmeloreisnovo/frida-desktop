@@ -21,6 +21,19 @@ export interface AlertRule {
   debounce_seconds?: number;
 }
 
+export interface NotificationQueueReceipt {
+  schema: 'rafaelia.alert-notification-queue-receipt.v1';
+  alert_id: string;
+  destination: 'slack' | 'pagerduty' | 'email';
+  queued_at: number;
+  queue_state: 'LOCAL_FILE_PERSISTED' | 'QUEUE_PERSISTENCE_FAILED';
+  delivery_state: 'TOKEN_VAZIO_EXTERNAL_TRANSPORT_NOT_BOUND';
+  delivery_verified: false;
+  external_transport_bound: false;
+  claim_allowed: false;
+  receipt_path: string;
+}
+
 export class AlertManager {
   private storagePath: string;
   private alerts: Map<string, Alert> = new Map();
@@ -33,7 +46,6 @@ export class AlertManager {
   }
 
   private initializeDefaultRules(): void {
-    // SLA violation: Bug capture latency
     this.addRule({
       id: 'sla_bug_capture_latency',
       name: 'Bug Capture Latency SLA Violation',
@@ -43,7 +55,6 @@ export class AlertManager {
       debounce_seconds: 60,
     });
 
-    // SLA violation: Pattern detection latency
     this.addRule({
       id: 'sla_pattern_detection_latency',
       name: 'Pattern Detection Latency SLA Violation',
@@ -53,7 +64,6 @@ export class AlertManager {
       debounce_seconds: 60,
     });
 
-    // SLA violation: Fix application latency
     this.addRule({
       id: 'sla_fix_application_latency',
       name: 'Fix Application Latency SLA Violation',
@@ -63,7 +73,6 @@ export class AlertManager {
       debounce_seconds: 60,
     });
 
-    // SLA violation: Fix success rate
     this.addRule({
       id: 'sla_fix_success_rate',
       name: 'Fix Success Rate SLA Violation',
@@ -73,7 +82,6 @@ export class AlertManager {
       debounce_seconds: 300,
     });
 
-    // Memory usage warning
     this.addRule({
       id: 'high_memory_usage',
       name: 'High Memory Usage Warning',
@@ -83,7 +91,6 @@ export class AlertManager {
       debounce_seconds: 120,
     });
 
-    // Storage usage critical
     this.addRule({
       id: 'high_storage_usage',
       name: 'High Storage Usage Critical',
@@ -93,7 +100,6 @@ export class AlertManager {
       debounce_seconds: 300,
     });
 
-    // Watchdog in failsafe
     this.addRule({
       id: 'watchdog_failsafe',
       name: 'Watchdog FAILSAFE Mode',
@@ -103,7 +109,6 @@ export class AlertManager {
       debounce_seconds: 0,
     });
 
-    // High error rate
     this.addRule({
       id: 'high_error_rate',
       name: 'High Error Rate',
@@ -113,7 +118,6 @@ export class AlertManager {
       debounce_seconds: 300,
     });
 
-    // Rollback failure
     this.addRule({
       id: 'rollback_failure',
       name: 'Rollback Failure Detected',
@@ -183,6 +187,7 @@ export class AlertManager {
 
   async saveAlerts(): Promise<void> {
     try {
+      if (!fs.existsSync(this.storagePath)) fs.mkdirSync(this.storagePath, { recursive: true });
       const alertsPath = path.join(this.storagePath, 'alerts.json');
       const alertsArray = Array.from(this.alerts.values());
       fs.writeFileSync(alertsPath, JSON.stringify(alertsArray, null, 2));
@@ -232,24 +237,52 @@ export class AlertManager {
     return `[${severity}] ${alert.message}\nTime: ${timestamp}\nContext: ${JSON.stringify(alert.context, null, 2)}`;
   }
 
+  /**
+   * Compatibility API: persists a local notification queue receipt only.
+   * No Slack/PagerDuty/email transport is bound here, so external delivery
+   * remains TOKEN_VAZIO and may never be inferred from successful persistence.
+   */
   async sendAlertNotification(
     alert: Alert,
     destination: 'slack' | 'pagerduty' | 'email' = 'slack'
-  ): Promise<void> {
+  ): Promise<NotificationQueueReceipt> {
+    const queuedAt = Date.now();
+    const notificationPath = path.join(this.storagePath, `notification_${alert.id}.json`);
+    const base: Omit<NotificationQueueReceipt, 'queue_state'> = {
+      schema: 'rafaelia.alert-notification-queue-receipt.v1',
+      alert_id: alert.id,
+      destination,
+      queued_at: queuedAt,
+      delivery_state: 'TOKEN_VAZIO_EXTERNAL_TRANSPORT_NOT_BOUND',
+      delivery_verified: false,
+      external_transport_bound: false,
+      claim_allowed: false,
+      receipt_path: notificationPath
+    };
+
     try {
-      const notificationPath = path.join(this.storagePath, `notification_${alert.id}.json`);
+      if (!fs.existsSync(this.storagePath)) fs.mkdirSync(this.storagePath, { recursive: true });
+      const receipt: NotificationQueueReceipt = {
+        ...base,
+        queue_state: 'LOCAL_FILE_PERSISTED'
+      };
       const notification = {
+        ...receipt,
         alert,
-        destination,
-        sent_at: Date.now(),
-        status: 'pending',
+        external_delivery_attempted: false
       };
       fs.writeFileSync(notificationPath, JSON.stringify(notification, null, 2));
-
-      // In production, integrate with actual notification services
-      console.log(`[AlertManager] Alert notification queued for ${destination}: ${alert.message}`);
+      console.log(
+        `[AlertManager] Local notification receipt persisted for ${destination}; ` +
+        'external delivery TOKEN_VAZIO_NOT_BOUND'
+      );
+      return receipt;
     } catch (e) {
-      console.error('[AlertManager] Error sending alert notification:', e);
+      console.error('[AlertManager] Local notification queue persistence failed:', e);
+      return {
+        ...base,
+        queue_state: 'QUEUE_PERSISTENCE_FAILED'
+      };
     }
   }
 }

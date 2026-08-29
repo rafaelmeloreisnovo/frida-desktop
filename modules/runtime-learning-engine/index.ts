@@ -163,8 +163,11 @@ export class RuntimeLearningEngine {
       await this.bugStore.appendEvent(bugEvent);
       this.recentBugs.push(bugEvent);
 
-      if (this.recentBugs.length > 10) {
-        this.recentBugs.shift();
+      // Keep the in-memory working set aligned with the configured capacity.
+      // A hidden fixed window of 10 contradicted bug_capacity and made stats
+      // report fewer events than the engine had actually accepted.
+      if (this.recentBugs.length > this.config.bug_capacity) {
+        this.recentBugs.splice(0, this.recentBugs.length - this.config.bug_capacity);
       }
 
       const captureLatency = Date.now() - captureStartedAt;
@@ -325,7 +328,7 @@ export class RuntimeLearningEngine {
       );
 
       if (store.events.length > 0) {
-        this.recentBugs = store.events.slice(-10);
+        this.recentBugs = store.events.slice(-this.config.bug_capacity);
 
         const patterns = await this.patternDetector.detectPatterns(store.events);
         this.patternsDetectedTotal += patterns.length;
@@ -451,6 +454,9 @@ export class RuntimeLearningEngine {
 
   async shutdown(): Promise<void> {
     await this.stop();
+    if (engine === this) {
+      engine = null;
+    }
     console.log('[RuntimeLearningEngine] Engine shutdown complete');
   }
 
@@ -475,7 +481,12 @@ let engine: RuntimeLearningEngine | null = null;
 
 export async function initializeEngine(config?: Partial<LearningEngineConfig>): Promise<RuntimeLearningEngine> {
   if (engine) {
-    console.warn('[RuntimeLearningEngine] Engine already initialized');
+    if (!engine.isRunning()) {
+      console.warn('[RuntimeLearningEngine] Restarting existing stopped engine');
+      await engine.start();
+    } else {
+      console.warn('[RuntimeLearningEngine] Engine already initialized');
+    }
     return engine;
   }
 
@@ -491,7 +502,8 @@ export function getEngine(): RuntimeLearningEngine | null {
 
 export async function shutdownEngine(): Promise<void> {
   if (engine) {
-    await engine.shutdown();
+    const current = engine;
+    await current.shutdown();
     engine = null;
   }
 }

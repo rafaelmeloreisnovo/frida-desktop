@@ -7,6 +7,9 @@ cd "$ROOT"
 
 MANIFEST='profiles/rafaelia-provenance-scope.v1.json'
 EVIDENCE='evidence/provenance/delta-inventory.v1.json'
+LINEAGE='evidence/provenance/commit-lineage.v1.json'
+SUBMODULE_REGISTRY='profiles/rafaelia-submodule-license-scope.v1.json'
+SUBMODULE_EVIDENCE='evidence/provenance/submodule-license-inventory.v1.json'
 
 validate_evidence_contract() {
   python3 - <<'PY'
@@ -26,10 +29,70 @@ print(f"PASS: evidence contract; paths={d['total_changed_paths']}")
 PY
 }
 
+validate_lineage_contract() {
+  python3 - <<'PY'
+import json
+from pathlib import Path
+
+delta = json.loads(Path('evidence/provenance/delta-inventory.v1.json').read_text())
+lineage = json.loads(Path('evidence/provenance/commit-lineage.v1.json').read_text())
+assert lineage['schema'] == 'rafaelia.commit-lineage-evidence.v1'
+assert lineage['baseline_commit'] == delta['baseline_commit']
+assert lineage['head_commit'] == delta['head_commit']
+assert lineage['path_count'] == delta['total_changed_paths']
+assert len(lineage['paths']) == lineage['path_count']
+assert lineage['ownership_claimed'] is False
+assert lineage['copyright_ownership_proven'] is False
+assert lineage['claim_allowed'] is False
+assert 'TOKEN_VAZIO' in lineage['hunk_origin_state']
+assert all(p['authorship_claimed'] is False for p in lineage['paths'])
+assert all('TOKEN_VAZIO' in p['hunk_origin_state'] for p in lineage['paths'])
+assert all(p['lineage_state'] == 'OBSERVED_PATH_TOUCH_HISTORY_NOT_HUNK_AUTHORSHIP' for p in lineage['paths'])
+print(
+    'PASS: commit-lineage contract; '
+    f"paths={lineage['path_count']} unique_commits={lineage['unique_touch_commits_observed']}"
+)
+PY
+}
+
+validate_submodule_contract() {
+  python3 - <<'PY'
+import json
+from pathlib import Path
+
+evidence = json.loads(Path('evidence/provenance/submodule-license-inventory.v1.json').read_text())
+assert evidence['schema'] == 'rafaelia.first-level-submodule-license-evidence.v1'
+assert evidence['first_level_submodule_count'] == 10
+assert evidence['observed_license_source_count'] == 9
+assert evidence['unresolved_license_source_count'] == 1
+assert evidence['all_gitlinks_match_registry'] is True
+assert evidence['all_gitmodule_urls_match_registry'] is True
+assert evidence['single_license_flattening_allowed'] is False
+assert evidence['license_compatibility_proven'] is False
+assert 'TOKEN_VAZIO' in evidence['transitive_reconciliation']
+assert evidence['claim_allowed'] is False
+assert any(e['license_summary'] == 'ISC License' for e in evidence['entries'])
+assert any('wxWindows' in str(e['license_summary']) for e in evidence['entries'])
+assert any('TOKEN_VAZIO' in e['license_source_state'] for e in evidence['entries'])
+print(
+    'PASS: first-level submodule contract; '
+    f"count={evidence['first_level_submodule_count']} observed={evidence['observed_license_source_count']} "
+    f"unresolved={evidence['unresolved_license_source_count']} compatibility=false"
+)
+PY
+}
+
 validate() {
-  python3 -m py_compile tools/validate-rafaelia-provenance.py
+  python3 -m py_compile \
+    tools/validate-rafaelia-provenance.py \
+    tools/generate-rafaelia-commit-lineage.py \
+    tools/validate-rafaelia-submodule-license.py
   python3 tools/validate-rafaelia-provenance.py --manifest "$MANIFEST" --evidence "$EVIDENCE"
+  python3 tools/generate-rafaelia-commit-lineage.py --manifest "$MANIFEST" --delta "$EVIDENCE" --output "$LINEAGE"
+  python3 tools/validate-rafaelia-submodule-license.py --registry "$SUBMODULE_REGISTRY" --output "$SUBMODULE_EVIDENCE"
   validate_evidence_contract
+  validate_lineage_contract
+  validate_submodule_contract
 }
 
 expect_fail() {
@@ -40,6 +103,16 @@ expect_fail() {
     exit 1
   fi
   echo "PASS: negative fixture rejected: $label"
+}
+
+expect_submodule_fail() {
+  local label="$1"
+  local file="$2"
+  if python3 tools/validate-rafaelia-submodule-license.py --registry "$file" --output "/tmp/${label}.submodule.evidence.json"; then
+    echo "FAIL: submodule negative fixture unexpectedly passed: $label" >&2
+    exit 1
+  fi
+  echo "PASS: submodule negative fixture rejected: $label"
 }
 
 negative() {
@@ -78,6 +151,24 @@ cases['premature-governance-promotion'] = d
 
 for name, payload in cases.items():
     Path(f'/tmp/{name}.json').write_text(json.dumps(payload, indent=2) + '\n')
+
+submodule = json.loads(Path('profiles/rafaelia-submodule-license-scope.v1.json').read_text())
+sub_cases = {}
+
+d = deepcopy(submodule)
+d['license_compatibility_proven'] = True
+sub_cases['premature-submodule-compatibility'] = d
+
+d = deepcopy(submodule)
+d['single_license_flattening_allowed'] = True
+sub_cases['premature-license-flattening'] = d
+
+d = deepcopy(submodule)
+d['entries'][0]['gitlink_commit'] = '0' * 40
+sub_cases['submodule-gitlink-drift'] = d
+
+for name, payload in sub_cases.items():
+    Path(f'/tmp/{name}.json').write_text(json.dumps(payload, indent=2) + '\n')
 PY
 
   expect_fail premature-ownership /tmp/premature-ownership.json
@@ -86,8 +177,13 @@ PY
   expect_fail premature-hunk-promotion /tmp/premature-hunk-promotion.json
   expect_fail premature-governance-promotion /tmp/premature-governance-promotion.json
 
-  # Re-run the canonical manifest last. Negative fixtures may never mutate it.
+  expect_submodule_fail premature-submodule-compatibility /tmp/premature-submodule-compatibility.json
+  expect_submodule_fail premature-license-flattening /tmp/premature-license-flattening.json
+  expect_submodule_fail submodule-gitlink-drift /tmp/submodule-gitlink-drift.json
+
+  # Re-run canonical inputs last. Negative fixtures may never mutate them.
   python3 tools/validate-rafaelia-provenance.py --manifest "$MANIFEST" --evidence /tmp/final.evidence.json
+  python3 tools/validate-rafaelia-submodule-license.py --registry "$SUBMODULE_REGISTRY" --output /tmp/final.submodule.evidence.json
 }
 
 case "${1:-all}" in

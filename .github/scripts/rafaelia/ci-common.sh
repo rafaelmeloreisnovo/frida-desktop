@@ -12,6 +12,13 @@ rafaelia_die() {
   exit 1
 }
 
+# Emit an error annotation without terminating immediately. Gates use this only
+# after durable receipts/manifests have been written, then return their own
+# explicit non-zero status. Use rafaelia_die for immediate precondition failures.
+rafaelia_error() {
+  printf '::error::%s\n' "$*" >&2
+}
+
 rafaelia_notice() {
   printf '::notice::%s\n' "$*"
 }

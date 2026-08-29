@@ -1,6 +1,10 @@
 /**
- * Mock Frida API for offline testing
- * Simulates Frida's Java.use() and hook mechanisms without real Frida
+ * Mock Frida API for deterministic offline testing.
+ *
+ * The mock intentionally models the property shape exposed by Frida's
+ * Java.use(): methods are available as properties (clazz.method), not only in
+ * an internal registry. This keeps hosted CI representative of the API shape
+ * without claiming a physical Android runtime.
  */
 
 export class MockJavaClass {
@@ -8,20 +12,58 @@ export class MockJavaClass {
   private methods: Map<string, MockMethod> = new Map();
   private instances: any[] = [];
 
+  [key: string]: any;
+
   constructor(className: string) {
     this.className = className;
     this.setupCommonMethods();
+    this.setupCommonFields();
+  }
+
+  private exposeMethod(name: string): MockMethod {
+    const method = new MockMethod(name);
+    this.methods.set(name, method);
+    this[name] = method;
+    return method;
   }
 
   private setupCommonMethods(): void {
     if (this.className === 'java.lang.Throwable') {
-      this.methods.set('printStackTrace', new MockMethod('printStackTrace'));
+      this.exposeMethod('printStackTrace');
     } else if (this.className === 'android.app.ActivityManager') {
-      this.methods.set('appNotResponding', new MockMethod('appNotResponding'));
+      this.exposeMethod('appNotResponding');
     } else if (this.className === 'java.lang.Runtime') {
-      this.methods.set('gc', new MockMethod('gc'));
+      this.exposeMethod('gc');
+      this.getRuntime = () => ({
+        exec: (_args: any) => ({ mock: true }),
+        maxMemory: () => ({ toNumber: () => 1024 * 1024 * 1024 }),
+        totalMemory: () => ({ toNumber: () => 512 * 1024 * 1024 }),
+        freeMemory: () => ({ toNumber: () => 256 * 1024 * 1024 })
+      });
     } else if (this.className === 'java.lang.Thread') {
-      this.methods.set('start', new MockMethod('start'));
+      this.exposeMethod('start');
+      this.currentThread = () => ({
+        getId: () => ({ toNumber: () => 1 }),
+        getBlockedTime: () => 0,
+        getName: () => ({ toString: () => 'mock-thread' }),
+        getClass: () => ({
+          getName: () => ({ toString: () => 'java.lang.Thread' })
+        })
+      });
+    } else if (this.className === 'android.os.Handler') {
+      this.exposeMethod('post');
+    } else if (this.className === 'java.util.concurrent.locks.LockSupport') {
+      this.exposeMethod('park');
+    } else if (this.className === 'android.os.Process') {
+      this.myPid = () => 1234;
+    }
+  }
+
+  private setupCommonFields(): void {
+    if (this.className === 'android.os.Build$VERSION') {
+      this.SDK_INT = { value: MockAndroidBuild.API_LEVEL };
+      this.RELEASE = { value: '11' };
+      this.CODENAME = { value: MockAndroidBuild.CODENAME };
     }
   }
 
@@ -33,8 +75,6 @@ export class MockJavaClass {
     this.instances.push(instance);
     return instance;
   }
-
-  [key: string]: any;
 }
 
 export class MockMethod {
@@ -42,6 +82,7 @@ export class MockMethod {
   private hookCallbacks: ((args: any) => void)[] = [];
   private callCount = 0;
   private lastCallArgs: any[] | null = null;
+  private installedImplementation: any = null;
 
   constructor(methodName: string) {
     this.methodName = methodName;
@@ -51,16 +92,31 @@ export class MockMethod {
     return new MockOverload(this.methodName, types, this);
   }
 
-  implementation(fn: any): void {
-    // Mock implementation setter
+  get implementation(): any {
+    return this.installedImplementation;
+  }
+
+  set implementation(fn: any) {
+    this.installedImplementation = fn;
   }
 
   replace(fn: any): void {
-    // Mock replacement
+    this.installedImplementation = fn;
   }
 
   hook(callback: any): void {
     this.hookCallbacks.push(callback);
+  }
+
+  call(_receiver: any, ...args: any[]): any {
+    this.callCount++;
+    this.lastCallArgs = args;
+    return undefined;
+  }
+
+  detach(): void {
+    this.installedImplementation = null;
+    this.hookCallbacks = [];
   }
 
   simulate(...args: any[]): void {
@@ -87,26 +143,41 @@ export class MockMethod {
     this.callCount = 0;
     this.lastCallArgs = null;
     this.hookCallbacks = [];
+    this.installedImplementation = null;
   }
 }
 
 export class MockOverload {
+  private installedImplementation: any = null;
+
   constructor(
     private methodName: string,
     private types: string[],
     private parent: MockMethod
   ) {}
 
-  implementation(fn: any): void {
-    // Mock implementation
+  get implementation(): any {
+    return this.installedImplementation;
+  }
+
+  set implementation(fn: any) {
+    this.installedImplementation = fn;
   }
 
   replace(fn: any): void {
-    // Mock replacement
+    this.installedImplementation = fn;
   }
 
   hook(callback: any): void {
     this.parent.hook(callback);
+  }
+
+  call(receiver: any, ...args: any[]): any {
+    return this.parent.call(receiver, ...args);
+  }
+
+  detach(): void {
+    this.installedImplementation = null;
   }
 
   simulate(...args: any[]): void {
@@ -124,7 +195,7 @@ export class MockJava {
     return this.classes.get(className)!;
   }
 
-  cast(obj: any, className: string): any {
+  cast(obj: any, _className: string): any {
     return obj;
   }
 
@@ -142,6 +213,10 @@ export class MockJava {
 
   getClassLoader(): any {
     return { loadClass: () => null };
+  }
+
+  reset(): void {
+    this.classes.clear();
   }
 }
 
@@ -164,6 +239,7 @@ export class MockFrida {
 
 // Global setup for testing
 export function setupFridaMock(): void {
+  MockFrida.Java.reset();
   (globalThis as any).Java = MockFrida.Java;
   (globalThis as any).Frida = MockFrida;
 }
@@ -172,6 +248,7 @@ export function setupFridaMock(): void {
 export function teardownFridaMock(): void {
   delete (globalThis as any).Java;
   delete (globalThis as any).Frida;
+  MockFrida.Java.reset();
 }
 
 // Helper to get mock class instance

@@ -32,6 +32,9 @@ jobs:
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
           name: rafaelia-provenance-${{ github.run_id }}
-          path: evidence/provenance/delta-inventory.v1.json
+          path: |
+            evidence/provenance/delta-inventory.v1.json
+            evidence/provenance/commit-lineage.v1.json
+            evidence/provenance/submodule-license-inventory.v1.json
           if-no-files-found: error
           retention-days: 30

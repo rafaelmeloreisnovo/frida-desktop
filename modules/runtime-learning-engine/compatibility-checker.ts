@@ -44,7 +44,6 @@ export class CompatibilityChecker {
     const errors: string[] = [];
     const recommendations: string[] = [];
 
-    // 1. Check Frida version
     const fridaVersion = this.getFridaVersion();
     const fridaCompatible = this.isFridaVersionCompatible(fridaVersion);
     if (!fridaCompatible) {
@@ -52,7 +51,6 @@ export class CompatibilityChecker {
       recommendations.push('Update Frida to version 14.0.0 or higher');
     }
 
-    // 2. Check Android API level
     const androidInfo = this.getAndroidAPILevel();
     const apiCompatible = androidInfo.level >= 29;
     if (!apiCompatible) {
@@ -60,14 +58,14 @@ export class CompatibilityChecker {
       recommendations.push(`This device runs Android ${androidInfo.codename}, minimum requirement is Android 10`);
     }
 
-    // 3. Check SELinux mode
     const selinuxMode = this.getSELinuxMode();
     if (selinuxMode === 'enforcing') {
-      errors.push('SELinux is in enforcing mode - may restrict Frida hooking');
-      recommendations.push('Try SELinux permissive mode: adb shell setenforce 0 (requires root)');
+      // Enforcing is relevant evidence, but not automatically a hard
+      // incompatibility: Frida deployments can work under enforcing policies
+      // depending on process, privileges and policy. Keep it as a warning.
+      recommendations.push('SELinux enforcing observed: verify the intended Frida deployment path and privileges');
     }
 
-    // 4. Test individual hooks
     const hooksStatus = await this.validateHooks();
     const failedHooks = hooksStatus.filter(h => !h.available);
     if (failedHooks.length > 0) {
@@ -76,11 +74,10 @@ export class CompatibilityChecker {
       recommendations.push('Check if app has obfuscation enabled (proguard)');
     }
 
-    // Determine overall status
     let overallStatus: 'compatible' | 'partial' | 'incompatible' = 'compatible';
-    if (errors.length > 2 || failedHooks.length > 2) {
+    if (!fridaCompatible || !apiCompatible || failedHooks.length > 2) {
       overallStatus = 'incompatible';
-    } else if (errors.length > 0 || failedHooks.length > 0) {
+    } else if (errors.length > 0 || failedHooks.length > 0 || selinuxMode === 'enforcing') {
       overallStatus = 'partial';
     }
 
@@ -106,12 +103,10 @@ export class CompatibilityChecker {
 
   private getFridaVersion(): string {
     try {
-      // In real Frida context: Frida.version or via Java.use
-      // For testing/offline, return mock version
       if (typeof (globalThis as any).Frida !== 'undefined') {
         return (globalThis as any).Frida.version || '14.2.0';
       }
-      return '14.2.0'; // Mock default
+      return '14.2.0';
     } catch (e) {
       console.warn('[CompatibilityChecker] Could not detect Frida version:', e);
       return 'unknown';
@@ -121,15 +116,9 @@ export class CompatibilityChecker {
   private isFridaVersionCompatible(version: string): boolean {
     try {
       const parts = version.split('.').map(Number);
-      if (parts.length < 2) return false;
+      if (parts.length < 2 || parts.some(Number.isNaN)) return false;
       const major = parts[0];
-      const minor = parts[1];
-
-      // Minimum: 14.0.0
-      if (major < 14) return false;
-      if (major === 14 && minor < 0) return false;
-
-      return true;
+      return major >= 14;
     } catch {
       return false;
     }
@@ -137,20 +126,31 @@ export class CompatibilityChecker {
 
   private getAndroidAPILevel(): { level: number; codename: string } {
     try {
-      // In real context: android.os.Build.VERSION.SDK_INT
       if (typeof (globalThis as any).Java !== 'undefined') {
-        const Build = (globalThis as any).Java.use('android.os.Build');
         const VERSION = (globalThis as any).Java.use('android.os.Build$VERSION');
-        const apiLevel = VERSION.SDK_INT.value;
-        const codename = Build.VERSION_CODES.codename.value || this.getCodenameFromLevel(apiLevel);
+        const rawApiLevel = VERSION?.SDK_INT?.value ?? VERSION?.SDK_INT;
+        const apiLevel = Number(rawApiLevel);
+        if (!Number.isFinite(apiLevel) || apiLevel <= 0) {
+          throw new Error(`invalid SDK_INT: ${String(rawApiLevel)}`);
+        }
+
+        const rawCodename = VERSION?.CODENAME?.value;
+        const codename =
+          typeof rawCodename === 'string' && rawCodename.length > 0 && rawCodename !== 'REL'
+            ? rawCodename
+            : this.getCodenameFromLevel(apiLevel);
         return { level: apiLevel, codename };
       }
 
-      // Mock for offline testing
-      return { level: 30, codename: 'Android 11' };
+      // Hosted/offline mode. This is test-surface evidence only; it is not
+      // physical-device evidence and is kept separate by the CI receipt.
+      return { level: 30, codename: 'Android 11 (hosted mock)' };
     } catch (e) {
       console.warn('[CompatibilityChecker] Could not detect Android API level:', e);
-      return { level: 29, codename: 'Android 10 (default)' };
+      // Unknown live detection must not fabricate a modern device. The minimum
+      // supported API is used only as a conservative hosted fallback so the
+      // unit surface can execute; physical-device gates remain TOKEN_VAZIO.
+      return { level: 29, codename: 'Android 10 (hosted fallback)' };
     }
   }
 
@@ -164,24 +164,29 @@ export class CompatibilityChecker {
       34: 'Android 14',
       35: 'Android 15'
     };
-    return codenames[level] || `Android ${level}`;
+    return codenames[level] || `Android API ${level}`;
   }
 
   private getSELinuxMode(): string {
     try {
-      // In real context: via proc/cmdline or getenforce command
-      // For testing, check if we can access sensitive APIs
       if (typeof (globalThis as any).Java !== 'undefined') {
         try {
           const Runtime = (globalThis as any).Java.use('java.lang.Runtime');
-          const process = Runtime.getRuntime().exec(['getenforce']);
-          // Would need to read output - simplified for now
-          return 'permissive'; // Assume permissive if hooking works
+          const runtime = Runtime?.getRuntime?.();
+          if (!runtime || typeof runtime.exec !== 'function') {
+            return 'unknown';
+          }
+
+          // Starting getenforce without reading its stdout is not sufficient to
+          // classify enforcing/permissive. Record the epistemically correct
+          // state instead of guessing from API accessibility.
+          runtime.exec(['getenforce']);
+          return 'unknown';
         } catch {
-          return 'enforcing'; // Assume enforcing if can't hook
+          return 'unknown';
         }
       }
-      return 'unknown'; // Mock default
+      return 'unknown';
     } catch (e) {
       console.warn('[CompatibilityChecker] Could not detect SELinux mode:', e);
       return 'unknown';
@@ -197,12 +202,9 @@ export class CompatibilityChecker {
     ];
 
     const results: HookValidation[] = [];
-
     for (const hookName of hooks) {
-      const validation = await this.testHook(hookName);
-      results.push(validation);
+      results.push(await this.testHook(hookName));
     }
-
     return results;
   }
 
@@ -214,12 +216,10 @@ export class CompatibilityChecker {
       const methodName = parts.pop()!;
       const className = parts.join('.');
 
-      // Test if we can access the class and method
       if (typeof (globalThis as any).Java === 'undefined') {
-        // Offline testing mode
         return {
           hook_name: hookName,
-          available: true, // Assume available in test mode
+          available: true,
           latency_ms: 1
         };
       }
@@ -234,7 +234,6 @@ export class CompatibilityChecker {
         };
       }
 
-      // Check if method exists (simplified - don't actually hook)
       if (clazz[methodName] === undefined) {
         return {
           hook_name: hookName,
@@ -261,11 +260,7 @@ export class CompatibilityChecker {
 
   private async saveReport(report: CompatibilityReport): Promise<void> {
     try {
-      fs.writeFileSync(
-        this.reportPath,
-        JSON.stringify(report, null, 2),
-        'utf-8'
-      );
+      fs.writeFileSync(this.reportPath, JSON.stringify(report, null, 2), 'utf-8');
       console.log(`[CompatibilityChecker] Report saved to ${this.reportPath}`);
     } catch (e) {
       console.error('[CompatibilityChecker] Failed to save report:', e);
@@ -308,7 +303,6 @@ export class CompatibilityChecker {
 
   canProceedWithDeployment(): boolean {
     if (!this.lastReport) return false;
-    // Allow partial compatibility but not incompatible
     return this.lastReport.overall_status !== 'incompatible';
   }
 }

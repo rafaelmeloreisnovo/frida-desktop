@@ -2,11 +2,11 @@ import * as fs from 'fs';
 import * as path from 'path';
 
 /**
- * End-to-End Conformance Testing
+ * Deterministic hosted conformance harness.
  *
- * Validates complete lifecycle: bug capture → pattern detection → fix application →
- * test validation → rollback. Tests edge cases like disk exhaustion, corruption recovery,
- * high concurrency, and watchdog failsafe procedures.
+ * This harness exercises lifecycle/state contracts without pretending that hosted
+ * Node/Jest execution is physical Android/Frida evidence. Results are therefore
+ * explicitly bounded to HOSTED_DETERMINISTIC_MODEL_ONLY and claimAllowed=false.
  */
 
 export interface ConformanceTestConfig {
@@ -48,6 +48,8 @@ export interface ConformanceTestResult {
   };
   validationFailures: string[];
   summary: string;
+  evidenceBoundary?: 'HOSTED_DETERMINISTIC_MODEL_ONLY';
+  claimAllowed?: false;
 }
 
 export interface ConcurrencyScenario {
@@ -71,41 +73,24 @@ export interface CorruptionRecoveryScenario {
 
 export class EndToEndConformance {
   private lifecycleEvents: LifecycleEvent[] = [];
-  private storagePath: string;
-  private eventId: number = 0;
+  private readonly storagePath: string;
+  private eventId = 0;
 
   constructor(storagePath: string = '/tmp/e2e-conformance') {
     this.storagePath = storagePath;
-    if (!fs.existsSync(storagePath)) {
-      fs.mkdirSync(storagePath, { recursive: true });
-    }
+    fs.mkdirSync(storagePath, { recursive: true });
   }
 
-  /**
-   * Record a lifecycle event
-   */
   recordEvent(event: Omit<LifecycleEvent, 'timestamp'>): LifecycleEvent {
-    const fullEvent: LifecycleEvent = {
-      timestamp: Date.now(),
-      ...event
-    };
-
+    const fullEvent: LifecycleEvent = { timestamp: Date.now(), ...event };
     this.lifecycleEvents.push(fullEvent);
     return fullEvent;
   }
 
-  /**
-   * Test: Full lifecycle from bug to commit
-   */
-  async testFullLifecycle(config: ConformanceTestConfig): Promise<ConformanceTestResult> {
-    console.log(`[E2E Conformance] Running: ${config.testName}`);
-
-    const startTime = Date.now();
-    this.lifecycleEvents = [];
-
-    const result: ConformanceTestResult = {
-      testName: config.testName,
-      startTime,
+  private newResult(testName: string): ConformanceTestResult {
+    return {
+      testName,
+      startTime: Date.now(),
       endTime: 0,
       status: 'passed',
       lifecycleEvents: [],
@@ -116,536 +101,196 @@ export class EndToEndConformance {
       failsafeActivations: 0,
       dataIntegrity: { corrupted: 0, recovered: 0, lost: 0 },
       validationFailures: [],
-      summary: ''
+      summary: '',
+      evidenceBoundary: 'HOSTED_DETERMINISTIC_MODEL_ONLY',
+      claimAllowed: false
     };
+  }
 
-    try {
-      // Phase 1: Capture bugs
-      for (let i = 0; i < config.bugCount; i++) {
-        const bugType = config.bugTypes[i % config.bugTypes.length];
-        const bugId = `bug_${Date.now()}_${i}`;
+  async testFullLifecycle(config: ConformanceTestConfig): Promise<ConformanceTestResult> {
+    this.lifecycleEvents = [];
+    const result = this.newResult(config.testName);
 
-        this.recordEvent({
-          phase: 'bug_capture',
-          bugId,
-          status: 'started'
-        });
+    if (config.bugCount < 0 || config.concurrency < 1 || config.bugTypes.length === 0) {
+      result.validationFailures.push('Invalid hosted conformance configuration');
+      return this.finalize(result);
+    }
 
-        try {
-          await this.simulateBugCapture(bugType);
-          this.recordEvent({
-            phase: 'bug_capture',
-            bugId,
-            status: 'completed',
-            duration: Math.random() * 50
-          });
-          result.bugsCaptured++;
-        } catch (e: any) {
-          this.recordEvent({
-            phase: 'bug_capture',
-            bugId,
-            status: 'failed',
-            error: e.message
-          });
-          result.validationFailures.push(`Bug capture failed: ${e.message}`);
-        }
-      }
+    for (let i = 0; i < config.bugCount; i++) {
+      const bugId = `bug_${++this.eventId}_${i}`;
+      this.recordEvent({ phase: 'bug_capture', bugId, status: 'started' });
+      this.recordEvent({ phase: 'bug_capture', bugId, status: 'completed', duration: 0 });
+      result.bugsCaptured++;
+    }
 
-      // Phase 2: Detect patterns
-      const patternId = `pat_${Date.now()}`;
+    const patternId = `pat_${++this.eventId}`;
+    this.recordEvent({ phase: 'pattern_detection', bugId: 'bulk', patternId, status: 'started' });
+
+    if (result.bugsCaptured < 3) {
       this.recordEvent({
         phase: 'pattern_detection',
         bugId: 'bulk',
         patternId,
-        status: 'started'
+        status: 'failed',
+        error: 'Insufficient observations for pattern contract (minimum=3)'
       });
+      return this.finalize(result);
+    }
 
-      try {
-        await this.simulatePatternDetection(result.bugsCaptured);
-        this.recordEvent({
-          phase: 'pattern_detection',
-          bugId: 'bulk',
-          patternId,
-          status: 'completed',
-          duration: Math.random() * 300
-        });
-        result.patternsDetected++;
-      } catch (e: any) {
-        this.recordEvent({
-          phase: 'pattern_detection',
-          bugId: 'bulk',
-          patternId,
-          status: 'failed',
-          error: e.message
-        });
-        result.validationFailures.push(`Pattern detection failed: ${e.message}`);
-      }
+    this.recordEvent({ phase: 'pattern_detection', bugId: 'bulk', patternId, status: 'completed', duration: 0 });
+    result.patternsDetected = 1;
 
-      // Phase 3: Apply fix
-      const fixId = `fix_${Date.now()}`;
-      this.recordEvent({
-        phase: 'fix_attempt',
-        bugId: 'bulk',
-        fixId,
-        status: 'started'
-      });
+    const fixId = `fix_${++this.eventId}`;
+    this.recordEvent({ phase: 'fix_attempt', bugId: 'bulk', patternId, fixId, status: 'started' });
+    this.recordEvent({ phase: 'fix_attempt', bugId: 'bulk', patternId, fixId, status: 'completed', duration: 0 });
+    result.fixesApplied = 1;
 
-      try {
-        const fixSuccess = await this.simulateFixApplication(patternId);
+    this.recordEvent({ phase: 'test_validation', bugId: 'bulk', patternId, fixId, status: 'started' });
 
-        if (fixSuccess) {
-          this.recordEvent({
-            phase: 'fix_attempt',
-            bugId: 'bulk',
-            fixId,
-            status: 'completed',
-            duration: Math.random() * 500
-          });
-          result.fixesApplied++;
-        } else {
-          throw new Error('Fix application returned false');
-        }
-      } catch (e: any) {
-        this.recordEvent({
-          phase: 'fix_attempt',
-          bugId: 'bulk',
-          fixId,
-          status: 'failed',
-          error: e.message
-        });
-        result.validationFailures.push(`Fix application failed: ${e.message}`);
-      }
-
-      // Phase 4: Validate fix with tests
+    if (config.expectedOutcome === 'rollback') {
       this.recordEvent({
         phase: 'test_validation',
         bugId: 'bulk',
+        patternId,
         fixId,
-        status: 'started'
+        status: 'failed',
+        error: 'Hosted scenario requested rollback path'
       });
-
-      try {
-        const testsPassed = await this.validateFix(fixId);
-
-        if (testsPassed) {
-          this.recordEvent({
-            phase: 'test_validation',
-            bugId: 'bulk',
-            fixId,
-            status: 'completed',
-            duration: Math.random() * 200
-          });
-
-          // Phase 5: Commit fix
-          this.recordEvent({
-            phase: 'commit',
-            bugId: 'bulk',
-            fixId,
-            status: 'started'
-          });
-
-          try {
-            await this.commitFix(fixId);
-            this.recordEvent({
-              phase: 'commit',
-              bugId: 'bulk',
-              fixId,
-              status: 'completed'
-            });
-          } catch (e: any) {
-            this.recordEvent({
-              phase: 'commit',
-              bugId: 'bulk',
-              fixId,
-              status: 'failed',
-              error: e.message
-            });
-            result.validationFailures.push(`Fix commit failed: ${e.message}`);
-          }
-        } else {
-          // Tests failed - trigger rollback
-          this.recordEvent({
-            phase: 'test_validation',
-            bugId: 'bulk',
-            fixId,
-            status: 'failed',
-            error: 'Tests failed'
-          });
-
-          this.recordEvent({
-            phase: 'rollback',
-            bugId: 'bulk',
-            fixId,
-            status: 'started'
-          });
-
-          try {
-            await this.executeRollback(fixId);
-            this.recordEvent({
-              phase: 'rollback',
-              bugId: 'bulk',
-              fixId,
-              status: 'completed'
-            });
-            result.rollbacksExecuted++;
-          } catch (e: any) {
-            this.recordEvent({
-              phase: 'rollback',
-              bugId: 'bulk',
-              fixId,
-              status: 'failed',
-              error: e.message
-            });
-            result.validationFailures.push(`Rollback failed: ${e.message}`);
-          }
-        }
-      } catch (e: any) {
-        this.recordEvent({
-          phase: 'test_validation',
-          bugId: 'bulk',
-          fixId,
-          status: 'failed',
-          error: e.message
-        });
-        result.validationFailures.push(`Test validation failed: ${e.message}`);
-      }
-
-      // Validate expected outcome
-      if (config.expectedOutcome === 'success' && result.fixesApplied === 0) {
-        result.validationFailures.push(`Expected success but no fixes applied`);
-      } else if (config.expectedOutcome === 'rollback' && result.rollbacksExecuted === 0) {
-        result.validationFailures.push(`Expected rollback but none occurred`);
-      }
-
-    } catch (e: any) {
-      result.validationFailures.push(`Test execution failed: ${e.message}`);
+      this.recordEvent({ phase: 'rollback', bugId: 'bulk', patternId, fixId, status: 'started' });
+      this.recordEvent({ phase: 'rollback', bugId: 'bulk', patternId, fixId, status: 'completed', duration: 0 });
+      result.rollbacksExecuted = 1;
+    } else if (config.expectedOutcome === 'failsafe') {
+      this.recordEvent({ phase: 'test_validation', bugId: 'bulk', patternId, fixId, status: 'failed', error: 'Hosted scenario requested failsafe path' });
+      this.recordEvent({ phase: 'failsafe', bugId: 'bulk', patternId, fixId, status: 'completed', duration: 0 });
+      result.failsafeActivations = 1;
+    } else {
+      this.recordEvent({ phase: 'test_validation', bugId: 'bulk', patternId, fixId, status: 'completed', duration: 0 });
+      this.recordEvent({ phase: 'commit', bugId: 'bulk', patternId, fixId, status: 'started' });
+      this.recordEvent({ phase: 'commit', bugId: 'bulk', patternId, fixId, status: 'completed', duration: 0 });
     }
 
-    result.endTime = Date.now();
-    result.lifecycleEvents = this.lifecycleEvents;
-    result.status = result.validationFailures.length === 0 ? 'passed' : 'failed';
-    result.summary = this.generateSummary(result);
+    if (config.expectedOutcome === 'rollback' && result.rollbacksExecuted !== 1) {
+      result.validationFailures.push('Expected rollback path was not completed');
+    }
+    if (config.expectedOutcome === 'failsafe' && result.failsafeActivations !== 1) {
+      result.validationFailures.push('Expected failsafe path was not completed');
+    }
 
-    this.saveResult(result);
-    return result;
+    return this.finalize(result);
   }
 
-  /**
-   * Test: High concurrency with 100+ parallel bugs
-   */
   async testHighConcurrency(scenario: ConcurrencyScenario): Promise<ConformanceTestResult> {
-    console.log(`[E2E Conformance] Testing high concurrency: ${scenario.parallelBugs} parallel bugs`);
-
-    const config: ConformanceTestConfig = {
+    const result = await this.testFullLifecycle({
       testName: `High Concurrency - ${scenario.parallelBugs} Parallel`,
       bugTypes: ['crash', 'anr', 'memory_leak'],
       bugCount: scenario.parallelBugs,
-      concurrency: scenario.maxConcurrentOps,
-      validationRules: [
-        'No race conditions',
-        'No data corruption',
-        'No deadlocks',
-        'All bugs captured'
-      ],
+      concurrency: Math.max(1, scenario.maxConcurrentOps),
+      validationRules: ['bounded hosted concurrency contract'],
       expectedOutcome: 'success',
       timeoutMs: 30000
-    };
+    });
 
-    return this.testFullLifecycle(config);
+    if (scenario.parallelBugs < 0 || scenario.maxConcurrentOps < 1) {
+      result.validationFailures.push('Invalid concurrency scenario');
+      result.status = 'failed';
+    }
+    return result;
   }
 
-  /**
-   * Test: Disk space exhaustion and recovery
-   */
   async testDiskExhaustion(scenario: DiskExhaustionScenario): Promise<ConformanceTestResult> {
-    console.log(`[E2E Conformance] Testing disk exhaustion: ${scenario.availableSpaceMb}MB available`);
+    this.lifecycleEvents = [];
+    const result = this.newResult(`Disk Exhaustion - ${scenario.availableSpaceMb}MB`);
 
-    const result: ConformanceTestResult = {
-      testName: `Disk Exhaustion - ${scenario.availableSpaceMb}MB`,
-      startTime: Date.now(),
-      endTime: 0,
-      status: 'passed',
-      lifecycleEvents: [],
-      bugsCaptured: 0,
-      patternsDetected: 0,
-      fixesApplied: 0,
-      rollbacksExecuted: 0,
-      failsafeActivations: 0,
-      dataIntegrity: { corrupted: 0, recovered: 0, lost: 0 },
-      validationFailures: [],
-      summary: ''
-    };
-
-    try {
-      // Simulate disk space approaching limit
-      const spacePercentageUsed = 100 - scenario.bugCapacityPercentage;
-
-      if (spacePercentageUsed > 90) {
-        // Expected: Circular buffer eviction or cleanup
-        this.recordEvent({
-          phase: 'bug_capture',
-          bugId: 'disk_test',
-          status: 'completed'
-        });
-        result.bugsCaptured++;
-
-        // Verify cleanup occurred
-        this.recordEvent({
-          phase: 'bug_capture',
-          bugId: 'disk_test_2',
-          status: 'completed'
-        });
-        result.bugsCaptured++;
-      }
-
-      result.status = 'passed';
-    } catch (e: any) {
-      result.validationFailures.push(`Disk exhaustion test failed: ${e.message}`);
-      result.status = 'failed';
+    if (scenario.availableSpaceMb < 0 || scenario.bugCapacityPercentage < 0 || scenario.bugCapacityPercentage > 100) {
+      result.validationFailures.push('Invalid disk-pressure scenario');
+      return this.finalize(result);
     }
 
-    result.endTime = Date.now();
-    this.saveResult(result);
-    return result;
+    const pressure = 100 - scenario.bugCapacityPercentage;
+    if (pressure > 90) {
+      this.recordEvent({ phase: 'bug_capture', bugId: 'disk_pressure_1', status: 'completed', duration: 0 });
+      this.recordEvent({ phase: 'bug_capture', bugId: 'disk_pressure_2', status: 'completed', duration: 0 });
+      result.bugsCaptured = 2;
+    }
+
+    return this.finalize(result);
   }
 
-  /**
-   * Test: Data corruption detection and recovery
-   */
   async testCorruptionRecovery(scenario: CorruptionRecoveryScenario): Promise<ConformanceTestResult> {
-    console.log(`[E2E Conformance] Testing corruption recovery: ${scenario.corruptionType}`);
+    this.lifecycleEvents = [];
+    const result = this.newResult(`Corruption Recovery - ${scenario.corruptionType}`);
 
-    const result: ConformanceTestResult = {
-      testName: `Corruption Recovery - ${scenario.corruptionType}`,
-      startTime: Date.now(),
-      endTime: 0,
-      status: 'passed',
-      lifecycleEvents: [],
-      bugsCaptured: 0,
-      patternsDetected: 0,
-      fixesApplied: 0,
-      rollbacksExecuted: 0,
-      failsafeActivations: 0,
-      dataIntegrity: { corrupted: 0, recovered: 0, lost: 0 },
-      validationFailures: [],
-      summary: ''
-    };
-
-    try {
-      // Simulate corruption detection
-      result.dataIntegrity.corrupted = 1;
-
-      // Attempt recovery
-      const recovered = await this.recoverFromCorruption(scenario);
-      if (recovered) {
-        result.dataIntegrity.recovered = 1;
-      } else {
-        result.validationFailures.push(`Failed to recover from ${scenario.corruptionType}`);
-        result.status = 'failed';
-      }
-
-      result.endTime = Date.now();
-    } catch (e: any) {
-      result.validationFailures.push(`Corruption recovery test failed: ${e.message}`);
-      result.status = 'failed';
-      result.endTime = Date.now();
+    result.dataIntegrity.corrupted = 1;
+    if (scenario.corruptionType === 'invalid_json' || scenario.corruptionType === 'truncated_file' || scenario.corruptionType === 'checksum_mismatch') {
+      result.dataIntegrity.recovered = 1;
+      result.dataIntegrity.lost = 0;
+    } else {
+      result.validationFailures.push('Unsupported corruption scenario');
     }
 
-    this.saveResult(result);
-    return result;
+    return this.finalize(result);
   }
 
-  /**
-   * Test: Watchdog failsafe activation
-   */
   async testWatchdogFailsafe(): Promise<ConformanceTestResult> {
-    console.log(`[E2E Conformance] Testing watchdog failsafe activation`);
-
-    const result: ConformanceTestResult = {
-      testName: 'Watchdog Failsafe Activation',
-      startTime: Date.now(),
-      endTime: 0,
-      status: 'passed',
-      lifecycleEvents: [],
-      bugsCaptured: 1,
-      patternsDetected: 0,
-      fixesApplied: 0,
-      rollbacksExecuted: 0,
-      failsafeActivations: 0,
-      dataIntegrity: { corrupted: 0, recovered: 0, lost: 0 },
-      validationFailures: [],
-      summary: ''
-    };
-
-    try {
-      // Simulate condition that triggers failsafe (no heartbeat)
-      const heartbeatTimeout = 5000;
-      await new Promise(r => setTimeout(r, heartbeatTimeout + 1000));
-
-      // Verify failsafe was activated
-      this.recordEvent({
-        phase: 'failsafe',
-        bugId: 'watchdog_test',
-        status: 'completed'
-      });
-      result.failsafeActivations++;
-
-      // Verify engine entered passive mode (read-only)
-      const isPassive = true; // Simulated check
-      if (!isPassive) {
-        result.validationFailures.push('Engine did not enter passive mode after failsafe');
-        result.status = 'failed';
-      }
-
-      result.endTime = Date.now();
-    } catch (e: any) {
-      result.validationFailures.push(`Watchdog failsafe test failed: ${e.message}`);
-      result.status = 'failed';
-      result.endTime = Date.now();
-    }
-
-    this.saveResult(result);
-    return result;
+    this.lifecycleEvents = [];
+    const result = this.newResult('Watchdog Failsafe Activation');
+    result.bugsCaptured = 1;
+    this.recordEvent({ phase: 'failsafe', bugId: 'watchdog_timeout_model', status: 'completed', duration: 0 });
+    result.failsafeActivations = 1;
+    return this.finalize(result);
   }
 
-  /**
-   * Simulate bug capture
-   */
-  private async simulateBugCapture(bugType: string): Promise<void> {
-    const latency = Math.random() * 50 + 10;
-    await new Promise(r => setTimeout(r, latency));
-  }
-
-  /**
-   * Simulate pattern detection
-   */
-  private async simulatePatternDetection(bugCount: number): Promise<void> {
-    if (bugCount < 3) {
-      throw new Error('Not enough bugs to form pattern');
-    }
-    const latency = Math.random() * 300 + 100;
-    await new Promise(r => setTimeout(r, latency));
-  }
-
-  /**
-   * Simulate fix application
-   */
-  private async simulateFixApplication(patternId: string): Promise<boolean> {
-    const latency = Math.random() * 400 + 200;
-    await new Promise(r => setTimeout(r, latency));
-    return Math.random() > 0.1; // 90% success rate
-  }
-
-  /**
-   * Validate fix with tests
-   */
-  private async validateFix(fixId: string): Promise<boolean> {
-    const latency = Math.random() * 200 + 50;
-    await new Promise(r => setTimeout(r, latency));
-    return Math.random() > 0.15; // 85% test pass rate
-  }
-
-  /**
-   * Commit fix
-   */
-  private async commitFix(fixId: string): Promise<void> {
-    const latency = Math.random() * 100;
-    await new Promise(r => setTimeout(r, latency));
-  }
-
-  /**
-   * Execute rollback
-   */
-  private async executeRollback(fixId: string): Promise<void> {
-    const latency = Math.random() * 400 + 100;
-    await new Promise(r => setTimeout(r, latency));
-  }
-
-  /**
-   * Recover from corruption
-   */
-  private async recoverFromCorruption(scenario: CorruptionRecoveryScenario): Promise<boolean> {
-    const latency = Math.random() * 1000 + 500;
-    await new Promise(r => setTimeout(r, latency));
-
-    // Different corruption types have different recovery success rates
-    const successRates: Record<string, number> = {
-      invalid_json: 0.95, // Can parse from backup
-      truncated_file: 0.80, // Partial recovery
-      checksum_mismatch: 0.90 // Can re-verify
-    };
-
-    const rate = successRates[scenario.corruptionType] || 0.5;
-    return Math.random() < rate;
-  }
-
-  /**
-   * Generate summary from result
-   */
-  private generateSummary(result: ConformanceTestResult): string {
-    const lines = [
-      `Test: ${result.testName}`,
-      `Status: ${result.status.toUpperCase()}`,
-      `Duration: ${((result.endTime - result.startTime) / 1000).toFixed(1)}s`,
-      `Bugs Captured: ${result.bugsCaptured}`,
-      `Patterns Detected: ${result.patternsDetected}`,
-      `Fixes Applied: ${result.fixesApplied}`,
-      `Rollbacks: ${result.rollbacksExecuted}`,
-      `Failsafe Activations: ${result.failsafeActivations}`,
-      `Data Integrity: corrupted=${result.dataIntegrity.corrupted}, recovered=${result.dataIntegrity.recovered}`,
-      `Validation Failures: ${result.validationFailures.length}`
-    ];
-
-    if (result.validationFailures.length > 0) {
-      lines.push('Failures:');
-      result.validationFailures.forEach(f => lines.push(`  - ${f}`));
-    }
-
-    return lines.join('\n');
-  }
-
-  /**
-   * Save result to disk
-   */
-  private saveResult(result: ConformanceTestResult): void {
-    const resultPath = path.join(this.storagePath, `e2e-${result.testName.replace(/\s+/g, '_')}-${Date.now()}.json`);
-    fs.writeFileSync(resultPath, JSON.stringify(result, null, 2));
-  }
-
-  /**
-   * Get all lifecycle events
-   */
-  getLifecycleEvents(): LifecycleEvent[] {
-    return this.lifecycleEvents;
-  }
-
-  /**
-   * Generate conformance report
-   */
   generateConformanceReport(results: ConformanceTestResult[]): string {
-    const lines = [
-      '\n=== End-to-End Conformance Report ===',
-      `Timestamp: ${new Date().toISOString()}`,
-      `Total Tests: ${results.length}`,
-      `Passed: ${results.filter(r => r.status === 'passed').length}`,
-      `Failed: ${results.filter(r => r.status === 'failed').length}`,
-      '',
-      '--- Test Results ---'
+    const lines: string[] = [
+      'End-to-End Conformance Report',
+      'Evidence boundary: HOSTED_DETERMINISTIC_MODEL_ONLY',
+      'Physical Android/Frida claim: TOKEN_VAZIO',
+      ''
     ];
 
     for (const result of results) {
-      lines.push(`\n${result.testName}: ${result.status.toUpperCase()}`);
-      lines.push(`  Duration: ${((result.endTime - result.startTime) / 1000).toFixed(1)}s`);
-      lines.push(`  Bugs: ${result.bugsCaptured}, Patterns: ${result.patternsDetected}, Fixes: ${result.fixesApplied}`);
-      lines.push(`  Rollbacks: ${result.rollbacksExecuted}, Failsafe: ${result.failsafeActivations}`);
-
-      if (result.validationFailures.length > 0) {
-        lines.push(`  Failures: ${result.validationFailures.length}`);
-        result.validationFailures.forEach(f => lines.push(`    - ${f}`));
-      }
+      lines.push(`${result.testName}: ${result.status.toUpperCase()}`);
+      lines.push(`Bugs: ${result.bugsCaptured}`);
+      lines.push(`Patterns: ${result.patternsDetected}`);
+      lines.push(`Fixes: ${result.fixesApplied}`);
+      lines.push(`Rollbacks: ${result.rollbacksExecuted}`);
+      lines.push(`Failsafe activations: ${result.failsafeActivations}`);
+      lines.push(`Corrupted: ${result.dataIntegrity.corrupted}`);
+      lines.push(`Recovered: ${result.dataIntegrity.recovered}`);
+      lines.push(`Lost: ${result.dataIntegrity.lost}`);
+      lines.push(`Validation failures: ${result.validationFailures.length}`);
+      lines.push('');
     }
 
-    lines.push('');
     return lines.join('\n');
+  }
+
+  private finalize(result: ConformanceTestResult): ConformanceTestResult {
+    result.endTime = Date.now();
+    result.lifecycleEvents = [...this.lifecycleEvents];
+    result.status = result.validationFailures.length === 0 ? 'passed' : 'failed';
+    result.summary = this.generateSummary(result);
+    this.saveResult(result);
+    return result;
+  }
+
+  private generateSummary(result: ConformanceTestResult): string {
+    return [
+      `status=${result.status}`,
+      `bugs=${result.bugsCaptured}`,
+      `patterns=${result.patternsDetected}`,
+      `fixes=${result.fixesApplied}`,
+      `rollbacks=${result.rollbacksExecuted}`,
+      `failsafe=${result.failsafeActivations}`,
+      `boundary=${result.evidenceBoundary ?? 'HOSTED_DETERMINISTIC_MODEL_ONLY'}`,
+      `claim_allowed=${result.claimAllowed ?? false}`
+    ].join(' ');
+  }
+
+  private saveResult(result: ConformanceTestResult): void {
+    fs.mkdirSync(this.storagePath, { recursive: true });
+    const safeName = result.testName.replace(/[^a-zA-Z0-9._-]+/g, '_');
+    const outputPath = path.join(this.storagePath, `${safeName}.json`);
+    fs.writeFileSync(outputPath, JSON.stringify(result, null, 2), 'utf-8');
   }
 }
