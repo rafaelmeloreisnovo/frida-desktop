@@ -2,7 +2,7 @@
   "schema": "rafaelia.upstream-delta-provenance.v1",
   "repository": "rafaelmeloreisnovo/frida-desktop",
   "observed_commit": "997b6499d84838093f8a0fc2f5c88f51b571e30c",
-  "classification": "UPSTREAM_DERIVATIVE_WITH_VERIFIED_PATH_DELTA_AND_OPEN_HUNK_ORIGIN",
+  "classification": "UPSTREAM_DERIVATIVE_WITH_VERIFIED_PATH_DELTA_COMMIT_LINEAGE_AND_OPEN_HUNK_ORIGIN",
   "baseline": {
     "repository": "wojcikiewicz17/frida",
     "commit": "281ad2176c165e4fd3cf4c64befbabe5d7302a66",
@@ -17,13 +17,19 @@
     "preserved": true
   },
   "authorial_delta": {
-    "state": "PARTIAL_PATH_DIFF_BOUND_HUNK_ORIGIN_TOKEN_VAZIO",
+    "state": "PARTIAL_PATH_DIFF_AND_COMMIT_LINEAGE_BOUND_HUNK_ORIGIN_TOKEN_VAZIO",
     "ownership_claimed_by_this_manifest": false,
     "path_diff": {
       "state": "IMPLEMENTED_AUTOMATED",
       "method": "git diff --name-status --find-renames <pinned-baseline>..HEAD",
       "evidence": "evidence/provenance/delta-inventory.v1.json",
       "meaning": "proves fork-relative path delta only; does not prove exclusive authorship"
+    },
+    "commit_lineage": {
+      "state": "IMPLEMENTED_AUTOMATED_NON_AUTHORSHIP_EVIDENCE",
+      "method": "git log <pinned-baseline>..HEAD -- <changed-path> with commit author, merge and declared co-author trailer signals",
+      "evidence": "evidence/provenance/commit-lineage.v1.json",
+      "meaning": "reduces origin uncertainty by recording observed path-touch history; commit metadata is not hunk authorship, originality, copyright ownership, or license entitlement"
     },
     "hunk_origin": {
       "state": "TOKEN_VAZIO_REQUIRES_ORIGIN_REVIEW",
@@ -53,13 +59,14 @@
       "identify and pin parent-fork baseline commit",
       "produce deterministic path-level diff against baseline",
       "bind upstream COPYING to exact Git blob",
-      "separate fork delta from authorship claim"
+      "separate fork delta from authorship claim",
+      "record bounded per-path commit lineage and declared AI co-author signals without promoting ownership"
     ],
     "required_closure": [
       "classify changed hunks by origin where an authorship/license claim is intended",
       "reconcile dependency and submodule governing terms",
       "preserve all applicable upstream and third-party notices",
-      "record AI-assisted/generated provenance where known",
+      "record AI-assisted/generated provenance where known beyond commit metadata",
       "only then decide whether any compatible authorial notice is appropriate"
     ]
   },
@@ -102,9 +109,14 @@
       "falsifier": "deterministic baseline-to-HEAD path inventory cannot be generated"
     },
     {
+      "id": "PATH_COMMIT_LINEAGE_INVENTORY",
+      "state": "IMPLEMENTED",
+      "falsifier": "per-path commit metadata ledger cannot be regenerated from the pinned baseline and current HEAD"
+    },
+    {
       "id": "AUTHORIAL_HUNK_ORIGIN",
       "state": "TOKEN_VAZIO",
-      "falsifier": "ownership is promoted from path-delta evidence without hunk-origin evidence"
+      "falsifier": "ownership is promoted from path-delta or commit-lineage evidence without hunk-origin evidence"
     },
     {
       "id": "THIRD_PARTY_RECONCILED",
@@ -124,6 +136,8 @@
       "COPYING remains unmodified authority for its scope and is blob-pinned",
       "baseline ancestry is machine-validated",
       "every path changed since the pinned baseline is inventoried automatically",
+      "bounded per-path commit lineage is recorded with author/merge/co-author signals",
+      "commit metadata is explicitly not treated as hunk authorship or copyright ownership",
       "path delta is explicitly not treated as exclusive authorship evidence",
       "unknown hunk origin remains TOKEN_VAZIO",
       "unknown dependency/submodule rights remain TOKEN_VAZIO",
