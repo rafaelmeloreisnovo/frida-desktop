@@ -48,8 +48,8 @@ export interface ConformanceTestResult {
   };
   validationFailures: string[];
   summary: string;
-  evidenceBoundary: 'HOSTED_DETERMINISTIC_MODEL_ONLY';
-  claimAllowed: false;
+  evidenceBoundary?: 'HOSTED_DETERMINISTIC_MODEL_ONLY';
+  claimAllowed?: false;
 }
 
 export interface ConcurrencyScenario {
@@ -82,10 +82,7 @@ export class EndToEndConformance {
   }
 
   recordEvent(event: Omit<LifecycleEvent, 'timestamp'>): LifecycleEvent {
-    const fullEvent: LifecycleEvent = {
-      timestamp: Date.now(),
-      ...event
-    };
+    const fullEvent: LifecycleEvent = { timestamp: Date.now(), ...event };
     this.lifecycleEvents.push(fullEvent);
     return fullEvent;
   }
@@ -110,10 +107,6 @@ export class EndToEndConformance {
     };
   }
 
-  /**
-   * Exercise the lifecycle deterministically. The requested expectedOutcome is
-   * an input to the hosted scenario, never a randomized oracle.
-   */
   async testFullLifecycle(config: ConformanceTestConfig): Promise<ConformanceTestResult> {
     this.lifecycleEvents = [];
     const result = this.newResult(config.testName);
@@ -186,10 +179,6 @@ export class EndToEndConformance {
     return this.finalize(result);
   }
 
-  /**
-   * Deterministic model of the concurrency contract. This does not claim a
-   * physical scheduler/race detector; that boundary remains explicit in result.
-   */
   async testHighConcurrency(scenario: ConcurrencyScenario): Promise<ConformanceTestResult> {
     const result = await this.testFullLifecycle({
       testName: `High Concurrency - ${scenario.parallelBugs} Parallel`,
@@ -208,7 +197,6 @@ export class EndToEndConformance {
     return result;
   }
 
-  /** Hosted disk-pressure model; no physical disk-capacity claim is made. */
   async testDiskExhaustion(scenario: DiskExhaustionScenario): Promise<ConformanceTestResult> {
     this.lifecycleEvents = [];
     const result = this.newResult(`Disk Exhaustion - ${scenario.availableSpaceMb}MB`);
@@ -228,7 +216,6 @@ export class EndToEndConformance {
     return this.finalize(result);
   }
 
-  /** Hosted corruption/recovery model; physical filesystem recovery remains outside this proof. */
   async testCorruptionRecovery(scenario: CorruptionRecoveryScenario): Promise<ConformanceTestResult> {
     this.lifecycleEvents = [];
     const result = this.newResult(`Corruption Recovery - ${scenario.corruptionType}`);
@@ -244,7 +231,6 @@ export class EndToEndConformance {
     return this.finalize(result);
   }
 
-  /** Hosted watchdog state-transition model; no wall-clock wait or device claim. */
   async testWatchdogFailsafe(): Promise<ConformanceTestResult> {
     this.lifecycleEvents = [];
     const result = this.newResult('Watchdog Failsafe Activation');
@@ -252,6 +238,31 @@ export class EndToEndConformance {
     this.recordEvent({ phase: 'failsafe', bugId: 'watchdog_timeout_model', status: 'completed', duration: 0 });
     result.failsafeActivations = 1;
     return this.finalize(result);
+  }
+
+  generateConformanceReport(results: ConformanceTestResult[]): string {
+    const lines: string[] = [
+      'End-to-End Conformance Report',
+      'Evidence boundary: HOSTED_DETERMINISTIC_MODEL_ONLY',
+      'Physical Android/Frida claim: TOKEN_VAZIO',
+      ''
+    ];
+
+    for (const result of results) {
+      lines.push(`${result.testName}: ${result.status.toUpperCase()}`);
+      lines.push(`Bugs: ${result.bugsCaptured}`);
+      lines.push(`Patterns: ${result.patternsDetected}`);
+      lines.push(`Fixes: ${result.fixesApplied}`);
+      lines.push(`Rollbacks: ${result.rollbacksExecuted}`);
+      lines.push(`Failsafe activations: ${result.failsafeActivations}`);
+      lines.push(`Corrupted: ${result.dataIntegrity.corrupted}`);
+      lines.push(`Recovered: ${result.dataIntegrity.recovered}`);
+      lines.push(`Lost: ${result.dataIntegrity.lost}`);
+      lines.push(`Validation failures: ${result.validationFailures.length}`);
+      lines.push('');
+    }
+
+    return lines.join('\n');
   }
 
   private finalize(result: ConformanceTestResult): ConformanceTestResult {
@@ -271,8 +282,8 @@ export class EndToEndConformance {
       `fixes=${result.fixesApplied}`,
       `rollbacks=${result.rollbacksExecuted}`,
       `failsafe=${result.failsafeActivations}`,
-      `boundary=${result.evidenceBoundary}`,
-      `claim_allowed=${result.claimAllowed}`
+      `boundary=${result.evidenceBoundary ?? 'HOSTED_DETERMINISTIC_MODEL_ONLY'}`,
+      `claim_allowed=${result.claimAllowed ?? false}`
     ].join(' ');
   }
 
