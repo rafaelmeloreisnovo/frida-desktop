@@ -6,7 +6,7 @@ This validator deliberately separates three different facts:
   2. a path changed in this fork relative to a pinned baseline;
   3. authorship/origin of the changed hunks.
 
-A fork delta is not, by itself, proof of exclusive authorship.  The validator
+A fork delta is not, by itself, proof of exclusive authorship. The validator
 therefore generates path-level evidence while keeping hunk-origin claims closed
 until separately reviewed.
 """
@@ -69,13 +69,11 @@ def parse_name_status(base: str, head: str) -> list[dict[str, Any]]:
             old_path = tokens[i]
             new_path = tokens[i + 1]
             i += 2
-            path = new_path
-            relation = "FORK_DELTA_RENAMED_OR_COPIED_REQUIRES_HUNK_REVIEW"
             entry = {
-                "path": path,
+                "path": new_path,
                 "previous_path": old_path,
                 "git_status": status,
-                "path_relation": relation,
+                "path_relation": "FORK_DELTA_RENAMED_OR_COPIED_REQUIRES_HUNK_REVIEW",
             }
         else:
             if i >= len(tokens):
@@ -178,6 +176,17 @@ def validate(manifest_path: Path, evidence_path: Path) -> None:
     if third_party.get("flatten_to_single_license") is not False:
         die("third-party licensing must not be flattened")
 
+    governance = require_dict(manifest.get("governance"), "governance")
+    main_protection = require_dict(governance.get("main_branch_protection"), "governance.main_branch_protection")
+    if main_protection.get("observed_protected") is not False:
+        die("main protection may not be promoted by repository content alone")
+    if main_protection.get("required_checks_enforced") is not False:
+        die("required checks may not be claimed enforced without GitHub settings evidence")
+    if int(main_protection.get("observed_ruleset_count", -1)) != 0:
+        die("ruleset count differs from the pinned observed governance gap")
+    if "TOKEN_VAZIO" not in str(main_protection.get("state", "")):
+        die("unprotected-main governance gap must remain TOKEN_VAZIO until settings evidence exists")
+
     rollback = require_dict(manifest.get("rollback"), "rollback")
     if rollback.get("available") is not True:
         die("rollback required")
@@ -208,6 +217,7 @@ def validate(manifest_path: Path, evidence_path: Path) -> None:
         "hunk_origin_state": "TOKEN_VAZIO_REQUIRES_ORIGIN_REVIEW",
         "ownership_claimed": False,
         "claim_allowed": False,
+        "governance_required_checks_enforced": False,
         "counts": dict(sorted(counts.items())),
         "total_changed_paths": len(entries),
         "entries": entries,
@@ -220,7 +230,7 @@ def validate(manifest_path: Path, evidence_path: Path) -> None:
 
     print(
         "PASS: license blob pinned; baseline ancestry verified; "
-        f"{len(entries)} fork-delta paths inventoried; hunk authorship remains fail-closed"
+        f"{len(entries)} fork-delta paths inventoried; hunk authorship and main enforcement remain fail-closed"
     )
 
 
