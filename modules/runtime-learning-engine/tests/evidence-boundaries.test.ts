@@ -52,4 +52,20 @@ describe('Runtime evidence boundaries', () => {
     expect(alerts[0].type).toBe('high_memory_usage');
     expect(alerts[0].severity).toBe('warning');
   });
+
+  test('local notification persistence never claims external delivery', async () => {
+    const [alert] = engine.getAlertManager().evaluateRules({ bug_capture_latency_ms: 150 });
+    expect(alert).toBeDefined();
+
+    const receipt = await engine.getAlertManager().sendAlertNotification(alert, 'slack');
+    expect(receipt.queue_state).toBe('LOCAL_FILE_PERSISTED');
+    expect(receipt.delivery_state).toBe('TOKEN_VAZIO_EXTERNAL_TRANSPORT_NOT_BOUND');
+    expect(receipt.delivery_verified).toBe(false);
+    expect(receipt.external_transport_bound).toBe(false);
+    expect(receipt.claim_allowed).toBe(false);
+
+    const persisted = JSON.parse(fs.readFileSync(receipt.receipt_path, 'utf-8'));
+    expect(persisted.external_delivery_attempted).toBe(false);
+    expect(persisted.delivery_verified).toBe(false);
+  });
 });
