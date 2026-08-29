@@ -1,42 +1,104 @@
-name: RAFAELIA Provenance Gate
+name: RAFAELIA Provenance Non-Regression Gate
 
 on:
   push:
-    paths:
-      - 'profiles/rafaelia-provenance-scope.v1.json'
-      - 'tools/validate-rafaelia-provenance.py'
-      - '.github/workflows/rafaelia-provenance-gate.yml'
   pull_request:
-    paths:
-      - 'profiles/rafaelia-provenance-scope.v1.json'
-      - 'tools/validate-rafaelia-provenance.py'
-      - '.github/workflows/rafaelia-provenance-gate.yml'
+  workflow_dispatch:
 
 permissions:
   contents: read
 
 jobs:
   provenance:
+    name: provenance / fail-closed delta boundary
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - name: Validate fail-closed provenance scope
+      - name: Checkout full ancestry
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Syntax-check validator
+        run: python3 -m py_compile tools/validate-rafaelia-provenance.py
+
+      - name: Validate provenance and emit path inventory
         run: python3 tools/validate-rafaelia-provenance.py
-      - name: Negative gate — premature authorship promotion must fail
+
+      - name: Validate generated evidence contract
         run: |
-          cp profiles/rafaelia-provenance-scope.v1.json /tmp/provenance.json
           python3 - <<'PY'
           import json
           from pathlib import Path
-          p = Path('profiles/rafaelia-provenance-scope.v1.json')
+          p = Path('evidence/provenance/delta-inventory.v1.json')
           d = json.loads(p.read_text())
-          d['authorial_delta']['state'] = 'PASS'
-          d['authorial_delta']['ownership_claimed_by_this_manifest'] = True
-          p.write_text(json.dumps(d))
+          assert d['schema'] == 'rafaelia.delta-inventory-evidence.v1'
+          assert d['claim_allowed'] is False
+          assert d['ownership_claimed'] is False
+          assert d['total_changed_paths'] > 0
+          assert 'TOKEN_VAZIO' in d['hunk_origin_state']
+          assert len(d['entries']) == d['total_changed_paths']
+          print(f"PASS: evidence contract; paths={d['total_changed_paths']}")
           PY
-          if python3 tools/validate-rafaelia-provenance.py; then
-            echo 'FAIL: premature authorial promotion accepted' >&2
-            exit 1
-          fi
-          mv /tmp/provenance.json profiles/rafaelia-provenance-scope.v1.json
-          python3 tools/validate-rafaelia-provenance.py
+
+      - name: Negative gates must fail closed
+        run: |
+          set -euo pipefail
+          MANIFEST='profiles/rafaelia-provenance-scope.v1.json'
+
+          expect_fail() {
+            local label="$1"
+            local file="$2"
+            if python3 tools/validate-rafaelia-provenance.py --manifest "$file" --evidence "/tmp/${label}.evidence.json"; then
+              echo "FAIL: negative fixture unexpectedly passed: $label" >&2
+              exit 1
+            fi
+            echo "PASS: negative fixture rejected: $label"
+          }
+
+          python3 - <<'PY'
+          import json
+          from copy import deepcopy
+          from pathlib import Path
+
+          source = json.loads(Path('profiles/rafaelia-provenance-scope.v1.json').read_text())
+
+          cases = {}
+
+          d = deepcopy(source)
+          d['claim_allowed'] = True
+          d['authorial_delta']['ownership_claimed_by_this_manifest'] = True
+          cases['premature-ownership'] = d
+
+          d = deepcopy(source)
+          d['upstream_license']['blob'] = '0' * 40
+          cases['license-blob-drift'] = d
+
+          d = deepcopy(source)
+          d['baseline']['commit'] = '0' * 40
+          cases['invalid-baseline'] = d
+
+          d = deepcopy(source)
+          d['authorial_delta']['hunk_origin']['state'] = 'PASS'
+          d['authorial_delta']['hunk_origin']['ownership_claimed'] = True
+          cases['premature-hunk-promotion'] = d
+
+          for name, payload in cases.items():
+              Path(f'/tmp/{name}.json').write_text(json.dumps(payload, indent=2) + '\n')
+          PY
+
+          expect_fail premature-ownership /tmp/premature-ownership.json
+          expect_fail license-blob-drift /tmp/license-blob-drift.json
+          expect_fail invalid-baseline /tmp/invalid-baseline.json
+          expect_fail premature-hunk-promotion /tmp/premature-hunk-promotion.json
+
+          python3 tools/validate-rafaelia-provenance.py --manifest "$MANIFEST" --evidence /tmp/final.evidence.json
+
+      - name: Upload deterministic provenance evidence
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: rafaelia-provenance-${{ github.run_id }}
+          path: evidence/provenance/delta-inventory.v1.json
+          if-no-files-found: error
+          retention-days: 30
