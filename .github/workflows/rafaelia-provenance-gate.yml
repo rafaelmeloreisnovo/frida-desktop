@@ -35,5 +35,6 @@ jobs:
           path: |
             evidence/provenance/delta-inventory.v1.json
             evidence/provenance/commit-lineage.v1.json
+            evidence/provenance/submodule-license-inventory.v1.json
           if-no-files-found: error
           retention-days: 30
