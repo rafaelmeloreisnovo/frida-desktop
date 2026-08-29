@@ -2,7 +2,7 @@
   "schema": "rafaelia.upstream-delta-provenance.v1",
   "repository": "rafaelmeloreisnovo/frida-desktop",
   "observed_commit": "997b6499d84838093f8a0fc2f5c88f51b571e30c",
-  "classification": "UPSTREAM_DERIVATIVE_WITH_VERIFIED_PATH_DELTA_COMMIT_LINEAGE_AND_OPEN_HUNK_ORIGIN",
+  "classification": "UPSTREAM_DERIVATIVE_WITH_VERIFIED_PATH_DELTA_COMMIT_LINEAGE_FIRST_LEVEL_SUBMODULE_BINDING_AND_OPEN_HUNK_TRANSITIVE_ORIGIN",
   "baseline": {
     "repository": "wojcikiewicz17/frida",
     "commit": "281ad2176c165e4fd3cf4c64befbabe5d7302a66",
@@ -64,16 +64,32 @@
     ],
     "required_closure": [
       "classify changed hunks by origin where an authorship/license claim is intended",
-      "reconcile dependency and submodule governing terms",
+      "complete nested submodule, vendored-code and dependency governing-term reconciliation",
       "preserve all applicable upstream and third-party notices",
       "record AI-assisted/generated provenance where known beyond commit metadata",
       "only then decide whether any compatible authorial notice is appropriate"
     ]
   },
   "third_party": {
-    "state": "TOKEN_VAZIO_FULL_SUBMODULE_AND_DEPENDENCY_LICENSE_RECONCILIATION",
+    "state": "PARTIAL_FIRST_LEVEL_SUBMODULE_IDENTITY_AND_LICENSE_SOURCE_BOUND_TRANSITIVE_TOKEN_VAZIO",
     "gitmodules_present": true,
-    "flatten_to_single_license": false
+    "first_level_registry": "profiles/rafaelia-submodule-license-scope.v1.json",
+    "first_level_evidence": "evidence/provenance/submodule-license-inventory.v1.json",
+    "first_level_submodule_count": 10,
+    "first_level_gitlinks_bound": 10,
+    "first_level_license_sources_observed": 9,
+    "first_level_license_sources_token_vazio": 1,
+    "unresolved_first_level_component": "releng",
+    "distinct_terms_observed": true,
+    "examples": [
+      "wxWindows Library Licence 3.1",
+      "LGPL-2.0 WITH WxWindows-exception-3.1",
+      "ISC License",
+      "additional embedded BSD-style notices in frida-gum COPYING"
+    ],
+    "flatten_to_single_license": false,
+    "license_compatibility_proven": false,
+    "nested_submodules_vendored_and_dependency_reconciliation": "TOKEN_VAZIO_NOT_PROVEN"
   },
   "runtime": {
     "state": "TOKEN_VAZIO_CURRENT_PHYSICAL_EXECUTION_FOR_NEW_DELTA",
@@ -114,6 +130,11 @@
       "falsifier": "per-path commit metadata ledger cannot be regenerated from the pinned baseline and current HEAD"
     },
     {
+      "id": "FIRST_LEVEL_SUBMODULE_LICENSE_INVENTORY",
+      "state": "IMPLEMENTED_PARTIAL_LICENSE_SOURCE_COVERAGE",
+      "falsifier": ".gitmodules path/URL, HEAD gitlink or conservative first-level registry binding drifts; compatibility may not be promoted by this gate"
+    },
+    {
       "id": "AUTHORIAL_HUNK_ORIGIN",
       "state": "TOKEN_VAZIO",
       "falsifier": "ownership is promoted from path-delta or commit-lineage evidence without hunk-origin evidence"
@@ -121,7 +142,7 @@
     {
       "id": "THIRD_PARTY_RECONCILED",
       "state": "TOKEN_VAZIO",
-      "falsifier": "submodule/dependency material lacks governing terms"
+      "falsifier": "first-level unresolved license source, nested submodule, vendored or dependency material lacks reconciled governing terms or compatibility proof"
     },
     {
       "id": "MAIN_REQUIRED_CHECKS_ENFORCED",
@@ -139,8 +160,11 @@
       "bounded per-path commit lineage is recorded with author/merge/co-author signals",
       "commit metadata is explicitly not treated as hunk authorship or copyright ownership",
       "path delta is explicitly not treated as exclusive authorship evidence",
+      "all first-level submodule gitlinks and URLs are bound to a conservative registry",
+      "distinct first-level license-source observations are preserved instead of flattened",
+      "the unresolved releng root license source remains TOKEN_VAZIO",
+      "nested submodule, vendored and dependency reconciliation remains TOKEN_VAZIO",
       "unknown hunk origin remains TOKEN_VAZIO",
-      "unknown dependency/submodule rights remain TOKEN_VAZIO",
       "runtime and security claims remain separate from source presence",
       "workflow success is not represented as mandatory merge enforcement while main remains unprotected"
     ]
