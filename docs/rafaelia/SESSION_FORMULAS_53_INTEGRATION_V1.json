@@ -1,0 +1,14 @@
+{
+  "schema":"rafaelia.session_formula_integration.v1",
+  "canonical_repo":"rafaelmeloreisnovo/Mapa",
+  "canonical_path":"data/formulas/SESSION_FORMULA_REGISTRY_53_V1.json",
+  "registry_id":"SESSION-FORMULAS-53-20260830-V1",
+  "exact_count":53,
+  "canonical_range":"F01..F53",
+  "local_repo":"rafaelmeloreisnovo/frida-desktop",
+  "role":"OBSERVABILITY_INSTRUMENTATION_AND_FEEDBACK_RECEIPTS",
+  "applicable_ids":["F44","F48","F52","F53"],
+  "requirements":["observation_ne_claim","runtime_identity","timestamp","watchdog_event","rollback_observation"],
+  "non_applicable":"REFERENCE_CANONICAL_NO_DUPLICATION",
+  "claim_allowed":false
+}
