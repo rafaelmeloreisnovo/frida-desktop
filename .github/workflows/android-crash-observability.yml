@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - 'rafaelia/android-crash-observability-v1'
+      - 'rafaelia/crash-network-metadata-trigger-v1'
   pull_request:
     paths:
       - 'agents/android-crash-observer.js'
@@ -30,26 +31,43 @@ jobs:
             -Itools -o /tmp/frida-runtime-crash-observer-selftest
           /tmp/frida-runtime-crash-observer-selftest
 
+      - name: Validate agent syntax
+        run: node --check agents/android-crash-observer.js
+
       - name: Validate shell syntax
         run: sh -n tools/android-crash-spine.sh
 
-      - name: Validate machine-readable contract
+      - name: Validate crash-network contract
         run: |
           python3 - <<'PY'
           import json
           from pathlib import Path
           p = Path('profiles/android-crash-observability.v1.json')
           data = json.loads(p.read_text())
-          assert data['schema'] == 1
+          assert data['schema'] == 2
           assert data['claim_allowed'] is False
-          assert data['privacy']['keyboard_content'] == 'forbidden'
           assert data['privacy']['payload_bytes'] == 'forbidden'
-          assert data['invariant'] == 'absence of evidence never becomes absence of crash'
+          assert data['privacy']['payload_hash'] == 'forbidden'
+          assert data['privacy']['payload_pointer_dereference'] == 'forbidden'
+          trigger = data['crash_network_trigger']
+          assert trigger['ring_capacity'] == 64
+          assert trigger['operations'] == ['connect', 'send', 'sendto']
+          assert trigger['payload_access'] is False
+          assert trigger['cross_process_payload_capture'] is False
           PY
+
+      - name: Validate crash-trigger wiring
+        run: |
+          grep -F "crashTriggered = true" agents/android-crash-observer.js
+          grep -F "outbound_tail: outboundTail()" agents/android-crash-observer.js
+          grep -F "emit('POST_CRASH_NET'" agents/android-crash-observer.js
+          grep -F "attachSendLike('send', false)" agents/android-crash-observer.js
+          grep -F "attachSendLike('sendto', true)" agents/android-crash-observer.js
+          grep -F "attachConnect()" agents/android-crash-observer.js
 
       - name: Privacy regression guard
         run: |
-          if grep -En 'getText\(|ClipboardManager|readUtf8String|readByteArray|HttpURLConnection|OkHttp' \
+          if grep -En 'getText\(|ClipboardManager|readUtf8String|readByteArray|HttpURLConnection|OkHttp|args\[1\].*read|Memory\.read' \
               agents/android-crash-observer.js tools/android-crash-spine.sh; then
             echo 'forbidden content-capture surface detected' >&2
             exit 1
@@ -57,7 +75,7 @@ jobs:
 
       - name: Evidence boundary
         run: |
-          echo 'BUILD_PROVEN applies only to the standalone core and static contracts.'
+          echo 'BUILD_PROVEN applies to syntax, structural wiring, fixed core self-test and privacy contract.'
           echo 'RUNTIME_PROVEN=TOKEN_VAZIO'
           echo 'DEVICE_PROVEN=TOKEN_VAZIO'
           echo 'REPRODUCED=TOKEN_VAZIO'
