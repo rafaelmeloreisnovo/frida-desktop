@@ -51,6 +51,7 @@ jobs:
           bash -n .github/scripts/rafaelia/runtime-aided-hardening.sh
           bash -n .github/scripts/rafaelia/runtime-learning-engine-ci.sh
           bash -n .github/scripts/rafaelia/provenance-ci.sh
+          bash -n .github/scripts/rafaelia/android-crash-observability-ci.sh
           python3 -m py_compile .github/scripts/rafaelia/workflow-contract.py
           python3 -m py_compile tools/validate-rafaelia-provenance.py
 
