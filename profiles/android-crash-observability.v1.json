@@ -1,0 +1,72 @@
+{
+  "schema": 1,
+  "profile": "android-crash-observability",
+  "extends": [
+    "runtime-debugger-arm-safety",
+    "runtime-stability-recorder"
+  ],
+  "intent": "Observe crash, ANR, process-death and renderer-death boundaries without collecting application payload or input content.",
+  "claim_allowed": false,
+  "privacy": {
+    "payload_bytes": "forbidden",
+    "keyboard_content": "forbidden",
+    "clipboard": "forbidden",
+    "ui_text": "forbidden",
+    "urls": "forbidden",
+    "headers": "forbidden",
+    "credentials": "forbidden",
+    "exception_message": "forbidden-by-default",
+    "allowed": [
+      "timestamps",
+      "pid/tid/uid",
+      "non-reversible package/process tags",
+      "exit reason/status",
+      "exception type/class",
+      "pc/sp/fault address",
+      "architecture metadata",
+      "integrity chain"
+    ]
+  },
+  "event_kinds": [
+    "JAVA_UNCAUGHT",
+    "NATIVE_EXCEPTION",
+    "ANR",
+    "PROCESS_EXIT",
+    "WEB_RENDERER_GONE",
+    "IME_PROCESS_EXIT",
+    "LOW_MEMORY_KILL",
+    "SYSTEM_WATCHDOG",
+    "UNKNOWN_FATAL"
+  ],
+  "sources": {
+    "frida_native": "Process.setExceptionHandler; observation-only; exception is forwarded",
+    "frida_java": "ThreadGroup uncaughtException metadata; original path is preserved",
+    "adb_events": "am_crash/am_anr/am_kill/am_proc_died/am_low_memory",
+    "adb_crash": "opt-in stack mode only",
+    "application_exit_info": "Android 11+ historical process-exit reason for code that owns the application context",
+    "app_callback": "owned WebView renderer callback where wired"
+  },
+  "targets": {
+    "chatgpt": "discover package at runtime; no package name is treated as invariant",
+    "chrome_chromium_webview": "discover installed packages at runtime",
+    "keyboard_ime": "resolve default_input_method; observe process/service failure only",
+    "system": "observe only surfaces available to the authorized ADB/Frida context"
+  },
+  "evidence_chain": [
+    "SOURCE_OBSERVED",
+    "WIRED",
+    "BUILD_PROVEN",
+    "RUNTIME_PROVEN",
+    "DEVICE_PROVEN",
+    "REPRODUCED"
+  ],
+  "token_vazio": [
+    "physical-device execution until a receipt is collected",
+    "system_server internals without sufficient privilege",
+    "kernel pstore/ramoops without sufficient privilege",
+    "tombstone files without sufficient privilege",
+    "another process internal stack without authorized attach or explicit stack mode",
+    "causal attribution until independently reproduced"
+  ],
+  "invariant": "absence of evidence never becomes absence of crash"
+}
