@@ -1,0 +1,63 @@
+name: Android crash observability
+
+on:
+  push:
+    branches:
+      - 'rafaelia/android-crash-observability-v1'
+  pull_request:
+    paths:
+      - 'agents/android-crash-observer.js'
+      - 'tools/frida-runtime-crash-observer.*'
+      - 'tools/android-crash-spine.sh'
+      - 'profiles/android-crash-observability.v1.json'
+      - 'docs/android-crash-observability.md'
+      - '.github/workflows/android-crash-observability.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  structural-gate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Compile fixed crash observer self-test
+        run: |
+          cc -std=c11 -Wall -Wextra -Werror -pedantic \
+            tools/frida-runtime-crash-observer.c \
+            tools/frida-runtime-crash-observer-selftest.c \
+            -Itools -o /tmp/frida-runtime-crash-observer-selftest
+          /tmp/frida-runtime-crash-observer-selftest
+
+      - name: Validate shell syntax
+        run: sh -n tools/android-crash-spine.sh
+
+      - name: Validate machine-readable contract
+        run: |
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          p = Path('profiles/android-crash-observability.v1.json')
+          data = json.loads(p.read_text())
+          assert data['schema'] == 1
+          assert data['claim_allowed'] is False
+          assert data['privacy']['keyboard_content'] == 'forbidden'
+          assert data['privacy']['payload_bytes'] == 'forbidden'
+          assert data['invariant'] == 'absence of evidence never becomes absence of crash'
+          PY
+
+      - name: Privacy regression guard
+        run: |
+          if grep -En 'getText\(|ClipboardManager|readUtf8String|readByteArray|HttpURLConnection|OkHttp' \
+              agents/android-crash-observer.js tools/android-crash-spine.sh; then
+            echo 'forbidden content-capture surface detected' >&2
+            exit 1
+          fi
+
+      - name: Evidence boundary
+        run: |
+          echo 'BUILD_PROVEN applies only to the standalone core and static contracts.'
+          echo 'RUNTIME_PROVEN=TOKEN_VAZIO'
+          echo 'DEVICE_PROVEN=TOKEN_VAZIO'
+          echo 'REPRODUCED=TOKEN_VAZIO'
