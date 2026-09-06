@@ -23,6 +23,7 @@ WORKFLOW_DIR = ROOT / ".github" / "workflows"
 EVIDENCE_DIR = ROOT / "evidence" / "workflow-contract"
 
 CUSTOM_WORKFLOWS = {
+    "android-crash-observability.yml",
     "android17-apk-elf-dex.yml",
     "android17-rfl-selftest.yml",
     "rafaelia-provenance-gate.yml",
@@ -60,6 +61,10 @@ CATALYST_PINS = {
 }
 
 CUSTOM_ACTION_ALLOWLIST = {
+    "android-crash-observability.yml": {
+        "actions/checkout",
+        "actions/upload-artifact",
+    },
     "android17-apk-elf-dex.yml": {
         "actions/checkout",
         "actions/setup-java",
