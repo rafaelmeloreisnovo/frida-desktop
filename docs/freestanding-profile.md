@@ -29,6 +29,36 @@ source can be compiled by target diagnostics that need branchless, no-heap
 FAILSAFE/FAILOVER/ROLLBACK decisions, but it is not wired into the default
 desktop build.
 
+## Strict ARM32/NEON4096 leaf core
+
+For hot paths that need a stronger contract than the repository-wide diagnostic
+profile, `android/app/native/neon4096_armv7.S` is a separate ARMv7-A leaf core.
+It does not inherit the hosted implementation in `neon4096_core.c` and does not
+perform runtime CPU discovery, POSIX I/O, allocation, atomics, libc calls, or
+system calls.
+
+Its ABI is declared in `android/app/native/neon4096_freestanding.h` and contains
+only two `void` entry points: one fixed 4096-byte staging kernel and one
+three-source 4096-byte NEON XOR kernel. The object-level gate requires ELF32 ARM,
+zero undefined symbols, no call instructions, no stack push/pop, and only the
+two intended hidden global ABI symbols.
+
+The ARM32 core uses 128-bit NEON vectors. With `u8` data that is 16 lanes per
+vector ALU operation; a 4096-byte page is 256 such vectors. `pld` is used only as
+a prefetch hint. It does not turn a 128-bit physical NEON register into a
+4096-byte register and it does not by itself prove a cache-hit or bandwidth
+claim.
+
+Run the strict structural gate with:
+
+```sh
+bash .github/scripts/rafaelia/arm32-neon4096-freestanding-gate.sh
+```
+
+See `docs/arm32-neon4096-freestanding.md` for the exact ABI, flags, cache/buffer
+contract, three-stream interpretation, and the remaining physical-device
+`TOKEN_VAZIO` gates.
+
 ## Scope and non-goals
 
 This profile does not claim that every transitive subproject is already
@@ -37,6 +67,10 @@ system call, or runtime service must be proven inside the relevant subprojects
 and target platform code.  The top-level repository can only provide a safe
 selector that removes the obvious hosted/GC layers and exposes compile-time
 macros for downstream enforcement.
+
+The strict ARM32 leaf core is narrower and stronger than that top-level profile.
+Its structural PASS must not be generalized into a claim that all Frida
+subprojects are freestanding.
 
 ## Two-cycle validation loop
 
@@ -52,6 +86,12 @@ The helper below validates the top-level contract without requiring submodules:
 
 ```sh
 python3 tools/validate-freestanding-profile.py
+```
+
+For the strict ARM32 leaf object, also run:
+
+```sh
+bash .github/scripts/rafaelia/arm32-neon4096-freestanding-gate.sh
 ```
 
 ## Example configuration

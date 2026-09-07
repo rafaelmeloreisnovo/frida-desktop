@@ -1,0 +1,56 @@
+name: ARM32 NEON4096 Strict Freestanding Gate
+
+on:
+  pull_request:
+    paths:
+      - "android/app/native/neon4096_armv7.S"
+      - "android/app/native/neon4096_freestanding.h"
+      - ".github/scripts/rafaelia/arm32-neon4096-freestanding-gate.sh"
+      - ".github/workflows/arm32-neon4096-freestanding.yml"
+      - "docs/arm32-neon4096-freestanding.md"
+      - "docs/freestanding-profile.md"
+  push:
+    branches:
+      - main
+    paths:
+      - "android/app/native/neon4096_armv7.S"
+      - "android/app/native/neon4096_freestanding.h"
+      - ".github/scripts/rafaelia/arm32-neon4096-freestanding-gate.sh"
+      - ".github/workflows/arm32-neon4096-freestanding.yml"
+      - "docs/arm32-neon4096-freestanding.md"
+      - "docs/freestanding-profile.md"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: arm32-neon4096-freestanding-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  strict-object-gate:
+    name: ELF32 ARM no-external-symbol gate
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2, Node 24
+        with:
+          persist-credentials: false
+
+      - name: Compile and audit strict ARM32 object
+        run: bash .github/scripts/rafaelia/arm32-neon4096-freestanding-gate.sh
+
+      - name: Upload strict freestanding evidence
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1, Node 24
+        with:
+          name: arm32-neon4096-freestanding-${{ github.run_id }}
+          path: evidence/arm32-neon4096-freestanding/
+          if-no-files-found: error
+          retention-days: 14
