@@ -1,0 +1,73 @@
+name: Lifecycle intake
+
+description: Register a new internal/external code intake for 00-intake with provenance and evidence metadata.
+title: "intake: "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        New code enters the governed lifecycle through `00-intake`. This form records scope and uncertainty; it does not grant acceptance or release authority.
+  - type: dropdown
+    id: source_type
+    attributes:
+      label: Source type
+      options:
+        - Internal repository branch
+        - External fork pull request
+        - Upstream source import
+        - Third-party source dependency
+        - Binary/artifact input
+        - Documentation/configuration only
+    validations:
+      required: true
+  - type: textarea
+    id: objective
+    attributes:
+      label: Objective and bounded scope
+      description: What problem is solved, what is included, and what is explicitly out of scope?
+    validations:
+      required: true
+  - type: textarea
+    id: provenance
+    attributes:
+      label: Origin, authorship, license and provenance
+      description: Provide source repository/version/license/checksum/signature when known. Use TOKEN_VAZIO for genuinely unresolved fields.
+    validations:
+      required: true
+  - type: textarea
+    id: compatibility
+    attributes:
+      label: Compatibility surface
+      description: Architectures, ABI/API, Android/device, Frida/subprojects, schemas and toolchains affected.
+    validations:
+      required: true
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Existing tests and evidence
+      description: Link checks, runs, receipts or artifacts already available; distinguish hosted CI from physical-device evidence.
+    validations:
+      required: true
+  - type: textarea
+    id: risk
+    attributes:
+      label: Security, authority and data-flow risk
+      description: Secrets, permissions, provider writes, external network/code, publication, parsing/extraction or privacy boundaries.
+    validations:
+      required: true
+  - type: textarea
+    id: rollback
+    attributes:
+      label: Rollback / removal strategy
+      description: How can this intake be safely reverted or removed if validation fails?
+    validations:
+      required: true
+  - type: checkboxes
+    id: acknowledgement
+    attributes:
+      label: Evidence boundary
+      options:
+        - label: I understand that intake into `00-intake` means eligible for bounded testing, not release approval.
+          required: true
+        - label: I have not converted unknown information into PASS or zero.
+          required: true

@@ -1,0 +1,75 @@
+name: Release readiness
+
+description: Prepare beta/RC/stable release-readiness evidence without publishing.
+title: "release-readiness: "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        This form prepares a release decision. It does not create a tag or publish an artifact.
+  - type: dropdown
+    id: lane
+    attributes:
+      label: Candidate lane
+      options:
+        - 02-beta
+        - main
+    validations:
+      required: true
+  - type: input
+    id: sha
+    attributes:
+      label: Exact candidate SHA
+      placeholder: 40-hex commit SHA
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Planned version
+      description: Use X.Y.Z-beta.N / X.Y.Z-rc.N for beta, X.Y.Z for stable.
+    validations:
+      required: true
+  - type: textarea
+    id: changes
+    attributes:
+      label: User-visible changes and rationale
+    validations:
+      required: true
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Required gate and artifact evidence
+      description: Link exact-head lifecycle, topology, provenance and subsystem receipts.
+    validations:
+      required: true
+  - type: textarea
+    id: compatibility
+    attributes:
+      label: Compatibility and migration notes
+    validations:
+      required: true
+  - type: textarea
+    id: limitations
+    attributes:
+      label: Known limitations and TOKEN_VAZIO ledger
+      description: List unresolved device/provider/performance/release-authority states explicitly.
+    validations:
+      required: true
+  - type: textarea
+    id: rollback
+    attributes:
+      label: Rollback target and strategy
+    validations:
+      required: true
+  - type: checkboxes
+    id: boundary
+    attributes:
+      label: Publication boundary
+      options:
+        - label: Release readiness is not production publication.
+          required: true
+        - label: I will not infer physical-device evidence from hosted CI.
+          required: true
+        - label: Provider protection/release authority must have separate authoritative readback.
+          required: true

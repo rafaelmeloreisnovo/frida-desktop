@@ -1,0 +1,45 @@
+changelog:
+  exclude:
+    labels:
+      - skip-changelog
+      - internal
+  categories:
+    - title: Breaking changes
+      labels:
+        - breaking
+        - semver-major
+    - title: Features
+      labels:
+        - enhancement
+        - feature
+        - semver-minor
+    - title: Fixes
+      labels:
+        - bug
+        - fix
+        - semver-patch
+    - title: Performance
+      labels:
+        - performance
+        - perf
+    - title: Security and hardening
+      labels:
+        - security
+        - hardening
+    - title: Governance, provenance and lifecycle
+      labels:
+        - governance
+        - provenance
+        - lifecycle
+    - title: Documentation
+      labels:
+        - documentation
+        - docs
+    - title: Dependencies and build
+      labels:
+        - dependencies
+        - build
+        - ci
+    - title: Other changes
+      labels:
+        - "*"
