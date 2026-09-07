@@ -9,8 +9,7 @@ import android.widget.LinearLayout;
 import android.widget.TextView;
 
 /**
- * Thin one-screen operator UI. No model logic lives here: all runtime state is
- * read/written through MainActivity's JNI bridge into the source-built ELF.
+ * One-screen operator UI. Runtime/model logic stays in JNI/native ELF.
  */
 final class OperatorPanel {
     interface Actions {
@@ -36,12 +35,12 @@ final class OperatorPanel {
         root.addView(title);
 
         TextView help = new TextView(context);
-        help.setText("Uso normal: toque em Diagnóstico completo e leia/copiei as métricas. Observação real é opcional e só grava quando você preencher os campos.");
+        help.setText("Normal: toque em Diagnóstico completo. Pronto. As métricas aparecem aqui e podem ser copiadas em um toque.");
         root.addView(help);
 
         final TextView result = new TextView(context);
         result.setTextIsSelectable(true);
-        result.setText("Pronto.");
+        result.setText("Pronto para diagnosticar.");
         root.addView(result);
 
         Button diagnose = new Button(context);
@@ -63,50 +62,45 @@ final class OperatorPanel {
         root.addView(copy);
 
         TextView observationTitle = new TextView(context);
-        observationTitle.setText("Observação real (opcional)");
+        observationTitle.setText("Observação real — opcional");
         observationTitle.setTextSize(16.0f);
         root.addView(observationTitle);
 
-        final EditText contextHash = field(context, "contextHash (decimal ou 0x...)");
-        final EditText candidateId = field(context, "candidateId");
-        final EditText eventType = field(context, "eventType");
-        final EditText costNs = field(context, "costNs");
-        final EditText memoryDelta = field(context, "memoryDelta");
-        final EditText auxHash = field(context, "auxHash (decimal ou 0x...)");
-        root.addView(contextHash);
-        root.addView(candidateId);
-        root.addView(eventType);
-        root.addView(costNs);
-        root.addView(memoryDelta);
-        root.addView(auxHash);
+        TextView observationHelp = new TextView(context);
+        observationHelp.setText("Uma linha: contextHash, candidateId, eventType, costNs, memoryDelta, auxHash. Decimal ou 0x para hashes. Nada é preenchido automaticamente.");
+        root.addView(observationHelp);
+
+        final EditText observation = new EditText(context);
+        observation.setHint("0xcontext, candidate, event, costNs, memoryDelta, 0xaux");
+        observation.setSingleLine(true);
+        observation.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS);
+        root.addView(observation);
 
         Button observe = new Button(context);
         observe.setText("Registrar observação real");
         observe.setOnClickListener(new View.OnClickListener() {
             @Override public void onClick(View v) {
+                String raw = observation.getText().toString();
+                String[] fields = raw.split(",", -1);
+                if (fields.length != 6) {
+                    result.setText("OBSERVAÇÃO: REJEITADA — use exatamente 6 campos separados por vírgula. O RFL não foi alterado.");
+                    return;
+                }
                 result.setText(actions.recordObservation(
-                        contextHash.getText().toString(),
-                        candidateId.getText().toString(),
-                        eventType.getText().toString(),
-                        costNs.getText().toString(),
-                        memoryDelta.getText().toString(),
-                        auxHash.getText().toString()));
+                        fields[0].trim(),
+                        fields[1].trim(),
+                        fields[2].trim(),
+                        fields[3].trim(),
+                        fields[4].trim(),
+                        fields[5].trim()));
             }
         });
         root.addView(observe);
 
         TextView safety = new TextView(context);
-        safety.setText("Segurança: nenhum dado sintético é criado; Learning OFF/FROZEN rejeita gravação; ACTIVE automático continua desabilitado.");
+        safety.setText("Fail-safe: sem dado sintético; entrada inválida não toca no RFL; OFF/FROZEN bloqueiam gravação; ACTIVE automático segue DISABLED.");
         root.addView(safety);
 
         return root;
-    }
-
-    private static EditText field(Context context, String hint) {
-        EditText input = new EditText(context);
-        input.setHint(hint);
-        input.setSingleLine(true);
-        input.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS);
-        return input;
     }
 }
