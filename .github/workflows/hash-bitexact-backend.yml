@@ -1,0 +1,51 @@
+name: Hash Bit-Exact Backend Gate
+
+on:
+  pull_request:
+    paths:
+      - 'android/app/native/hash_bitexact_core.h'
+      - 'android/app/native/hash_bitexact_equations.h'
+      - '.github/tests/rafaelia/hash_bitexact_vectors.c'
+      - '.github/scripts/rafaelia/hash-bitexact-backend-gate.sh'
+      - '.github/workflows/hash-bitexact-backend.yml'
+      - 'docs/hash-bitexact-backend.md'
+      - 'docs/hash-math-plugin-freestanding.md'
+  push:
+    branches: [ main ]
+    paths:
+      - 'android/app/native/hash_bitexact_core.h'
+      - 'android/app/native/hash_bitexact_equations.h'
+      - '.github/tests/rafaelia/hash_bitexact_vectors.c'
+      - '.github/scripts/rafaelia/hash-bitexact-backend-gate.sh'
+      - '.github/workflows/hash-bitexact-backend.yml'
+      - 'docs/hash-bitexact-backend.md'
+      - 'docs/hash-math-plugin-freestanding.md'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: hash-bitexact-backend-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  bitexact-equivalence:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+        with:
+          persist-credentials: false
+
+      - name: Run bit-exact backend gate
+        run: bash .github/scripts/rafaelia/hash-bitexact-backend-gate.sh
+
+      - name: Upload evidence
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: hash-bitexact-backend-${{ github.run_id }}
+          path: evidence/hash-bitexact-backend/
+          if-no-files-found: error
+          retention-days: 14
