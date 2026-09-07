@@ -1,17 +1,14 @@
 package io.rafaelia.fridalab;
 
 import android.app.Activity;
-import android.content.ActivityNotFoundException;
 import android.content.ClipData;
 import android.content.ClipboardManager;
 import android.content.Context;
-import android.content.Intent;
 import android.content.SharedPreferences;
 import android.content.pm.ApplicationInfo;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.Process;
-import android.provider.Settings;
 import android.util.Log;
 import android.view.View;
 import android.widget.AdapterView;
@@ -27,10 +24,18 @@ import android.widget.Toast;
 
 import java.io.File;
 
+/**
+ * RAFAELIA Frida Android Lab.
+ *
+ * Normal operator path:
+ * Java/DEX -> JNI -> source-built ELF -> RFL/NEON4096.
+ * Frida Gadget stays available for instrumentation, but metric collection does
+ * not require ADB, a host PC, Frida REPL, or hand-written JavaScript.
+ */
 public final class MainActivity extends Activity {
     private static final String TAG = "RAFAELIA-FridaLab";
     private static final String PREFS = "frida_lab_prefs";
-    private static final String PREF_DEVELOPER = "developer_mode";
+    private static final String PREF_ADVANCED = "developer_mode";
     private static final String PREF_VERBOSE = "verbose_mode";
     private static final String PREF_LEARNING_MODE = "learning_mode";
     private static final String ENDPOINT = "127.0.0.1:27042";
@@ -43,12 +48,12 @@ public final class MainActivity extends Activity {
     private static final int LEARNING_FROZEN = 5;
 
     private static final String[] LEARNING_MODE_LABELS = new String[] {
-            "OFF — sem gravação",
-            "OBSERVE — medir e gravar",
+            "OFF — só leitura; não grava",
+            "OBSERVE — medir e gravar observações reais",
             "LEARN_SHADOW — aprender sem agir",
             "PREDICT_SHADOW — prever e continuar aprendendo",
-            "VALIDATE_SHADOW — modelo congelado + dados novos",
-            "FROZEN — somente leitura"
+            "VALIDATE_SHADOW — validar modelo congelado",
+            "FROZEN — somente leitura do modelo"
     };
 
     private static native int nativeLearningInit(String path);
@@ -57,10 +62,6 @@ public final class MainActivity extends Activity {
     private static native int nativeLearningResetVolatile();
     private static native String nativeLearningSnapshot(boolean verbose);
 
-    /*
-     * Public bridge for Frida JavaScript. Instrumentation agents can call this
-     * without creating a Java-side model or database object per event.
-     */
     public static native int learningObserve(
             long contextHash,
             int candidateId,
@@ -69,7 +70,16 @@ public final class MainActivity extends Activity {
             long memoryDelta,
             long auxHash);
 
-    private boolean developerMode;
+    /** Read-only bridge for local/on-device Frida verification. */
+    public static String learningSnapshotForInstrumentation(boolean verbose) {
+        try {
+            return nativeLearningSnapshot(verbose);
+        } catch (Throwable t) {
+            return "Learning snapshot: FAILED — " + formatError(t);
+        }
+    }
+
+    private boolean advancedMode;
     private boolean verboseMode;
     private boolean learningInitialized;
     private boolean changingLearningMode;
@@ -78,12 +88,35 @@ public final class MainActivity extends Activity {
     private String learningStorePath;
     private String probeStatus;
     private String gadgetStatus;
+    private String lastOperatorReceipt = "TOKEN_VAZIO";
+
     private TextView statusView;
     private TextView learningStatusView;
-    private CheckBox developerCheck;
+    private CheckBox advancedCheck;
     private CheckBox verboseCheck;
-    private LinearLayout learningPanel;
+    private LinearLayout advancedPanel;
     private Spinner learningModeSpinner;
+
+    private static String formatError(Throwable t) {
+        if (t == null) return "TOKEN_VAZIO";
+        String message = t.getMessage();
+        return t.getClass().getSimpleName()
+                + (message == null ? "" : ": " + message);
+    }
+
+    private static String modeName(int mode) {
+        if (mode >= 0 && mode < LEARNING_MODE_LABELS.length) {
+            return LEARNING_MODE_LABELS[mode];
+        }
+        return "TOKEN_VAZIO";
+    }
+
+    private String gateText() {
+        return "modo=" + modeName(learningMode)
+                + " | ACTIVE automático=DISABLED"
+                + " | GPU=TOKEN_VAZIO"
+                + " | validation persistence=TOKEN_VAZIO";
+    }
 
     private String loadElf(String library, String label) {
         try {
@@ -92,8 +125,7 @@ public final class MainActivity extends Activity {
             Log.i(TAG, result);
             return result;
         } catch (Throwable t) {
-            String result = label + ": FAILED — " + t.getClass().getSimpleName() + ": "
-                    + String.valueOf(t.getMessage());
+            String result = label + ": FAILED — " + formatError(t);
             Log.e(TAG, result, t);
             return result;
         }
@@ -108,35 +140,18 @@ public final class MainActivity extends Activity {
 
     private String supportedAbis() {
         if (Build.VERSION.SDK_INT >= 21 && Build.SUPPORTED_ABIS.length > 0) {
-            StringBuilder result = new StringBuilder();
+            StringBuilder out = new StringBuilder();
             for (int i = 0; i < Build.SUPPORTED_ABIS.length; i++) {
-                if (i != 0) result.append(", ");
-                result.append(Build.SUPPORTED_ABIS[i]);
+                if (i != 0) out.append(", ");
+                out.append(Build.SUPPORTED_ABIS[i]);
             }
-            return result.toString();
+            return out.toString();
         }
         return "TOKEN_VAZIO";
     }
 
     private boolean isDebuggable() {
         return (getApplicationInfo().flags & ApplicationInfo.FLAG_DEBUGGABLE) != 0;
-    }
-
-    private String hostCommands() {
-        return "adb devices\n"
-                + "adb forward tcp:27042 tcp:27042\n"
-                + "frida-ps -H 127.0.0.1:27042\n"
-                + "frida -H 127.0.0.1:27042 -n Gadget";
-    }
-
-    private String learningAgentSnippet() {
-        return "Java.perform(function () {\n"
-                + "  const Lab = Java.use('io.rafaelia.fridalab.MainActivity');\n"
-                + "  // Pass only real observations from your hook:\n"
-                + "  // Lab.learningObserve(contextHash, actualCandidate, eventType, costNs, memoryDelta, auxHash);\n"
-                + "  // Candidate may represent a class or route (CPU scalar / NEON / GPU / storage).\n"
-                + "  // VALIDATE_SHADOW predicts with the frozen model and never trains it.\n"
-                + "});";
     }
 
     private void verbose(String message) {
@@ -151,79 +166,138 @@ public final class MainActivity extends Activity {
             return nativeLearningSnapshot(verbose);
         } catch (Throwable t) {
             Log.e(TAG, "Learning snapshot failed", t);
-            return "Learning core: FAILED — " + t.getClass().getSimpleName() + ": "
-                    + String.valueOf(t.getMessage());
+            return "Learning core: FAILED — " + formatError(t);
+        }
+    }
+
+    private String buildOperatorReceipt() {
+        return OperatorReceipt.format(
+                probeStatus,
+                gadgetStatus,
+                safeLearningSnapshot(true),
+                learningStorePath,
+                modeName(learningMode),
+                isDebuggable());
+    }
+
+    private String runFullDiagnostic() {
+        renderStatus();
+        renderLearningStatus();
+        lastOperatorReceipt = buildOperatorReceipt();
+        return "DIAGNÓSTICO LOCAL: PASS\n"
+                + "DEX → JNI → ELF → RFL/NEON4096\n"
+                + gateText() + "\n\n"
+                + lastOperatorReceipt;
+    }
+
+    private String copyMetrics() {
+        lastOperatorReceipt = buildOperatorReceipt();
+        ClipboardManager clipboard =
+                (ClipboardManager) getSystemService(Context.CLIPBOARD_SERVICE);
+        clipboard.setPrimaryClip(ClipData.newPlainText(
+                "RAFAELIA Frida Lab metrics", lastOperatorReceipt));
+        Toast.makeText(this, "Métricas copiadas", Toast.LENGTH_SHORT).show();
+        return "MÉTRICAS COPIADAS: PASS\n" + gateText();
+    }
+
+    private String recordRealObservation(String contextHashRaw,
+                                         String candidateIdRaw,
+                                         String eventTypeRaw,
+                                         String costNsRaw,
+                                         String memoryDeltaRaw,
+                                         String auxHashRaw) {
+        if (!learningInitialized) {
+            return "OBSERVAÇÃO: FAIL — Learning core não inicializado";
+        }
+        if (learningMode == LEARNING_OFF || learningMode == LEARNING_FROZEN) {
+            return "OBSERVAÇÃO: BLOQUEADA — escolha um modo que aceite observações.";
+        }
+
+        try {
+            long contextHash = MobileNumberParser.signedLong(contextHashRaw, "contextHash");
+            int candidateId = MobileNumberParser.uint32(candidateIdRaw, "candidateId");
+            int eventType = MobileNumberParser.uint32(eventTypeRaw, "eventType");
+            long costNs = MobileNumberParser.signedLong(costNsRaw, "costNs");
+            long memoryDelta = MobileNumberParser.signedLong(memoryDeltaRaw, "memoryDelta");
+            long auxHash = MobileNumberParser.signedLong(auxHashRaw, "auxHash");
+            if (costNs < 0L) {
+                return "OBSERVAÇÃO: REJEITADA — costNs não pode ser negativo. RFL inalterado.";
+            }
+
+            int rc = learningObserve(
+                    contextHash, candidateId, eventType, costNs, memoryDelta, auxHash);
+            renderLearningStatus();
+            if (rc == 0) {
+                lastOperatorReceipt = buildOperatorReceipt();
+                return "OBSERVAÇÃO: PASS — DEX → JNI → ELF → RFL\n" + gateText();
+            }
+            return "OBSERVAÇÃO: FAIL — rc=" + rc + "\n" + gateText();
+        } catch (Throwable t) {
+            return "OBSERVAÇÃO: REJEITADA — " + formatError(t)
+                    + "\nEntrada inválida não foi encaminhada ao RFL.";
         }
     }
 
     private void renderLearningStatus() {
         if (learningStatusView == null) return;
         StringBuilder text = new StringBuilder();
-        text.append("\nLEARNING / RFL V1 + NEON4096/3\n");
+        text.append("\nMÉTRICAS RFL / NEON4096\n");
         text.append(safeLearningSnapshot(verboseMode)).append("\n");
-        text.append("Store: ").append(learningStorePath == null ? "TOKEN_VAZIO" : learningStorePath).append("\n");
-        text.append("VALIDATE_SHADOW: modelo congelado; janela de validação não altera suporte aprendido.\n");
-        text.append("Validation persistence: TOKEN_VAZIO (janela atual é volátil).\n");
-        text.append("ZIPRAF checkpoint + segment GC/compaction: TOKEN_VAZIO / próxima fase.\n");
-        text.append("GPU compute backend: TOKEN_VAZIO até execução física medida.\n");
+        text.append("Store: ").append(
+                learningStorePath == null ? "TOKEN_VAZIO" : learningStorePath).append("\n");
+        text.append("VALIDATE_SHADOW: modelo congelado; validação não treina.\n");
+        text.append("Validation persistence: TOKEN_VAZIO\n");
+        text.append("ZIPRAF checkpoint + GC/compaction: TOKEN_VAZIO\n");
+        text.append("GPU compute backend: TOKEN_VAZIO\n");
         text.append("Automatic ACTIVE policy: DISABLED\n");
         text.append("Promotion gate: support + error + confidence + overhead + memory + validation window\n");
-        if (verboseMode) {
-            text.append("\nFrida bridge example:\n").append(learningAgentSnippet()).append("\n");
-            text.append("\nNative geometry: 4096 B = 64 B control + 3 x 1344 B; 64 cache-lines; 256 NEON vectors.\n");
-            text.append("RFL hot path: fixed native predictor + 4 KiB record slab; no Java DB object per observation.\n");
-        }
         learningStatusView.setText(text.toString());
     }
 
     private void renderStatus() {
+        if (statusView == null) return;
         StringBuilder status = new StringBuilder();
-        status.append("RAFAELIA / Frida Android Lab\n\n");
+        status.append("RAFAELIA / Frida Android Lab\n");
+        status.append("UMA TELA • DEX → JNI → ELF\n\n");
+        status.append(probeStatus).append("\n");
+        status.append(gadgetStatus).append("\n");
+        status.append("PID: ").append(Process.myPid()).append("\n");
+        status.append("Package: ").append(getPackageName()).append("\n");
+        status.append("Android: ").append(Build.VERSION.RELEASE)
+                .append(" / SDK ").append(Build.VERSION.SDK_INT).append("\n");
+        status.append("ABI: ").append(primaryAbi()).append("\n");
+        status.append("Debuggable APK: ").append(isDebuggable()).append("\n");
+        status.append("Gadget local: ").append(ENDPOINT).append("\n");
+        status.append("Learning: ").append(modeName(learningMode)).append("\n");
+        status.append("ACTIVE automático: DISABLED\n");
 
-        if (!developerMode) {
-            status.append(probeStatus).append("\n");
-            status.append(gadgetStatus).append("\n\n");
-            status.append("Endpoint: ").append(ENDPOINT).append("\n");
-            status.append("Próximo passo: conecte pelo ADB/Frida no computador.\n");
-            status.append("Ative Developer Mode abaixo para diagnóstico e Learning.\n");
-        } else {
-            status.append("DEVELOPER MODE: ON\n");
-            status.append("Verbose: ").append(verboseMode ? "ON" : "OFF").append("\n\n");
-            status.append(probeStatus).append("\n");
-            status.append(gadgetStatus).append("\n");
-            status.append("PID: ").append(Process.myPid()).append("\n");
-            status.append("Package: ").append(getPackageName()).append("\n");
-            status.append("SDK: ").append(Build.VERSION.SDK_INT).append("\n");
-            status.append("Android: ").append(Build.VERSION.RELEASE).append("\n");
-            status.append("Primary ABI: ").append(primaryAbi()).append("\n");
-            status.append("Debuggable APK: ").append(isDebuggable()).append("\n");
-            status.append("Gadget endpoint: ").append(ENDPOINT).append("\n");
-
-            if (verboseMode) {
-                status.append("\n--- VERBOSE ---\n");
-                status.append("Supported ABIs: ").append(supportedAbis()).append("\n");
-                status.append("Device: ").append(Build.MANUFACTURER).append(" ")
-                        .append(Build.MODEL).append("\n");
-                status.append("Build fingerprint: ").append(Build.FINGERPRINT).append("\n");
-                status.append("C source -> NDK clang -> ELF -> RFL/NEON4096 runtime\n");
-                status.append("Java source -> javac -> D8 -> DEX -> Activity -> System.loadLibrary -> ELF\n");
-                status.append("\nHost commands:\n").append(hostCommands()).append("\n");
-                status.append("\nSystem Developer Options status is not inferred by this app; use the button below to open the Android settings page.\n");
-            }
+        if (verboseMode) {
+            status.append("\n--- DETALHES ---\n");
+            status.append("ABIs: ").append(supportedAbis()).append("\n");
+            status.append("Device: ").append(Build.MANUFACTURER).append(" ")
+                    .append(Build.MODEL).append("\n");
+            status.append("Fingerprint: ").append(Build.FINGERPRINT).append("\n");
+            status.append("C source → NDK clang → ELF → RFL/NEON4096\n");
+            status.append("Java → javac → D8 → DEX → JNI → ELF\n");
+            status.append("Frida/Termux externo: opcional para instrumentação/receipt.\n");
         }
 
         statusView.setText(status.toString());
-        if (learningPanel != null) learningPanel.setVisibility(developerMode ? View.VISIBLE : View.GONE);
+        if (advancedPanel != null) {
+            advancedPanel.setVisibility(advancedMode ? View.VISIBLE : View.GONE);
+        }
         renderLearningStatus();
-        verbose("renderStatus developer=" + developerMode + " verbose=" + verboseMode
-                + " pid=" + Process.myPid() + " abi=" + primaryAbi()
+        verbose("renderStatus advanced=" + advancedMode
+                + " verbose=" + verboseMode
+                + " pid=" + Process.myPid()
+                + " abi=" + primaryAbi()
                 + " learningMode=" + learningMode);
     }
 
     private void saveModes() {
         getSharedPreferences(PREFS, MODE_PRIVATE)
                 .edit()
-                .putBoolean(PREF_DEVELOPER, developerMode)
+                .putBoolean(PREF_ADVANCED, advancedMode)
                 .putBoolean(PREF_VERBOSE, verboseMode)
                 .putInt(PREF_LEARNING_MODE, learningMode)
                 .apply();
@@ -234,23 +308,6 @@ public final class MainActivity extends Activity {
         button.setText(text);
         button.setOnClickListener(listener);
         return button;
-    }
-
-    private void openDeveloperOptions() {
-        Intent intent = new Intent(Settings.ACTION_APPLICATION_DEVELOPMENT_SETTINGS);
-        try {
-            startActivity(intent);
-        } catch (ActivityNotFoundException e) {
-            startActivity(new Intent(Settings.ACTION_SETTINGS));
-        }
-    }
-
-    private void copyHostCommands() {
-        ClipboardManager clipboard = (ClipboardManager) getSystemService(Context.CLIPBOARD_SERVICE);
-        clipboard.setPrimaryClip(ClipData.newPlainText(
-                "Frida host + learning commands",
-                hostCommands() + "\n\n" + learningAgentSnippet()));
-        Toast.makeText(this, "Comandos ADB/Frida/Learning copiados", Toast.LENGTH_SHORT).show();
     }
 
     private void initializeLearning() {
@@ -276,7 +333,9 @@ public final class MainActivity extends Activity {
     private void setLearningMode(int requestedMode, boolean fromUser) {
         if (requestedMode < LEARNING_OFF || requestedMode > LEARNING_FROZEN) return;
         if (!learningInitialized) {
-            if (fromUser) Toast.makeText(this, "Learning core não inicializado", Toast.LENGTH_SHORT).show();
+            if (fromUser) {
+                Toast.makeText(this, "Learning core não inicializado", Toast.LENGTH_SHORT).show();
+            }
             return;
         }
         try {
@@ -285,26 +344,29 @@ public final class MainActivity extends Activity {
                 learningMode = requestedMode;
                 saveModes();
                 if (fromUser) {
-                    Toast.makeText(this, "Learning: " + LEARNING_MODE_LABELS[requestedMode], Toast.LENGTH_SHORT).show();
+                    Toast.makeText(this, modeName(requestedMode), Toast.LENGTH_SHORT).show();
                 }
             } else {
-                Toast.makeText(this, "Falha ao mudar Learning rc=" + rc, Toast.LENGTH_LONG).show();
+                Toast.makeText(this, "Falha ao mudar Learning rc=" + rc,
+                        Toast.LENGTH_LONG).show();
                 changingLearningMode = true;
                 learningModeSpinner.setSelection(learningMode);
                 changingLearningMode = false;
             }
         } catch (Throwable t) {
             Log.e(TAG, "Learning mode change failed", t);
-            Toast.makeText(this, "Learning mode falhou: " + t.getClass().getSimpleName(), Toast.LENGTH_LONG).show();
+            Toast.makeText(this, "Learning mode falhou: " + formatError(t),
+                    Toast.LENGTH_LONG).show();
         }
-        renderLearningStatus();
+        renderStatus();
     }
 
     private void flushLearning() {
         if (!learningInitialized) return;
         try {
             int rc = nativeLearningFlush();
-            Toast.makeText(this, rc == 0 ? "RFL flush: PASS" : "RFL flush rc=" + rc,
+            Toast.makeText(this,
+                    rc == 0 ? "RFL flush: PASS" : "RFL flush rc=" + rc,
                     Toast.LENGTH_SHORT).show();
         } catch (Throwable t) {
             Log.e(TAG, "Learning flush failed", t);
@@ -316,12 +378,13 @@ public final class MainActivity extends Activity {
     private void resetVolatilePredictor() {
         if (!learningInitialized) return;
         if (learningMode != LEARNING_OFF && learningMode != LEARNING_FROZEN) {
-            Toast.makeText(this, "Coloque Learning em OFF ou FROZEN antes do reset", Toast.LENGTH_LONG).show();
+            Toast.makeText(this, "Reset só em OFF ou FROZEN", Toast.LENGTH_LONG).show();
             return;
         }
         try {
             int rc = nativeLearningResetVolatile();
-            Toast.makeText(this, rc == 0 ? "Preditor volátil resetado" : "Reset rc=" + rc,
+            Toast.makeText(this,
+                    rc == 0 ? "Preditor volátil resetado" : "Reset rc=" + rc,
                     Toast.LENGTH_SHORT).show();
         } catch (Throwable t) {
             Log.e(TAG, "Learning reset failed", t);
@@ -335,10 +398,12 @@ public final class MainActivity extends Activity {
         super.onCreate(state);
 
         SharedPreferences prefs = getSharedPreferences(PREFS, MODE_PRIVATE);
-        developerMode = prefs.getBoolean(PREF_DEVELOPER, false);
+        advancedMode = prefs.getBoolean(PREF_ADVANCED, false);
         verboseMode = prefs.getBoolean(PREF_VERBOSE, false);
         learningMode = prefs.getInt(PREF_LEARNING_MODE, LEARNING_OFF);
-        if (learningMode < LEARNING_OFF || learningMode > LEARNING_FROZEN) learningMode = LEARNING_OFF;
+        if (learningMode < LEARNING_OFF || learningMode > LEARNING_FROZEN) {
+            learningMode = LEARNING_OFF;
+        }
 
         probeStatus = loadElf("rafaelia-probe", "Source-built ELF probe");
         gadgetStatus = loadElf("frida-gadget", "Frida Gadget ELF");
@@ -347,7 +412,7 @@ public final class MainActivity extends Activity {
         ScrollView scroll = new ScrollView(this);
         LinearLayout root = new LinearLayout(this);
         root.setOrientation(LinearLayout.VERTICAL);
-        int pad = 28;
+        int pad = 24;
         root.setPadding(pad, pad, pad, pad);
         scroll.addView(root);
 
@@ -356,25 +421,45 @@ public final class MainActivity extends Activity {
         statusView.setTextIsSelectable(true);
         root.addView(statusView);
 
-        developerCheck = new CheckBox(this);
-        developerCheck.setText("Developer Mode do laboratório");
-        developerCheck.setChecked(developerMode);
-        root.addView(developerCheck);
+        root.addView(OperatorPanel.build(this, new OperatorPanel.Actions() {
+            @Override public String runFullDiagnostic() {
+                return MainActivity.this.runFullDiagnostic();
+            }
 
-        verboseCheck = new CheckBox(this);
-        verboseCheck.setText("Verbose diagnostics");
-        verboseCheck.setChecked(verboseMode);
-        verboseCheck.setEnabled(developerMode);
-        root.addView(verboseCheck);
+            @Override public String copyMetrics() {
+                return MainActivity.this.copyMetrics();
+            }
 
-        learningPanel = new LinearLayout(this);
-        learningPanel.setOrientation(LinearLayout.VERTICAL);
-        root.addView(learningPanel);
+            @Override public String recordObservation(String contextHash,
+                                                      String candidateId,
+                                                      String eventType,
+                                                      String costNs,
+                                                      String memoryDelta,
+                                                      String auxHash) {
+                return recordRealObservation(
+                        contextHash, candidateId, eventType,
+                        costNs, memoryDelta, auxHash);
+            }
+        }));
 
-        TextView learningTitle = new TextView(this);
-        learningTitle.setText("Learning / RFL + NEON4096 — shadow / validation");
-        learningTitle.setTextSize(18.0f);
-        learningPanel.addView(learningTitle);
+        learningStatusView = new TextView(this);
+        learningStatusView.setTextSize(14.0f);
+        learningStatusView.setTextIsSelectable(true);
+        root.addView(learningStatusView);
+
+        advancedCheck = new CheckBox(this);
+        advancedCheck.setText("Mostrar controles avançados");
+        advancedCheck.setChecked(advancedMode);
+        root.addView(advancedCheck);
+
+        advancedPanel = new LinearLayout(this);
+        advancedPanel.setOrientation(LinearLayout.VERTICAL);
+        root.addView(advancedPanel);
+
+        TextView modeTitle = new TextView(this);
+        modeTitle.setText("Modo do Learning");
+        modeTitle.setTextSize(16.0f);
+        advancedPanel.addView(modeTitle);
 
         learningModeSpinner = new Spinner(this);
         ArrayAdapter<String> learningAdapter = new ArrayAdapter<String>(
@@ -384,37 +469,39 @@ public final class MainActivity extends Activity {
         learningAdapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
         learningModeSpinner.setAdapter(learningAdapter);
         learningModeSpinner.setSelection(learningMode);
-        learningPanel.addView(learningModeSpinner);
+        advancedPanel.addView(learningModeSpinner);
 
-        learningStatusView = new TextView(this);
-        learningStatusView.setTextSize(14.0f);
-        learningStatusView.setTextIsSelectable(true);
-        learningPanel.addView(learningStatusView);
+        verboseCheck = new CheckBox(this);
+        verboseCheck.setText("Mostrar diagnóstico detalhado");
+        verboseCheck.setChecked(verboseMode);
+        advancedPanel.addView(verboseCheck);
 
-        learningPanel.addView(button("Atualizar métricas do Learning", new View.OnClickListener() {
-            @Override
-            public void onClick(View v) {
-                renderLearningStatus();
+        advancedPanel.addView(button("Atualizar métricas", new View.OnClickListener() {
+            @Override public void onClick(View v) {
+                renderStatus();
+                Toast.makeText(MainActivity.this,
+                        "Métricas atualizadas", Toast.LENGTH_SHORT).show();
             }
         }));
 
-        learningPanel.addView(button("Flush RFL agora", new View.OnClickListener() {
-            @Override
-            public void onClick(View v) {
+        advancedPanel.addView(button("Flush RFL", new View.OnClickListener() {
+            @Override public void onClick(View v) {
                 flushLearning();
             }
         }));
 
-        learningPanel.addView(button("Resetar preditor volátil", new View.OnClickListener() {
-            @Override
-            public void onClick(View v) {
+        advancedPanel.addView(button("Resetar somente preditor volátil", new View.OnClickListener() {
+            @Override public void onClick(View v) {
                 resetVolatilePredictor();
             }
         }));
 
-        TextView phase2 = new TextView(this);
-        phase2.setText("Próxima etapa: persistir janela VALIDATE + ZIPRAF checkpoint + segment GC/compaction + backend GPU físico medido.");
-        learningPanel.addView(phase2);
+        TextView boundary = new TextView(this);
+        boundary.setText(
+                "Gates abertos: validation persistence=TOKEN_VAZIO; "
+                        + "ZIPRAF/GC=TOKEN_VAZIO; GPU=TOKEN_VAZIO. "
+                        + "ACTIVE automático permanece DISABLED.");
+        advancedPanel.addView(boundary);
 
         learningModeSpinner.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
             @Override
@@ -423,20 +510,18 @@ public final class MainActivity extends Activity {
                 setLearningMode(position, true);
             }
 
-            @Override
-            public void onNothingSelected(AdapterView<?> parent) {
+            @Override public void onNothingSelected(AdapterView<?> parent) {
             }
         });
 
-        developerCheck.setOnCheckedChangeListener(new CompoundButton.OnCheckedChangeListener() {
+        advancedCheck.setOnCheckedChangeListener(new CompoundButton.OnCheckedChangeListener() {
             @Override
             public void onCheckedChanged(CompoundButton buttonView, boolean checked) {
-                developerMode = checked;
-                if (!developerMode) {
+                advancedMode = checked;
+                if (!advancedMode) {
                     verboseMode = false;
                     verboseCheck.setChecked(false);
                 }
-                verboseCheck.setEnabled(developerMode);
                 saveModes();
                 renderStatus();
             }
@@ -445,33 +530,11 @@ public final class MainActivity extends Activity {
         verboseCheck.setOnCheckedChangeListener(new CompoundButton.OnCheckedChangeListener() {
             @Override
             public void onCheckedChanged(CompoundButton buttonView, boolean checked) {
-                verboseMode = developerMode && checked;
+                verboseMode = advancedMode && checked;
                 saveModes();
                 renderStatus();
             }
         });
-
-        root.addView(button("Executar / atualizar diagnóstico", new View.OnClickListener() {
-            @Override
-            public void onClick(View v) {
-                renderStatus();
-                Toast.makeText(MainActivity.this, "Diagnóstico atualizado", Toast.LENGTH_SHORT).show();
-            }
-        }));
-
-        root.addView(button("Abrir Opções do desenvolvedor do Android", new View.OnClickListener() {
-            @Override
-            public void onClick(View v) {
-                openDeveloperOptions();
-            }
-        }));
-
-        root.addView(button("Copiar comandos ADB / Frida / Learning", new View.OnClickListener() {
-            @Override
-            public void onClick(View v) {
-                copyHostCommands();
-            }
-        }));
 
         renderStatus();
         setContentView(scroll);
