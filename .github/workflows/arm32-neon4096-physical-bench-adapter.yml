@@ -5,6 +5,7 @@ on:
     paths:
       - "tools/arm32-neon4096-physical-bench.c"
       - "tools/arm32-neon4096-physical-bench.sh"
+      - "tools/arm32-neon4096-multicore-bench.sh"
       - ".github/scripts/rafaelia/arm32-neon4096-physical-bench-adapter-gate.sh"
       - ".github/workflows/arm32-neon4096-physical-bench-adapter.yml"
       - "android/app/native/neon4096_armv7.S"
@@ -16,6 +17,7 @@ on:
     paths:
       - "tools/arm32-neon4096-physical-bench.c"
       - "tools/arm32-neon4096-physical-bench.sh"
+      - "tools/arm32-neon4096-multicore-bench.sh"
       - ".github/scripts/rafaelia/arm32-neon4096-physical-bench-adapter-gate.sh"
       - ".github/workflows/arm32-neon4096-physical-bench-adapter.yml"
       - "android/app/native/neon4096_armv7.S"
@@ -46,7 +48,7 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Compile adapter object and re-audit strict leaf
+      - name: Compile adapter variants and re-audit strict leaf
         run: bash .github/scripts/rafaelia/arm32-neon4096-physical-bench-adapter-gate.sh
 
       - name: Upload structural adapter evidence

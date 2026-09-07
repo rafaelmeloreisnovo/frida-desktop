@@ -15,10 +15,11 @@ strict leaf
   no hosted dependencies
         |
         v
-hosted measurement adapter
+hosted measurement adapters
   tools/arm32-neon4096-physical-bench.c
   tools/arm32-neon4096-physical-bench.sh
-  timing/output/device evidence only
+  tools/arm32-neon4096-multicore-bench.sh
+  timing/affinity/output/device evidence only
 ```
 
 A hosted benchmark dependency is not inherited by the leaf.
@@ -38,7 +39,7 @@ The scalar baseline is compiled by the device runner with:
 
 so the baseline is not silently converted into another SIMD implementation.
 
-Two conditions are emitted:
+Two single-process conditions are emitted:
 
 - `warm`: repeatedly processes the same 4096-byte source/output pages;
 - `stream`: rotates across 256 independent 4096-byte page sets.
@@ -48,6 +49,19 @@ warm-up.
 
 Before timing, the adapter calculates the same page with scalar C and the NEON
 leaf and compares every byte. Timing is aborted unless correctness is `PASS`.
+
+## Compile-time worker specialization
+
+The same C source also has a compile-time-only worker mode:
+
+```text
+-DRAFAELIA_BENCH_WORKER_ONLY=1
+```
+
+That variant executes only the verified NEON `stream` measurement. There is no
+runtime algorithm selector in the hot loop. It exists so external process
+orchestration can measure 1/2/4/8 pinned workers without introducing pthreads,
+a scheduler API, or another dispatch layer into the benchmark C core.
 
 ## No-heap measurement storage
 
@@ -91,9 +105,10 @@ Therefore:
 logical_GBps != physical_DRAM_bandwidth
 software_3read_1write_GBps != measured_memory_bus_GBps
 single_run_ratio != general_3x_claim
+process_sum_scaling != synchronized_wall_scaling
 ```
 
-The benchmark prints:
+The benchmark keeps these explicit boundaries:
 
 ```text
 cache_miss_rate=TOKEN_VAZIO
@@ -104,7 +119,7 @@ claim_allowed=false
 
 until independent evidence exists for those dimensions.
 
-## Device execution
+## Single-CPU device execution
 
 On the physical ARM32 Termux/device checkout:
 
@@ -123,7 +138,7 @@ The runner:
 6. records device metadata, results and SHA-256 identities;
 7. emits `evidence/arm32-neon4096-physical-bench/receipt.json`.
 
-Example for another single CPU:
+Example:
 
 ```sh
 RAFAELIA_BENCH_CPU=3 bash tools/arm32-neon4096-physical-bench.sh
@@ -131,6 +146,50 @@ RAFAELIA_BENCH_CPU=3 bash tools/arm32-neon4096-physical-bench.sh
 
 If `taskset` is unavailable, the run is allowed for exploratory measurement but
 its affinity remains `TOKEN_VAZIO` in the receipt.
+
+## 1/2/4/8-core process-sum experiment
+
+For an ARM32 device exposing at least eight CPUs and `taskset`:
+
+```sh
+bash tools/arm32-neon4096-multicore-bench.sh
+```
+
+The multicore runner:
+
+- compiles the strict leaf once;
+- compiles the C adapter as `NEON_STREAM_ONLY` at compile time;
+- launches waves of 1, 2, 4 and 8 independent processes;
+- pins each worker to a distinct CPU from `RAFAELIA_BENCH_CORE_LIST`;
+- verifies each worker result independently;
+- sums the per-process logical and declared software-I/O rates;
+- computes candidate process-sum scaling ratios relative to one worker;
+- preserves source/object/binary SHA-256 and per-worker raw outputs.
+
+Default CPU list:
+
+```text
+0,1,2,3,4,5,6,7
+```
+
+It can be overridden without changing the leaf:
+
+```sh
+RAFAELIA_BENCH_CORE_LIST=0,2,4,6,1,3,5,7 \
+  bash tools/arm32-neon4096-multicore-bench.sh
+```
+
+The v1 multicore launcher starts background processes in close succession but
+does not provide a hardware-synchronized start barrier. Therefore its scaling
+field is deliberately typed as:
+
+```text
+process_sum_scaling=OBSERVED_CANDIDATE_ONLY
+eight_core_scaling_claim=TOKEN_VAZIO_SYNCHRONIZED_WALL_MEASUREMENT_REQUIRED
+```
+
+This lets the 8-core behavior be explored immediately without promoting a
+process-sum approximation into a universal throughput claim.
 
 ## Evidence required for promotion
 
@@ -154,9 +213,9 @@ For cache-miss claims, add a provider/kernel-exposed hardware counter source and
 record counter availability and permissions. Do not infer cache-miss rate from
 wall-clock time.
 
-For eight-core scaling, a separate synchronized multi-worker measurement is
-required. This v1 adapter intentionally does not create threads or move
-scheduler policy into the leaf.
+For final eight-core scaling, add a synchronized start/wall-time protocol and
+repeat the 1/2/4/8 waves under equivalent thermal and governor conditions. The
+current external `taskset` process-sum result is a candidate observation only.
 
 ## Structural CI gate
 
@@ -166,9 +225,10 @@ CI runs:
 bash .github/scripts/rafaelia/arm32-neon4096-physical-bench-adapter-gate.sh
 ```
 
-That gate verifies static-buffer/no-allocation source properties, compiles the
-hosted adapter as an object, checks the physical runner flags, and reuses the
-canonical strict-leaf gate.
+That gate verifies static-buffer/no-allocation source properties, compiles both
+the full and worker-specialized hosted adapters as objects, checks the physical
+runner and multicore orchestration contracts, and reuses the canonical
+strict-leaf gate.
 
 CI success means the **measurement apparatus is structurally ready**. It does
 not mean a physical ARM32 benchmark has occurred.
