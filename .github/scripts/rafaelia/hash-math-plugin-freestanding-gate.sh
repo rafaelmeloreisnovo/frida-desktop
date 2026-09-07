@@ -32,6 +32,16 @@ if grep -Eiq '^[[:space:]]*(bl|blx|blr|call|push|pop)[[:space:]]' "$ARM32" "$ARM
   failures=$((failures + 1))
 fi
 
+# ARMv7 sidecar geometry is intentionally identical to the strict NEON4096 page cadence:
+# 16 fixed iterations x 256 bytes = 4096 bytes, with prefetch points every 128 bytes.
+test "$(grep -Ec '^[[:space:]]*mov[[:space:]]+r12,[[:space:]]*#16[[:space:]]*$' "$ARM32")" -eq 1 || failures=$((failures + 1))
+test "$(grep -Ec '^[[:space:]]*bne[[:space:]]+1b[[:space:]]*$' "$ARM32")" -eq 1 || failures=$((failures + 1))
+test "$(grep -Ec '^[[:space:]]*\.rept[[:space:]]+4[[:space:]]*$' "$ARM32")" -eq 2 || failures=$((failures + 1))
+if grep -Eq '^[[:space:]]*mov[[:space:]]+r12,[[:space:]]*#32[[:space:]]*$' "$ARM32"; then
+  echo 'legacy ARMv7 32-iteration sidecar geometry found' >&2
+  failures=$((failures + 1))
+fi
+
 TARGETS=(
   armv7a-none-eabi
   aarch64-none-elf
@@ -150,7 +160,7 @@ fi
 
 cat > "$EVIDENCE/receipt.json" <<EOF_JSON
 {
-  "schema": "rafaelia.frida.hash-math-plugin.freestanding.receipt.v1",
+  "schema": "rafaelia.frida.hash-math-plugin.freestanding.receipt.v2",
   "plugin_kind": "sidecar_transform_not_a_hash_redefinition",
   "portable_targets_requested": 10,
   "portable_targets_structurally_passed": $passed,
@@ -161,6 +171,10 @@ cat > "$EVIDENCE/receipt.json" <<EOF_JSON
   "source_streams": 3,
   "arm32_physical_vector_bits": 128,
   "arm32_u8_lanes_per_vector": 16,
+  "arm32_bytes_per_fixed_loop_iteration": 256,
+  "arm32_fixed_loop_iterations_per_page": 16,
+  "arm32_prefetch_cadence_bytes": 128,
+  "arm32_loop_control_iteration_reduction_vs_v1": "32_to_16",
   "aarch64_physical_vector_bits": 128,
   "aarch64_u8_lanes_per_vector": 16,
   "aarch64_software_stage_bytes": 32,
@@ -172,6 +186,7 @@ cat > "$EVIDENCE/receipt.json" <<EOF_JSON
   "throughput_ratio_vs_baseline": "TOKEN_VAZIO",
   "bandwidth_ratio_vs_baseline": "TOKEN_VAZIO",
   "three_x_throughput_claim": "TOKEN_VAZIO",
+  "eight_core_scaling": "TOKEN_VAZIO",
   "structural_failures": $failures,
   "claim_allowed": false
 }
