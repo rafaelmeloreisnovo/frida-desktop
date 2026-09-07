@@ -60,10 +60,18 @@ residency. Actual cache hit/miss behavior, memory bandwidth, and the best
 prefetch distance depend on the physical ARM32 SoC and therefore require device
 measurement.
 
-The current unroll factor is four 32-byte vector transfers per fixed loop body.
-This reduces loop-control frequency to one branch per 128 processed bytes while
-keeping the instruction footprint small enough to avoid replacing data-cache
-pressure with instruction-cache pressure.
+The fixed page kernel now executes two consecutive four-transfer groups per loop
+iteration. Each group advances 128 bytes and receives its own prefetch point, so
+prefetch cadence remains one hint window per 128 processed bytes while loop
+control is reduced from 32 to 16 iterations per 4096-byte page.
+
+Therefore the structural geometry is:
+
+`16 iterations x 256 bytes = 4096 bytes`
+
+This reduces only fixed loop-control overhead. It is not promoted as a physical
+throughput improvement until the exact object is benchmarked on the target
+ARM32 device.
 
 ## Three-stream parallelism
 
@@ -71,6 +79,10 @@ pressure with instruction-cache pressure.
 creates instruction-level independence and lets the ARM core overlap memory and
 NEON work where its pipeline permits it. It does **not** prove three times the
 physical throughput or memory bandwidth.
+
+The XOR result reuses the source registers (`q0`/`q1`) rather than allocating a
+separate result register set. This keeps the hot path register-local and avoids
+adding a shadow result route.
 
 For an eight-core target, page ranges may be statically partitioned by the
 caller across cores. Core scheduling/affinity is deliberately outside this
@@ -107,6 +119,13 @@ The gate emits `evidence/arm32-neon4096-freestanding/` containing ELF identity,
 symbol table, section table, undefined-symbol report, SHA-256 identities and a
 machine-readable receipt.
 
+The v2 receipt additionally binds the fixed page geometry:
+
+- `bytes_per_fixed_loop_iteration = 256`
+- `fixed_loop_iterations_per_page = 16`
+- `prefetch_cadence_bytes = 128`
+- `loop_control_iteration_reduction_vs_v1 = 32_to_16`
+
 A structural PASS proves only the object-level contract. It does not prove
 physical performance.
 
@@ -119,6 +138,8 @@ remain explicitly open:
 - `cache_miss_rate = TOKEN_VAZIO`
 - `throughput_ratio_vs_baseline = TOKEN_VAZIO`
 - `bandwidth_ratio_vs_baseline = TOKEN_VAZIO`
+- `three_x_throughput_claim = TOKEN_VAZIO`
+- `eight_core_scaling = TOKEN_VAZIO`
 - `claim_allowed = false`
 
 Promotion requires device evidence with the exact object SHA-256, CPU identity,
