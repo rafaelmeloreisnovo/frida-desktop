@@ -21,7 +21,7 @@ command -v sha256sum >/dev/null || exit 2
 
 failures=0
 
-forbidden='malloc|calloc|realloc|free|memcpy|memset|memcmp|open|read|close|sysconf|pthread|stdatomic|thread_local|__thread'
+forbidden='(^|[^A-Za-z0-9_])(malloc|calloc|realloc|free|memcpy|memset|memcmp|open|read|close|sysconf|pthread|stdatomic|thread_local|__thread)([^A-Za-z0-9_]|$)'
 if grep -Eiq "$forbidden" "$SRC" "$HDR" "$ARM32" "$ARM64"; then
   echo 'forbidden hosted dependency token found' >&2
   failures=$((failures + 1))
