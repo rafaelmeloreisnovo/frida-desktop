@@ -52,16 +52,22 @@ leaf and compares every byte. Timing is aborted unless correctness is `PASS`.
 
 ## Compile-time worker specialization
 
-The same C source also has a compile-time-only worker mode:
+The same C source has compile-time-only worker modes:
 
 ```text
 -DRAFAELIA_BENCH_WORKER_ONLY=1
+-DRAFAELIA_BENCH_SYNC_WORKER=1
 ```
 
-That variant executes only the verified NEON `stream` measurement. There is no
-runtime algorithm selector in the hot loop. It exists so external process
-orchestration can measure 1/2/4/8 pinned workers without introducing pthreads,
-a scheduler API, or another dispatch layer into the benchmark C core.
+`WORKER_ONLY` executes only the verified NEON `stream` measurement. `SYNC_WORKER`
+adds a hosted post-warmup software barrier: the worker emits `ready=1`, flushes
+stdout, blocks in `getchar()`, and starts its timed interval only after the
+orchestrator releases it with one stdin byte.
+
+There is no runtime algorithm selector in the hot loop. These modes exist so
+external process orchestration can measure 1/2/4/8 pinned workers without
+introducing pthreads, a scheduler API, timing logic, or another dispatch layer
+into the strict freestanding leaf.
 
 ## No-heap measurement storage
 
@@ -92,6 +98,14 @@ For each kernel and condition the adapter reports:
 - a sampled output guard;
 - NEON/scalar time ratio for `warm` and `stream`.
 
+The multicore orchestrator additionally records, for each 1/2/4/8-worker wave:
+
+- the legacy per-process throughput sum for compatibility and candidate analysis;
+- minimum worker `start_ns` and maximum worker `end_ns` as one synchronized wall window;
+- wall logical GB/s computed from total page work divided by that wall window;
+- wall declared software-I/O GB/s;
+- worker start skew (`max(start_ns) - min(start_ns)`).
+
 The declared `3 read + 1 write` byte count is a software data-path accounting
 quantity only.
 
@@ -106,6 +120,7 @@ logical_GBps != physical_DRAM_bandwidth
 software_3read_1write_GBps != measured_memory_bus_GBps
 single_run_ratio != general_3x_claim
 process_sum_scaling != synchronized_wall_scaling
+synchronized_wall_observation != generalized_device_claim
 ```
 
 The benchmark keeps these explicit boundaries:
@@ -113,7 +128,7 @@ The benchmark keeps these explicit boundaries:
 ```text
 cache_miss_rate=TOKEN_VAZIO
 physical_dram_bandwidth=TOKEN_VAZIO
-eight_core_scaling=TOKEN_VAZIO
+generalized_eight_core_scaling_claim=TOKEN_VAZIO_REPEATED_DEVICE_SERIES_REQUIRED
 claim_allowed=false
 ```
 
@@ -147,7 +162,7 @@ RAFAELIA_BENCH_CPU=3 bash tools/arm32-neon4096-physical-bench.sh
 If `taskset` is unavailable, the run is allowed for exploratory measurement but
 its affinity remains `TOKEN_VAZIO` in the receipt.
 
-## 1/2/4/8-core process-sum experiment
+## 1/2/4/8-core synchronized wall experiment
 
 For an ARM32 device exposing at least eight CPUs and `taskset`:
 
@@ -157,13 +172,17 @@ bash tools/arm32-neon4096-multicore-bench.sh
 
 The multicore runner:
 
-- compiles the strict leaf once;
-- compiles the C adapter as `NEON_STREAM_ONLY` at compile time;
+- compiles the strict leaf once, unchanged;
+- compiles the C adapter as `NEON_STREAM_ONLY` plus synchronized-worker mode at compile time;
 - launches waves of 1, 2, 4 and 8 independent processes;
 - pins each worker to a distinct CPU from `RAFAELIA_BENCH_CORE_LIST`;
+- lets every worker complete correctness and warm-up before the timed interval;
+- waits until every worker in a wave has emitted `ready=1`;
+- releases the whole ready set through hosted FIFO/stdin channels;
 - verifies each worker result independently;
-- sums the per-process logical and declared software-I/O rates;
-- computes candidate process-sum scaling ratios relative to one worker;
+- preserves the prior per-process sum as candidate evidence;
+- computes synchronized wall throughput from `max(end_ns) - min(start_ns)`;
+- records start skew for auditability;
 - preserves source/object/binary SHA-256 and per-worker raw outputs.
 
 Default CPU list:
@@ -179,17 +198,33 @@ RAFAELIA_BENCH_CORE_LIST=0,2,4,6,1,3,5,7 \
   bash tools/arm32-neon4096-multicore-bench.sh
 ```
 
-The v1 multicore launcher starts background processes in close succession but
-does not provide a hardware-synchronized start barrier. Therefore its scaling
-field is deliberately typed as:
+The prior compatibility artifact remains:
 
 ```text
-process_sum_scaling=OBSERVED_CANDIDATE_ONLY
-eight_core_scaling_claim=TOKEN_VAZIO_SYNCHRONIZED_WALL_MEASUREMENT_REQUIRED
+evidence/arm32-neon4096-multicore-bench/process-sum.tsv
+evidence/arm32-neon4096-multicore-bench/receipt.json
 ```
 
-This lets the 8-core behavior be explored immediately without promoting a
-process-sum approximation into a universal throughput claim.
+and is still typed as candidate process-sum evidence. The stronger synchronized
+surface is additive:
+
+```text
+evidence/arm32-neon4096-multicore-bench/synchronized-wall.tsv
+evidence/arm32-neon4096-multicore-bench/synchronized-wall-receipt.json
+```
+
+The synchronized receipt may contain a measured 1/2/4/8 wall-scaling observation
+for that exact binary/device/run. It deliberately keeps generalized performance
+promotion disabled:
+
+```text
+generalized_eight_core_scaling_claim=TOKEN_VAZIO_REPEATED_DEVICE_SERIES_REQUIRED
+three_x_throughput_general_claim=NOT_PROMOTED
+claim_allowed=false
+```
+
+This preserves the distinction between one physical observation and a stable
+claim across devices, thermal states, governors or repeated series.
 
 ## Evidence required for promotion
 
@@ -207,15 +242,17 @@ For a performance claim, preserve at minimum:
 - repeated samples;
 - scalar and NEON values from the same revision;
 - thermal state or at least run-order/randomization notes;
-- correctness result.
+- correctness result;
+- synchronized wall interval and start skew for multicore runs.
 
 For cache-miss claims, add a provider/kernel-exposed hardware counter source and
 record counter availability and permissions. Do not infer cache-miss rate from
 wall-clock time.
 
-For final eight-core scaling, add a synchronized start/wall-time protocol and
-repeat the 1/2/4/8 waves under equivalent thermal and governor conditions. The
-current external `taskset` process-sum result is a candidate observation only.
+For generalized eight-core scaling, repeat the synchronized 1/2/4/8 waves under
+equivalent thermal and governor conditions and retain the complete series. Until
+that exists, the synchronized wall value is an observation, not a promoted
+cross-run claim.
 
 ## Structural CI gate
 
@@ -225,10 +262,10 @@ CI runs:
 bash .github/scripts/rafaelia/arm32-neon4096-physical-bench-adapter-gate.sh
 ```
 
-That gate verifies static-buffer/no-allocation source properties, compiles both
-the full and worker-specialized hosted adapters as objects, checks the physical
-runner and multicore orchestration contracts, and reuses the canonical
-strict-leaf gate.
+That gate verifies static-buffer/no-allocation source properties, compiles the
+full adapter, the worker specialization and the synchronized-worker
+specialization as hosted objects, checks the physical runner and multicore
+orchestration contracts, and reuses the canonical strict-leaf gate.
 
 CI success means the **measurement apparatus is structurally ready**. It does
 not mean a physical ARM32 benchmark has occurred.
