@@ -106,8 +106,25 @@ vector ALU operation. The implementation works over three independent streams,
 prefetches each stream 256 bytes ahead using `pld`, and processes a fixed
 4096-byte page.
 
-The loop is fixed-count and data-independent. The only conditional branch in
-the leaf is loop control.
+The ARM32 sidecar is now structurally aligned with the strict NEON4096 leaf:
+
+```text
+16 fixed loop iterations x 256 bytes = 4096 bytes
+prefetch point every 128 processed bytes
+3 independent source streams
+1 caller-provided output stream
+```
+
+Each 256-byte loop iteration is composed from two consecutive 128-byte vector
+groups. The second group receives a new prefetch point, preserving the existing
+128-byte prefetch cadence while halving loop-control executions from 32 to 16
+per page. This is a structural control-flow reduction, not a measured throughput
+claim.
+
+The XOR result is accumulated directly into the registers that initially hold
+the first source stream (`q0`/`q1`). No separate shadow-result register path is
+introduced. The loop is fixed-count and data-independent; the only conditional
+branch in the leaf is loop control.
 
 ## AArch64 hot path
 
@@ -206,6 +223,13 @@ including:
 - SHA-256 identities
 - `receipt.json`
 
+Receipt v2 also binds the ARM32 geometry:
+
+- `arm32_bytes_per_fixed_loop_iteration = 256`
+- `arm32_fixed_loop_iterations_per_page = 16`
+- `arm32_prefetch_cadence_bytes = 128`
+- `arm32_loop_control_iteration_reduction_vs_v1 = 32_to_16`
+
 ## Cache and buffer contract
 
 The specialized Arm leaves use prefetch hints and caller-owned buffers. The
@@ -221,6 +245,11 @@ cache hit. The code therefore does not claim deterministic cache residency.
 The three-stream layout creates independent memory/vector work that may improve
 instruction-level overlap. It does not prove three times the throughput or
 bandwidth.
+
+For an eight-core ARM32 target, static page partitioning belongs to the external
+measurement/orchestration layer. CPU affinity, scheduling and thread creation do
+not belong inside this freestanding leaf, because introducing them would violate
+the zero-runtime-dependency boundary.
 
 ## Open physical gates
 
