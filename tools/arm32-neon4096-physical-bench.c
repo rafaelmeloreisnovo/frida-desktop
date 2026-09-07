@@ -26,6 +26,14 @@
 #define RAFAELIA_BENCH_WORKER_ONLY 0
 #endif
 
+#ifndef RAFAELIA_BENCH_SYNC_WORKER
+#define RAFAELIA_BENCH_SYNC_WORKER 0
+#endif
+
+#if RAFAELIA_BENCH_SYNC_WORKER && !RAFAELIA_BENCH_WORKER_ONLY
+#error RAFAELIA_BENCH_SYNC_WORKER requires RAFAELIA_BENCH_WORKER_ONLY=1
+#endif
+
 #if (RAFAELIA_BENCH_PAGES & (RAFAELIA_BENCH_PAGES - 1u)) != 0
 #error RAFAELIA_BENCH_PAGES must be a power of two
 #endif
@@ -215,6 +223,17 @@ main(void)
     puts("correctness=FAIL");
     return 2;
   }
+
+#if RAFAELIA_BENCH_SYNC_WORKER
+  puts("ready=1");
+  if (fflush(stdout) != 0)
+    return 4;
+  if (getchar() == EOF) {
+    puts("barrier=FAIL_EOF");
+    return 5;
+  }
+  puts("barrier=STDIN_BYTE_RELEASE");
+#endif
 
   ns = rfs_stream(rafaelia_neon4096_xor3_4096_armv7, RAFAELIA_BENCH_ROUNDS);
   if (ns == 0) {
