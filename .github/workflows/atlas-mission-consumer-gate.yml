@@ -1,0 +1,31 @@
+name: ATLAS mission consumer gate
+
+on:
+  pull_request:
+    paths:
+      - 'docs/contracts/frida_atlas_mission_execution_consumer.v1.json'
+      - 'tools/validate_frida_atlas_mission_binding.py'
+      - '.github/workflows/atlas-mission-consumer-gate.yml'
+  push:
+    branches:
+      - main
+    paths:
+      - 'docs/contracts/frida_atlas_mission_execution_consumer.v1.json'
+      - 'tools/validate_frida_atlas_mission_binding.py'
+      - '.github/workflows/atlas-mission-consumer-gate.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate-source-boundary:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Validate Frida ATLAS mission binding
+        run: python3 tools/validate_frida_atlas_mission_binding.py
