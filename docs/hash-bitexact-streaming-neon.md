@@ -28,11 +28,11 @@ This is distinct from the byte transport kernel, where one 128-bit NEON operatio
 
 The code must not claim sixteen `u32` lanes in one 128-bit register. Sixteen independent SHA-256 states require four independent 128-bit vectors; the compiler may keep several such vectors in flight, but each individual 32-bit vector instruction still has four lanes.
 
-The NEON gate cross-compiles for ARMv7-A with `-march=armv7-a -mfpu=neon -mfloat-abi=softfp -ffreestanding -fno-builtin -fno-stack-protector -fno-unwind-tables -fno-asynchronous-unwind-tables`. The resulting object must have zero undefined symbols and its disassembly must contain NEON vector add/XOR/shift/OR operations.
+The NEON gate cross-compiles for ARMv7-A with `-march=armv7-a -mfpu=neon -mfloat-abi=softfp -ffreestanding -fno-builtin -fno-stack-protector -fno-unwind-tables -fno-asynchronous-unwind-tables`. The ARM32 object must have zero undefined symbols. In addition, Clang emits ARM assembly from the same source and exact target/O3 flags; that generated assembly must contain NEON vector add/XOR/shift/OR operations. This keeps the code-generation proof independent of runner-specific `llvm-objdump` executable names.
 
 ## Loop specialization
 
-`RAFAELIA_HASH_NEON4_FULL_UNROLL=0` is the default portable specialization. `RAFAELIA_HASH_NEON4_FULL_UNROLL=1` asks Clang to fully expand the fixed SHA-256 schedule/round loops. CI requires the ARM32 full-unroll probe to contain zero conditional loop branches and to remain semantically equivalent to the default path.
+`RAFAELIA_HASH_NEON4_FULL_UNROLL=0` is the default portable specialization. `RAFAELIA_HASH_NEON4_FULL_UNROLL=1` asks Clang to fully expand the fixed SHA-256 schedule/round loops. CI requires the generated ARM32 full-unroll assembly to contain zero conditional loop branches and to remain semantically equivalent to the default path.
 
 Full unroll is a structural candidate, not a speed claim. Larger instruction footprint may increase I-cache pressure, so physical promotion requires device measurement.
 
@@ -52,7 +52,7 @@ The strict math and transport leaves contain no scheduler or thread dependency. 
 
 ## Evidence boundary
 
-Structural/semantic gates may prove exact digest equivalence for tested inputs, zero production-header global symbols, zero undefined symbols in ARM32 probes, actual NEON instructions in the ARM32 object, four parallel SHA-256 `u32` lanes per 128-bit vector, sixteen parallel transport `u8` lanes per 128-bit vector, and zero conditional loop branches in the full-unroll probe.
+Structural/semantic gates may prove exact digest equivalence for tested inputs, zero production-header global symbols, zero undefined symbols in ARM32 probes, actual NEON code generation under the exact ARM32 target flags, four parallel SHA-256 `u32` lanes per 128-bit vector, sixteen parallel transport `u8` lanes per 128-bit vector, and zero conditional loop branches in the full-unroll code-generation probe.
 
 They do not prove physical cache behavior or a performance ratio. Until an exact-object physical device run binds object SHA, CPU identity, clock/governor, alignment, warm/cold protocol and repeated samples, physical ARM32 execution of the new hash specialization, cache miss rate, throughput ratio, physical DRAM bandwidth ratio, generalized 3x throughput/bandwidth and synchronized eight-core wall scaling remain `TOKEN_VAZIO`.
 
