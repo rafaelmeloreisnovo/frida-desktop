@@ -9,6 +9,7 @@ import android.content.pm.ApplicationInfo;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.Process;
+import android.text.InputType;
 import android.util.Log;
 import android.view.View;
 import android.widget.AdapterView;
@@ -16,6 +17,7 @@ import android.widget.ArrayAdapter;
 import android.widget.Button;
 import android.widget.CheckBox;
 import android.widget.CompoundButton;
+import android.widget.EditText;
 import android.widget.LinearLayout;
 import android.widget.ScrollView;
 import android.widget.Spinner;
@@ -25,12 +27,13 @@ import android.widget.Toast;
 import java.io.File;
 
 /**
- * RAFAELIA Frida Android Lab.
+ * RAFAELIA Frida Android Lab — one-screen operator console.
  *
- * Normal operator path:
- * Java/DEX -> JNI -> source-built ELF -> RFL/NEON4096.
- * Frida Gadget stays available for instrumentation, but metric collection does
- * not require ADB, a host PC, Frida REPL, or hand-written JavaScript.
+ * Normal control path:
+ *   MainActivity.java -> javac -> D8/DEX -> JNI -> source-built ELF -> RFL/NEON4096
+ *
+ * Frida Gadget stays available at localhost for instrumentation. Reading local
+ * metrics does not require ADB, a desktop host, Frida REPL, or hand-written JS.
  */
 public final class MainActivity extends Activity {
     private static final String TAG = "RAFAELIA-FridaLab";
@@ -62,6 +65,7 @@ public final class MainActivity extends Activity {
     private static native int nativeLearningResetVolatile();
     private static native String nativeLearningSnapshot(boolean verbose);
 
+    /** Existing direct Java/DEX -> JNI -> ELF observation bridge. */
     public static native int learningObserve(
             long contextHash,
             int candidateId,
@@ -70,7 +74,7 @@ public final class MainActivity extends Activity {
             long memoryDelta,
             long auxHash);
 
-    /** Read-only bridge for local/on-device Frida verification. */
+    /** Read-only bridge for optional Frida/on-device verification. */
     public static String learningSnapshotForInstrumentation(boolean verbose) {
         try {
             return nativeLearningSnapshot(verbose);
@@ -92,6 +96,7 @@ public final class MainActivity extends Activity {
 
     private TextView statusView;
     private TextView learningStatusView;
+    private TextView operatorResultView;
     private CheckBox advancedCheck;
     private CheckBox verboseCheck;
     private LinearLayout advancedPanel;
@@ -170,34 +175,101 @@ public final class MainActivity extends Activity {
         }
     }
 
-    private String buildOperatorReceipt() {
-        return OperatorReceipt.format(
-                probeStatus,
-                gadgetStatus,
-                safeLearningSnapshot(true),
-                learningStorePath,
-                modeName(learningMode),
-                isDebuggable());
+    private static String requiredField(String raw, String name) {
+        String value = raw == null ? "" : raw.trim();
+        if (value.length() == 0) {
+            throw new IllegalArgumentException(name + " é obrigatório");
+        }
+        return value;
+    }
+
+    private static long parseLongField(String raw, String name) {
+        String value = requiredField(raw, name);
+        try {
+            if (value.startsWith("0x") || value.startsWith("0X")) {
+                return Long.parseUnsignedLong(value.substring(2), 16);
+            }
+            return Long.parseLong(value, 10);
+        } catch (NumberFormatException e) {
+            throw new IllegalArgumentException(name + " inválido");
+        }
+    }
+
+    private static int parseUint32Field(String raw, String name) {
+        long value = parseLongField(raw, name);
+        if (value < 0L || value > 0xffffffffL) {
+            throw new IllegalArgumentException(name + " fora do intervalo uint32");
+        }
+        return (int)value;
+    }
+
+    private String diagnosticState(String snapshot) {
+        boolean probeOk = probeStatus != null && probeStatus.endsWith(": LOADED");
+        boolean gadgetOk = gadgetStatus != null && gadgetStatus.endsWith(": LOADED");
+        boolean learningOk = learningInitialized
+                && snapshot != null
+                && !snapshot.startsWith("Learning core: FAILED")
+                && !snapshot.startsWith("Learning runtime: ERROR");
+        boolean neonOk = snapshot != null
+                && snapshot.contains("observed OS page: 4096 B (MATCH_4096)")
+                && snapshot.contains("SIMD fold selftest: PASS");
+
+        if (!probeOk || !learningOk) return "FAIL";
+        if (!gadgetOk || !neonOk) return "DEGRADED";
+        return "PASS";
+    }
+
+    private String buildOperatorReceipt(String snapshot, String diagnosticState) {
+        StringBuilder out = new StringBuilder();
+        out.append("RAFAELIA_FRIDA_LAB_RECEIPT_V1\n");
+        out.append("diagnostic_state=").append(diagnosticState).append('\n');
+        out.append("pid=").append(Process.myPid()).append('\n');
+        out.append("package=").append(getPackageName()).append('\n');
+        out.append("sdk=").append(Build.VERSION.SDK_INT).append('\n');
+        out.append("android=").append(Build.VERSION.RELEASE).append('\n');
+        out.append("abi=").append(primaryAbi()).append('\n');
+        out.append("debuggable=").append(isDebuggable()).append('\n');
+        out.append("gadget_endpoint=").append(ENDPOINT).append('\n');
+        out.append("probe=").append(oneLine(probeStatus)).append('\n');
+        out.append("gadget=").append(oneLine(gadgetStatus)).append('\n');
+        out.append("learning_mode=").append(modeName(learningMode)).append('\n');
+        out.append("store=").append(
+                learningStorePath == null ? "TOKEN_VAZIO" : learningStorePath).append('\n');
+        out.append("automatic_active=DISABLED\n");
+        out.append("claim_allowed=false\n");
+        out.append("--- METRICS ---\n");
+        out.append(snapshot == null ? "TOKEN_VAZIO" : snapshot).append('\n');
+        return out.toString();
+    }
+
+    private static String oneLine(String value) {
+        return value == null
+                ? "TOKEN_VAZIO"
+                : value.replace('\n', ' ').replace('\r', ' ');
     }
 
     private String runFullDiagnostic() {
         renderStatus();
         renderLearningStatus();
-        lastOperatorReceipt = buildOperatorReceipt();
-        return "DIAGNÓSTICO LOCAL: PASS\n"
+        String snapshot = safeLearningSnapshot(true);
+        String state = diagnosticState(snapshot);
+        lastOperatorReceipt = buildOperatorReceipt(snapshot, state);
+        return "DIAGNÓSTICO LOCAL: " + state + "\n"
                 + "DEX → JNI → ELF → RFL/NEON4096\n"
                 + gateText() + "\n\n"
                 + lastOperatorReceipt;
     }
 
     private String copyMetrics() {
-        lastOperatorReceipt = buildOperatorReceipt();
+        String snapshot = safeLearningSnapshot(true);
+        String state = diagnosticState(snapshot);
+        lastOperatorReceipt = buildOperatorReceipt(snapshot, state);
         ClipboardManager clipboard =
                 (ClipboardManager) getSystemService(Context.CLIPBOARD_SERVICE);
         clipboard.setPrimaryClip(ClipData.newPlainText(
                 "RAFAELIA Frida Lab metrics", lastOperatorReceipt));
         Toast.makeText(this, "Métricas copiadas", Toast.LENGTH_SHORT).show();
-        return "MÉTRICAS COPIADAS: PASS\n" + gateText();
+        return "MÉTRICAS COPIADAS: " + state + "\n" + gateText();
     }
 
     private String recordRealObservation(String contextHashRaw,
@@ -210,16 +282,16 @@ public final class MainActivity extends Activity {
             return "OBSERVAÇÃO: FAIL — Learning core não inicializado";
         }
         if (learningMode == LEARNING_OFF || learningMode == LEARNING_FROZEN) {
-            return "OBSERVAÇÃO: BLOQUEADA — escolha um modo que aceite observações.";
+            return "OBSERVAÇÃO: BLOQUEADA — abra Controles avançados e escolha um modo que aceite observações.";
         }
 
         try {
-            long contextHash = MobileNumberParser.signedLong(contextHashRaw, "contextHash");
-            int candidateId = MobileNumberParser.uint32(candidateIdRaw, "candidateId");
-            int eventType = MobileNumberParser.uint32(eventTypeRaw, "eventType");
-            long costNs = MobileNumberParser.signedLong(costNsRaw, "costNs");
-            long memoryDelta = MobileNumberParser.signedLong(memoryDeltaRaw, "memoryDelta");
-            long auxHash = MobileNumberParser.signedLong(auxHashRaw, "auxHash");
+            long contextHash = parseLongField(contextHashRaw, "contextHash");
+            int candidateId = parseUint32Field(candidateIdRaw, "candidateId");
+            int eventType = parseUint32Field(eventTypeRaw, "eventType");
+            long costNs = parseLongField(costNsRaw, "costNs");
+            long memoryDelta = parseLongField(memoryDeltaRaw, "memoryDelta");
+            long auxHash = parseLongField(auxHashRaw, "auxHash");
             if (costNs < 0L) {
                 return "OBSERVAÇÃO: REJEITADA — costNs não pode ser negativo. RFL inalterado.";
             }
@@ -228,7 +300,6 @@ public final class MainActivity extends Activity {
                     contextHash, candidateId, eventType, costNs, memoryDelta, auxHash);
             renderLearningStatus();
             if (rc == 0) {
-                lastOperatorReceipt = buildOperatorReceipt();
                 return "OBSERVAÇÃO: PASS — DEX → JNI → ELF → RFL\n" + gateText();
             }
             return "OBSERVAÇÃO: FAIL — rc=" + rc + "\n" + gateText();
@@ -236,6 +307,77 @@ public final class MainActivity extends Activity {
             return "OBSERVAÇÃO: REJEITADA — " + formatError(t)
                     + "\nEntrada inválida não foi encaminhada ao RFL.";
         }
+    }
+
+    private View buildOperatorPanel() {
+        LinearLayout panel = new LinearLayout(this);
+        panel.setOrientation(LinearLayout.VERTICAL);
+
+        TextView title = new TextView(this);
+        title.setText("Painel rápido — DEX → JNI → ELF");
+        title.setTextSize(18.0f);
+        panel.addView(title);
+
+        TextView help = new TextView(this);
+        help.setText("Uso normal: toque em Diagnóstico completo. As métricas aparecem aqui. Copiar métricas gera um receipt em um toque.");
+        panel.addView(help);
+
+        operatorResultView = new TextView(this);
+        operatorResultView.setTextIsSelectable(true);
+        operatorResultView.setText("Pronto para diagnosticar.");
+        panel.addView(operatorResultView);
+
+        panel.addView(button("Executar diagnóstico completo", new View.OnClickListener() {
+            @Override public void onClick(View v) {
+                operatorResultView.setText(runFullDiagnostic());
+            }
+        }));
+
+        panel.addView(button("Copiar métricas", new View.OnClickListener() {
+            @Override public void onClick(View v) {
+                operatorResultView.setText(copyMetrics());
+            }
+        }));
+
+        TextView observationTitle = new TextView(this);
+        observationTitle.setText("Observação real — opcional");
+        observationTitle.setTextSize(16.0f);
+        panel.addView(observationTitle);
+
+        TextView observationHelp = new TextView(this);
+        observationHelp.setText(
+                "Uma linha: contextHash, candidateId, eventType, costNs, memoryDelta, auxHash. "
+                        + "Decimal ou 0x para hashes. Nada é preenchido automaticamente.");
+        panel.addView(observationHelp);
+
+        final EditText observation = new EditText(this);
+        observation.setHint("0xcontext, candidate, event, costNs, memoryDelta, 0xaux");
+        observation.setSingleLine(true);
+        observation.setInputType(
+                InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS);
+        panel.addView(observation);
+
+        panel.addView(button("Registrar observação real", new View.OnClickListener() {
+            @Override public void onClick(View v) {
+                String[] fields = observation.getText().toString().split(",", -1);
+                if (fields.length != 6) {
+                    operatorResultView.setText(
+                            "OBSERVAÇÃO: REJEITADA — use exatamente 6 campos separados por vírgula. RFL inalterado.");
+                    return;
+                }
+                operatorResultView.setText(recordRealObservation(
+                        fields[0].trim(), fields[1].trim(), fields[2].trim(),
+                        fields[3].trim(), fields[4].trim(), fields[5].trim()));
+            }
+        }));
+
+        TextView safety = new TextView(this);
+        safety.setText(
+                "Fail-safe: sem dado sintético; entrada inválida não toca no RFL; "
+                        + "OFF/FROZEN bloqueiam gravação; ACTIVE automático segue DISABLED.");
+        panel.addView(safety);
+
+        return panel;
     }
 
     private void renderLearningStatus() {
@@ -421,26 +563,7 @@ public final class MainActivity extends Activity {
         statusView.setTextIsSelectable(true);
         root.addView(statusView);
 
-        root.addView(OperatorPanel.build(this, new OperatorPanel.Actions() {
-            @Override public String runFullDiagnostic() {
-                return MainActivity.this.runFullDiagnostic();
-            }
-
-            @Override public String copyMetrics() {
-                return MainActivity.this.copyMetrics();
-            }
-
-            @Override public String recordObservation(String contextHash,
-                                                      String candidateId,
-                                                      String eventType,
-                                                      String costNs,
-                                                      String memoryDelta,
-                                                      String auxHash) {
-                return recordRealObservation(
-                        contextHash, candidateId, eventType,
-                        costNs, memoryDelta, auxHash);
-            }
-        }));
+        root.addView(buildOperatorPanel());
 
         learningStatusView = new TextView(this);
         learningStatusView.setTextSize(14.0f);
