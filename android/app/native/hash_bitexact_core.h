@@ -37,11 +37,17 @@ RAFAELIA_FORCE_INLINE rafaelia_u64 rafaelia_rotr64(rafaelia_u64 x, unsigned int 
 
 RAFAELIA_FORCE_INLINE rafaelia_u32 rafaelia_load32_le(const void *p0) { const rafaelia_u8 *p=(const rafaelia_u8*)p0; return ((rafaelia_u32)p[0])|((rafaelia_u32)p[1]<<8)|((rafaelia_u32)p[2]<<16)|((rafaelia_u32)p[3]<<24); }
 RAFAELIA_FORCE_INLINE rafaelia_u32 rafaelia_load32_be(const void *p0) { const rafaelia_u8 *p=(const rafaelia_u8*)p0; return ((rafaelia_u32)p[0]<<24)|((rafaelia_u32)p[1]<<16)|((rafaelia_u32)p[2]<<8)|((rafaelia_u32)p[3]); }
+RAFAELIA_FORCE_INLINE rafaelia_u64 rafaelia_load64_be(const void *p0) { const rafaelia_u8 *p=(const rafaelia_u8*)p0; return ((rafaelia_u64)p[0]<<56)|((rafaelia_u64)p[1]<<48)|((rafaelia_u64)p[2]<<40)|((rafaelia_u64)p[3]<<32)|((rafaelia_u64)p[4]<<24)|((rafaelia_u64)p[5]<<16)|((rafaelia_u64)p[6]<<8)|((rafaelia_u64)p[7]); }
 RAFAELIA_FORCE_INLINE void rafaelia_store32_le(void *p0, rafaelia_u32 x) { rafaelia_u8 *p=(rafaelia_u8*)p0; p[0]=(rafaelia_u8)x; p[1]=(rafaelia_u8)(x>>8); p[2]=(rafaelia_u8)(x>>16); p[3]=(rafaelia_u8)(x>>24); }
 RAFAELIA_FORCE_INLINE void rafaelia_store32_be(void *p0, rafaelia_u32 x) { rafaelia_u8 *p=(rafaelia_u8*)p0; p[0]=(rafaelia_u8)(x>>24); p[1]=(rafaelia_u8)(x>>16); p[2]=(rafaelia_u8)(x>>8); p[3]=(rafaelia_u8)x; }
+RAFAELIA_FORCE_INLINE void rafaelia_store64_le(void *p0, rafaelia_u64 x) { rafaelia_u8 *p=(rafaelia_u8*)p0; unsigned int i; for (i=0;i<8u;i++) p[i]=(rafaelia_u8)(x>>(8u*i)); }
+RAFAELIA_FORCE_INLINE void rafaelia_store64_be(void *p0, rafaelia_u64 x) { rafaelia_u8 *p=(rafaelia_u8*)p0; unsigned int i; for (i=0;i<8u;i++) p[i]=(rafaelia_u8)(x>>(56u-(8u*i))); }
 
 #define RAFAELIA_ADD32_3(a,b,c) rafaelia_add32(rafaelia_add32((a),(b)),(c))
 #define RAFAELIA_ADD32_4(a,b,c,d) rafaelia_add32(RAFAELIA_ADD32_3((a),(b),(c)),(d))
 #define RAFAELIA_ADD32_5(a,b,c,d,e) rafaelia_add32(RAFAELIA_ADD32_4((a),(b),(c),(d)),(e))
+#define RAFAELIA_ADD64_3(a,b,c) rafaelia_add64(rafaelia_add64((a),(b)),(c))
+#define RAFAELIA_ADD64_4(a,b,c,d) rafaelia_add64(RAFAELIA_ADD64_3((a),(b),(c)),(d))
+#define RAFAELIA_ADD64_5(a,b,c,d,e) rafaelia_add64(RAFAELIA_ADD64_4((a),(b),(c),(d)),(e))
 
 #endif
