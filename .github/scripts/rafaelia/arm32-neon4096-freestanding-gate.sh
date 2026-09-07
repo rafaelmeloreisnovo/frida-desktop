@@ -52,6 +52,15 @@ if grep -Eiq '^[[:space:]]*(bl|blx|push|pop)[[:space:]]' "$SRC"; then
   exit 1
 fi
 
+# Fixed geometry: each entry point executes 16 loop iterations x 256 bytes = 4096 bytes.
+test "$(grep -Ec '^[[:space:]]*mov[[:space:]]+r12,[[:space:]]*#16[[:space:]]*$' "$SRC")" -eq 2
+test "$(grep -Ec '^[[:space:]]*bne[[:space:]]+[12]b[[:space:]]*$' "$SRC")" -eq 2
+test "$(grep -Ec '^[[:space:]]*\.rept[[:space:]]+4[[:space:]]*$' "$SRC")" -eq 4
+if grep -Eq '^[[:space:]]*mov[[:space:]]+r12,[[:space:]]*#32[[:space:]]*$' "$SRC"; then
+  echo 'legacy 32-iteration loop geometry found' >&2
+  exit 1
+fi
+
 grep -q 'RAFAELIA_NEON4096_FS_PAGE_BYTES 4096u' "$HDR"
 grep -q 'RAFAELIA_NEON4096_FS_VECTOR_BITS 128u' "$HDR"
 grep -q 'RAFAELIA_NEON4096_FS_U8_LANES 16u' "$HDR"
@@ -60,7 +69,7 @@ grep -q 'RAFAELIA_NEON4096_FS_STREAMS 3u' "$HDR"
 
 cat > "$EVIDENCE/receipt.json" <<EOF_JSON
 {
-  "schema": "rafaelia.frida.arm32-neon4096-freestanding.receipt.v1",
+  "schema": "rafaelia.frida.arm32-neon4096-freestanding.receipt.v2",
   "source_contract": "PASS",
   "elf32_arm": "PASS",
   "undefined_symbols": 0,
@@ -75,12 +84,18 @@ cat > "$EVIDENCE/receipt.json" <<EOF_JSON
   "u8_lanes_per_vector": 16,
   "vectors_per_page": 256,
   "independent_source_streams": 3,
+  "bytes_per_fixed_loop_iteration": 256,
+  "fixed_loop_iterations_per_page": 16,
+  "prefetch_cadence_bytes": 128,
+  "loop_control_iteration_reduction_vs_v1": "32_to_16",
   "data_path_branchless": true,
   "fixed_loop_control_branch": true,
   "physical_arm32_execution": "TOKEN_VAZIO",
   "cache_miss_rate": "TOKEN_VAZIO",
   "throughput_ratio_vs_baseline": "TOKEN_VAZIO",
   "bandwidth_ratio_vs_baseline": "TOKEN_VAZIO",
+  "three_x_throughput_claim": "TOKEN_VAZIO",
+  "eight_core_scaling": "TOKEN_VAZIO",
   "claim_allowed": false
 }
 EOF_JSON
