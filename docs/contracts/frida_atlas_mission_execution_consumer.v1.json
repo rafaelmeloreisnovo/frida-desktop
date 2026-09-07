@@ -1,0 +1,110 @@
+{
+  "schema": "rafaelia.frida.atlas_mission_execution_consumer/v1",
+  "binding_id": "FRIDA-ATLAS-MISSION-EXECUTION-CONSUMER-20260907-V1",
+  "date": "2026-09-07",
+  "state": "IMPLEMENTED_PENDING_GATE",
+  "claim_allowed": false,
+  "source_first": true,
+  "consumer": {
+    "repository": "rafaelmeloreisnovo/frida-desktop",
+    "branch_baseline": "main",
+    "baseline_commit": "2626f4a85b108ff5e237ef477287d8e7b8076aa1",
+    "role": "BOUNDED_EXECUTION_PRODUCER_CONSUMER",
+    "mission_authority": false,
+    "orchestration_authority": false,
+    "model_weight_training_authority": false
+  },
+  "authority_sources": {
+    "routing": {
+      "repository": "rafaelmeloreisnovo/Mapa",
+      "merge_commit": "ca3dd279e0772a9c740834ccad20f8d316400611",
+      "path": "indices/ATLAS_X_MISSION_EXECUTION_CURRENT_V1.json",
+      "route_id": "ATLAS:X-MISSION-EXECUTION-BOUNDARY-20260906"
+    },
+    "orchestration": {
+      "repository": "rafaelmeloreisnovo/termux-app-rafacodephi",
+      "merge_commit": "db95f0a64b1d28d1d50b70ab44bc2571fabef29d",
+      "path": "docs/contracts/mission_execution_boundary.v1.json",
+      "contract_id": "RAFAELIA-MISSION-EXECUTION-BOUNDARY-V1"
+    },
+    "protected_mission_semantics": {
+      "repository": "rafaelmeloreisnovo/Rafaelia_Private",
+      "merge_commit": "e7fe94f1394df54b0c62a1bf0bf7bb753c7e78d4",
+      "path": "docs/audit/MISSION_COHESION_SUCCESSOR_RECEIPT_20260907.v1.json",
+      "receipt_id": "MISSION-COHESION-SUCCESSOR-20260907-V1"
+    }
+  },
+  "required_invariants": [
+    "DATASET_INFORMS!=MISSION_AUTHORITY",
+    "MODEL_PROPOSAL!=EXECUTION_PERMISSION",
+    "RETRIEVAL_CONTEXT!=WEIGHT_UPDATE",
+    "LEARN_APPEND_ONLY!=ONLINE_SELF_TRAINING",
+    "CONTINUE_APPROVED_SCOPE!=AUTONOMOUS_GOAL_CREATION",
+    "SOURCE!=DERIVED_INDEX!=EXECUTION!=EVIDENCE!=CLAIM",
+    "TOKEN_VAZIO!=0",
+    "EXTERNAL_AUTHORITY_REQUIREMENT!=ORCHESTRATOR_PERMISSION",
+    "GREEN_GATE_PROMOTES_ONLY_MEASURED_SCOPE"
+  ],
+  "route_binding": [
+    "MISSION",
+    "ATLAS:X",
+    "NOVO:X",
+    "L:X",
+    "O:X",
+    "T:X",
+    "REL:X",
+    "EVID:X",
+    "GAP:X",
+    "AtlasLLMContextEnvelope",
+    "ContextBundle",
+    "IntentIR",
+    "Governance",
+    "ExecutionPlan",
+    "AuthorizedAction",
+    "FridaBoundedExecutionProducer",
+    "ExecutionResult",
+    "ProvenanceReceipt",
+    "LEARN:X"
+  ],
+  "producer_contract": {
+    "accepts_only": "AuthorizedAction",
+    "may_execute_bounded_frida_action": true,
+    "may_create_mission": false,
+    "may_expand_scope_without_authority": false,
+    "may_treat_dataset_as_permission": false,
+    "may_treat_model_output_as_permission": false,
+    "may_train_or_finetune_weights": false,
+    "may_promote_unmeasured_runtime_claim": false,
+    "must_emit_execution_result": true,
+    "must_emit_provenance_receipt": true,
+    "must_preserve_token_vazio": true
+  },
+  "local_evidence_surfaces": [
+    ".github/workflows/android17-apk-elf-dex.yml",
+    ".github/workflows/rafaelia-provenance-gate.yml",
+    ".github/workflows/arm32-neon4096-freestanding.yml"
+  ],
+  "runtime_gates": {
+    "physical_android_termux_execution": "TOKEN_VAZIO_DEVICE",
+    "exact_multi_repository_runtime_execution": "TOKEN_VAZIO_EXECUTION",
+    "remote_network_identity": "TOKEN_VAZIO_RUNTIME",
+    "provider_or_legal_authorization": "TOKEN_VAZIO_EXTERNAL_AUTHORITY",
+    "model_weight_training_authorization": "TOKEN_VAZIO_SEPARATE_EXPLICIT_CONTRACT_REQUIRED"
+  },
+  "closure_rule": "Frida source/CI evidence may close only its measured producer scope; mission authority, external execution authority, physical-device evidence, provider authority and model-weight training remain separate gates.",
+  "F_ok": [
+    "Frida producer role is explicitly bound below AuthorizedAction",
+    "dataset/model/learning semantics do not grant Frida mission or execution authority",
+    "existing Frida source and CI remain usable as bounded evidence producers"
+  ],
+  "F_gap": [
+    "TOKEN_VAZIO_DEVICE",
+    "TOKEN_VAZIO_EXECUTION",
+    "TOKEN_VAZIO_EXTERNAL_AUTHORITY"
+  ],
+  "F_next": [
+    "run this binding validator in CI",
+    "append exact-head CI receipt",
+    "append physical-device receipt only after handset execution"
+  ]
+}
