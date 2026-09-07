@@ -1,0 +1,1 @@
+OperatorPanel is intended to be mounted directly inside MainActivity's existing ScrollView. It is not a second Activity and must not become a navigation hop. The backend implementation belongs in MainActivity so all actions stay on the existing JNI bridge and native ELF runtime.
