@@ -1,0 +1,60 @@
+name: Hash Math Plugin Freestanding Matrix
+
+on:
+  pull_request:
+    paths:
+      - "android/app/native/hash_math_plugin.h"
+      - "android/app/native/hash_math_plugin_scalar.c"
+      - "android/app/native/hash_math_plugin_armv7.S"
+      - "android/app/native/hash_math_plugin_aarch64.S"
+      - ".github/scripts/rafaelia/hash-math-plugin-freestanding-gate.sh"
+      - ".github/workflows/hash-math-plugin-freestanding.yml"
+      - "docs/hash-math-plugin-freestanding.md"
+      - "docs/freestanding-profile.md"
+  push:
+    branches:
+      - main
+    paths:
+      - "android/app/native/hash_math_plugin.h"
+      - "android/app/native/hash_math_plugin_scalar.c"
+      - "android/app/native/hash_math_plugin_armv7.S"
+      - "android/app/native/hash_math_plugin_aarch64.S"
+      - ".github/scripts/rafaelia/hash-math-plugin-freestanding-gate.sh"
+      - ".github/workflows/hash-math-plugin-freestanding.yml"
+      - "docs/hash-math-plugin-freestanding.md"
+      - "docs/freestanding-profile.md"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: hash-math-plugin-freestanding-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  structural-matrix:
+    name: 10-target + ARM SIMD object gate
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+
+      - name: Compile and audit plugin objects
+        run: bash .github/scripts/rafaelia/hash-math-plugin-freestanding-gate.sh
+
+      - name: Upload structural evidence
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: hash-math-plugin-freestanding-${{ github.run_id }}
+          path: evidence/hash-math-plugin-freestanding/
+          if-no-files-found: error
+          retention-days: 14
