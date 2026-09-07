@@ -141,6 +141,48 @@ rfs_guard(uint32_t page)
   return x;
 }
 
+static void
+rfs_stream_warmup(rfs_xor3_fn fn)
+{
+  uint32_t i = 0;
+
+  while (i != RAFAELIA_BENCH_WARMUP) {
+    uint32_t p = i & RFS_MASK;
+    fn(rfs_d[p], rfs_a[p], rfs_b[p], rfs_c[p]);
+    i++;
+  }
+}
+
+static uint64_t
+rfs_stream_timed(rfs_xor3_fn fn, uint32_t rounds, uint64_t *start_ns,
+                 uint64_t *end_ns)
+{
+  uint32_t i = 0;
+  uint64_t a = rfs_now_ns();
+  uint64_t b;
+
+  while (i != rounds) {
+    uint32_t p = i & RFS_MASK;
+    fn(rfs_d[p], rfs_a[p], rfs_b[p], rfs_c[p]);
+    i++;
+  }
+  b = rfs_now_ns();
+
+  if (start_ns != NULL)
+    *start_ns = a;
+  if (end_ns != NULL)
+    *end_ns = b;
+
+  return (a == 0 || b <= a) ? 0 : b - a;
+}
+
+static uint64_t
+rfs_stream(rfs_xor3_fn fn, uint32_t rounds)
+{
+  rfs_stream_warmup(fn);
+  return rfs_stream_timed(fn, rounds, NULL, NULL);
+}
+
 #if !RAFAELIA_BENCH_WORKER_ONLY
 static uint64_t
 rfs_warm(rfs_xor3_fn fn, uint32_t rounds)
@@ -165,31 +207,6 @@ rfs_warm(rfs_xor3_fn fn, uint32_t rounds)
   return (a == 0 || b <= a) ? 0 : b - a;
 }
 #endif
-
-static uint64_t
-rfs_stream(rfs_xor3_fn fn, uint32_t rounds)
-{
-  uint32_t i = 0;
-  uint64_t a;
-  uint64_t b;
-
-  while (i != RAFAELIA_BENCH_WARMUP) {
-    uint32_t p = i & RFS_MASK;
-    fn(rfs_d[p], rfs_a[p], rfs_b[p], rfs_c[p]);
-    i++;
-  }
-
-  a = rfs_now_ns();
-  i = 0;
-  while (i != rounds) {
-    uint32_t p = i & RFS_MASK;
-    fn(rfs_d[p], rfs_a[p], rfs_b[p], rfs_c[p]);
-    i++;
-  }
-  b = rfs_now_ns();
-
-  return (a == 0 || b <= a) ? 0 : b - a;
-}
 
 static void
 rfs_emit(const char *kernel, const char *mode, uint64_t ns, uint32_t rounds,
@@ -216,6 +233,8 @@ int
 main(void)
 {
   uint64_t ns;
+  uint64_t start_ns = 0;
+  uint64_t end_ns = 0;
   uint32_t final_page;
 
   rfs_fill();
@@ -225,6 +244,7 @@ main(void)
   }
 
 #if RAFAELIA_BENCH_SYNC_WORKER
+  rfs_stream_warmup(rafaelia_neon4096_xor3_4096_armv7);
   puts("ready=1");
   if (fflush(stdout) != 0)
     return 4;
@@ -233,9 +253,12 @@ main(void)
     return 5;
   }
   puts("barrier=STDIN_BYTE_RELEASE");
+  ns = rfs_stream_timed(rafaelia_neon4096_xor3_4096_armv7,
+                        RAFAELIA_BENCH_ROUNDS, &start_ns, &end_ns);
+#else
+  ns = rfs_stream(rafaelia_neon4096_xor3_4096_armv7, RAFAELIA_BENCH_ROUNDS);
 #endif
 
-  ns = rfs_stream(rafaelia_neon4096_xor3_4096_armv7, RAFAELIA_BENCH_ROUNDS);
   if (ns == 0) {
     puts("timing=FAIL");
     return 3;
@@ -244,6 +267,10 @@ main(void)
   final_page = (RAFAELIA_BENCH_ROUNDS - 1u) & RFS_MASK;
   puts("correctness=PASS");
   puts("worker_mode=NEON_STREAM_ONLY_COMPILE_TIME");
+#if RAFAELIA_BENCH_SYNC_WORKER
+  printf("start_ns=%llu\n", (unsigned long long) start_ns);
+  printf("end_ns=%llu\n", (unsigned long long) end_ns);
+#endif
   puts("kernel,mode,rounds,page_bytes,elapsed_ns,logical_GBps,declared_3read_1write_GBps,guard");
   rfs_emit("neon", "stream", ns, RAFAELIA_BENCH_ROUNDS, rfs_guard(final_page));
   puts("cache_miss_rate=TOKEN_VAZIO");
