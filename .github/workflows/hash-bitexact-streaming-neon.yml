@@ -1,0 +1,46 @@
+name: Hash Bit-Exact Streaming + ARM32 NEON Gate
+on:
+  pull_request:
+    paths:
+      - 'android/app/native/hash_bitexact_core.h'
+      - 'android/app/native/hash_bitexact_equations.h'
+      - 'android/app/native/hash_bitexact_digest.h'
+      - 'android/app/native/hash_bitexact_neon4.h'
+      - 'android/app/native/neon4096_freestanding.h'
+      - '.github/tests/rafaelia/hash_bitexact_streaming_vectors.c'
+      - '.github/tests/rafaelia/hash_bitexact_differential.py'
+      - '.github/scripts/rafaelia/hash-bitexact-streaming-neon-gate.sh'
+      - '.github/workflows/hash-bitexact-streaming-neon.yml'
+      - 'docs/hash-bitexact-streaming-neon.md'
+  push:
+    branches: [ main ]
+    paths:
+      - 'android/app/native/hash_bitexact_core.h'
+      - 'android/app/native/hash_bitexact_equations.h'
+      - 'android/app/native/hash_bitexact_digest.h'
+      - 'android/app/native/hash_bitexact_neon4.h'
+      - 'android/app/native/neon4096_freestanding.h'
+      - '.github/tests/rafaelia/hash_bitexact_streaming_vectors.c'
+      - '.github/tests/rafaelia/hash_bitexact_differential.py'
+      - '.github/scripts/rafaelia/hash-bitexact-streaming-neon-gate.sh'
+      - '.github/workflows/hash-bitexact-streaming-neon.yml'
+      - 'docs/hash-bitexact-streaming-neon.md'
+permissions: { contents: read }
+concurrency:
+  group: hash-bitexact-streaming-neon-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  bitexact-streaming-neon:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+        with: { persist-credentials: false }
+      - run: bash .github/scripts/rafaelia/hash-bitexact-streaming-neon-gate.sh
+      - if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: hash-bitexact-streaming-neon-${{ github.run_id }}
+          path: evidence/hash-bitexact-streaming-neon/
+          if-no-files-found: error
+          retention-days: 14
