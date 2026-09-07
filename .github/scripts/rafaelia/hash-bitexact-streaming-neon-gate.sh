@@ -13,7 +13,7 @@ OUT="build/hash-bitexact-streaming-neon"
 EVIDENCE="evidence/hash-bitexact-streaming-neon"
 mkdir -p "$OUT" "$EVIDENCE"
 : "${CLANG:=clang}"
-for c in "$CLANG" llvm-objdump nm python3 sha256sum; do command -v "$c" >/dev/null || { echo "missing $c" >&2; exit 2; }; done
+for c in "$CLANG" nm python3 sha256sum; do command -v "$c" >/dev/null || { echo "missing $c" >&2; exit 2; }; done
 for f in "$CORE" "$EQ" "$DIG" "$SIMD" "$PAGE" "$TEST" "$DIFF"; do test -f "$f" || { echo "missing $f" >&2; exit 2; }; done
 forbidden='(^|[^A-Za-z0-9_])(malloc|calloc|realloc|free|memcpy|memset|memcmp|mmap|open|read|write|close|sysconf|pthread|stdatomic|thread_local|__thread)([^A-Za-z0-9_]|$)'
 if grep -Eiq "$forbidden" "$CORE" "$EQ" "$DIG" "$SIMD"; then echo 'hosted dependency token found in production hash core' >&2; exit 1; fi
@@ -44,22 +44,25 @@ ARM=(--target=armv7a-none-eabi -march=armv7-a -mfpu=neon -mfloat-abi=softfp -std
 "$CLANG" "${ARM[@]}" -DRAFAELIA_HASH_NEON4_FULL_UNROLL=1 -c "$OUT/neon_probe.c" -o "$OUT/neon-full-unroll.o"
 "$CLANG" "${ARM[@]}" -c "$OUT/digest_probe.c" -o "$OUT/digest-armv7.o"
 for o in "$OUT/neon-baseline.o" "$OUT/neon-full-unroll.o" "$OUT/digest-armv7.o"; do n="$(basename "$o" .o)"; nm -u "$o" > "$EVIDENCE/$n.undefined.txt"; test ! -s "$EVIDENCE/$n.undefined.txt"; done
-llvm-objdump -d "$OUT/neon-baseline.o" > "$EVIDENCE/neon-baseline.disasm.txt"
-llvm-objdump -d "$OUT/neon-full-unroll.o" > "$EVIDENCE/neon-full-unroll.disasm.txt"
-for op in 'vadd\.i32' 'veor' 'vshr\.u32' 'vshl\.i32' 'vorr'; do grep -Eq "$op" "$EVIDENCE/neon-full-unroll.disasm.txt" || { echo "missing NEON op $op" >&2; exit 1; }; done
-BR='\b(bne|beq|bhi|blo|bhs|bls|bgt|blt|bge|ble)\b'
-BASE_BRANCHES="$(grep -Eic "$BR" "$EVIDENCE/neon-baseline.disasm.txt" || true)"
-FULL_BRANCHES="$(grep -Eic "$BR" "$EVIDENCE/neon-full-unroll.disasm.txt" || true)"
+# Generate ARM assembly from the same source and exact optimization/target flags used for the object.
+# This avoids depending on a runner-specific llvm-objdump executable name while still
+# failing closed unless Clang actually lowers the vector equations to NEON instructions.
+"$CLANG" "${ARM[@]}" -S "$OUT/neon_probe.c" -o "$EVIDENCE/neon-baseline.arm.s"
+"$CLANG" "${ARM[@]}" -DRAFAELIA_HASH_NEON4_FULL_UNROLL=1 -S "$OUT/neon_probe.c" -o "$EVIDENCE/neon-full-unroll.arm.s"
+for op in 'vadd\.i32' 'veor' 'vshr\.u32' 'vshl\.i32' 'vorr'; do grep -Eq "$op" "$EVIDENCE/neon-full-unroll.arm.s" || { echo "missing NEON op $op" >&2; exit 1; }; done
+BR='^[[:space:]]*(bne|beq|bhi|blo|bhs|bls|bgt|blt|bge|ble)(\.[A-Za-z0-9]+)?[[:space:]]'
+BASE_BRANCHES="$(grep -Eic "$BR" "$EVIDENCE/neon-baseline.arm.s" || true)"
+FULL_BRANCHES="$(grep -Eic "$BR" "$EVIDENCE/neon-full-unroll.arm.s" || true)"
 test "$BASE_BRANCHES" -ge 1
 test "$FULL_BRANCHES" -eq 0
 grep -q 'RAFAELIA_NEON4096_FS_PAGE_BYTES 4096u' "$PAGE"
 grep -q 'RAFAELIA_NEON4096_FS_VECTOR_BITS 128u' "$PAGE"
 grep -q 'RAFAELIA_NEON4096_FS_U8_LANES 16u' "$PAGE"
 grep -q 'RAFAELIA_NEON4096_FS_STREAMS 3u' "$PAGE"
-sha256sum "$CORE" "$EQ" "$DIG" "$SIMD" "$TEST" "$DIFF" "$OUT/neon-baseline.o" "$OUT/neon-full-unroll.o" "$OUT/digest-armv7.o" > "$EVIDENCE/SHA256SUMS.txt"
+sha256sum "$CORE" "$EQ" "$DIG" "$SIMD" "$TEST" "$DIFF" "$OUT/neon-baseline.o" "$OUT/neon-full-unroll.o" "$OUT/digest-armv7.o" "$EVIDENCE/neon-baseline.arm.s" "$EVIDENCE/neon-full-unroll.arm.s" > "$EVIDENCE/SHA256SUMS.txt"
 cat > "$EVIDENCE/receipt.json" <<JSON
 {
-  "schema":"rafaelia.frida.hash-bitexact-streaming-neon.receipt.v1",
+  "schema":"rafaelia.frida.hash-bitexact-streaming-neon.receipt.v2",
   "semantic_role":"same_hash_math_lowered_to_words_and_simd",
   "md5_streaming_equivalence":"PASS",
   "sha256_streaming_equivalence":"PASS",
@@ -67,6 +70,8 @@ cat > "$EVIDENCE/receipt.json" <<JSON
   "differential_cases":75,
   "production_headers_global_symbols":0,
   "arm32_external_undefined_symbols":0,
+  "arm32_codegen_neon_ops":"PASS",
+  "arm32_codegen_evidence":"clang_S_same_target_and_O3_flags",
   "arm32_neon_sha256_parallel_u32_lanes":4,
   "arm32_neon_transport_parallel_u8_lanes":16,
   "neon_vector_bits":128,
