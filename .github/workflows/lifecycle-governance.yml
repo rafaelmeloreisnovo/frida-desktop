@@ -1,0 +1,97 @@
+name: Frida Lifecycle Governance
+
+on:
+  pull_request:
+    branches:
+      - 00-intake
+      - 01-integration
+      - 02-beta
+      - main
+  push:
+    branches:
+      - 00-intake
+      - 01-integration
+      - 02-beta
+      - main
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: Evidence mode
+        required: true
+        default: snapshot
+        type: choice
+        options:
+          - snapshot
+          - release-readiness
+          - rollback-plan
+      target_sha:
+        description: Exact rollback target SHA; required only for rollback-plan
+        required: false
+        type: string
+      release_version:
+        description: SemVer candidate; required only for release-readiness
+        required: false
+        type: string
+  workflow_call:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: frida-lifecycle-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  lifecycle:
+    name: lifecycle / promotion + evidence boundary
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    steps:
+      - name: Checkout full ancestry
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2 / Node 24
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Syntax-check local lifecycle implementation
+        run: |
+          set -euo pipefail
+          python3 -m py_compile .github/scripts/rafaelia/lifecycle-governance.py
+          bash -n .github/scripts/rafaelia/lifecycle-promotion.sh
+
+      - name: Validate lifecycle and generate navigable evidence
+        env:
+          DISPATCH_MODE: ${{ inputs.mode || 'validate' }}
+          TARGET_SHA_INPUT: ${{ inputs.target_sha || '' }}
+          RELEASE_VERSION_INPUT: ${{ inputs.release_version || '' }}
+        run: |
+          set -euo pipefail
+          mode="$DISPATCH_MODE"
+          if [[ "$GITHUB_EVENT_NAME" != "workflow_dispatch" ]]; then
+            mode="validate"
+          fi
+          python3 .github/scripts/rafaelia/lifecycle-governance.py \
+            --mode "$mode" \
+            --target-sha "$TARGET_SHA_INPUT" \
+            --release-version "$RELEASE_VERSION_INPUT"
+
+      - name: Reuse repository workflow architecture contract
+        run: python3 .github/scripts/rafaelia/workflow-contract.py
+
+      - name: Publish lifecycle summary
+        run: cat evidence/lifecycle/lifecycle-state.v1.md >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload lifecycle and topology evidence
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1 / Node 24
+        with:
+          name: frida-lifecycle-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            evidence/lifecycle/
+            evidence/workflow-contract/
+          if-no-files-found: error
+          retention-days: 30
