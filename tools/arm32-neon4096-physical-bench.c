@@ -22,6 +22,10 @@
 #define RAFAELIA_BENCH_WARMUP 2048u
 #endif
 
+#ifndef RAFAELIA_BENCH_WORKER_ONLY
+#define RAFAELIA_BENCH_WORKER_ONLY 0
+#endif
+
 #if (RAFAELIA_BENCH_PAGES & (RAFAELIA_BENCH_PAGES - 1u)) != 0
 #error RAFAELIA_BENCH_PAGES must be a power of two
 #endif
@@ -197,6 +201,36 @@ rfs_emit(const char *kernel, const char *mode, uint64_t ns, uint32_t rounds,
       (unsigned long long) guard);
 }
 
+#if RAFAELIA_BENCH_WORKER_ONLY
+int
+main(void)
+{
+  uint64_t ns;
+  uint32_t final_page;
+
+  rfs_fill();
+  if (!rfs_verify()) {
+    puts("correctness=FAIL");
+    return 2;
+  }
+
+  ns = rfs_stream(rafaelia_neon4096_xor3_4096_armv7, RAFAELIA_BENCH_ROUNDS);
+  if (ns == 0) {
+    puts("timing=FAIL");
+    return 3;
+  }
+
+  final_page = (RAFAELIA_BENCH_ROUNDS - 1u) & RFS_MASK;
+  puts("correctness=PASS");
+  puts("worker_mode=NEON_STREAM_ONLY_COMPILE_TIME");
+  puts("kernel,mode,rounds,page_bytes,elapsed_ns,logical_GBps,declared_3read_1write_GBps,guard");
+  rfs_emit("neon", "stream", ns, RAFAELIA_BENCH_ROUNDS, rfs_guard(final_page));
+  puts("cache_miss_rate=TOKEN_VAZIO");
+  puts("physical_dram_bandwidth=TOKEN_VAZIO");
+  puts("claim_allowed=false");
+  return 0;
+}
+#else
 int
 main(void)
 {
@@ -248,3 +282,4 @@ main(void)
 
   return 0;
 }
+#endif
