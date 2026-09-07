@@ -133,6 +133,7 @@ rfs_guard(uint32_t page)
   return x;
 }
 
+#if !RAFAELIA_BENCH_WORKER_ONLY
 static uint64_t
 rfs_warm(rfs_xor3_fn fn, uint32_t rounds)
 {
@@ -155,6 +156,7 @@ rfs_warm(rfs_xor3_fn fn, uint32_t rounds)
 
   return (a == 0 || b <= a) ? 0 : b - a;
 }
+#endif
 
 static uint64_t
 rfs_stream(rfs_xor3_fn fn, uint32_t rounds)
