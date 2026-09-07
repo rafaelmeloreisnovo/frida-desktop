@@ -55,6 +55,7 @@ jobs:
           bash -n .github/scripts/rafaelia/android-crash-observability-ci.sh
           python3 -m py_compile .github/scripts/rafaelia/workflow-contract.py
           python3 -m py_compile tools/validate-rafaelia-provenance.py
+          grep -Fq 'run: bash .github/scripts/rafaelia/on-device-receipt-verifier-gate.sh' .github/workflows/android17-apk-elf-dex.yml
 
       - name: Run fail-closed workflow + catalyst contract
         run: python3 .github/scripts/rafaelia/workflow-contract.py
