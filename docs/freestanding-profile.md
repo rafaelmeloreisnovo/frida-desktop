@@ -59,6 +59,34 @@ See `docs/arm32-neon4096-freestanding.md` for the exact ABI, flags, cache/buffer
 contract, three-stream interpretation, and the remaining physical-device
 `TOKEN_VAZIO` gates.
 
+## Freestanding hash-math sidecar
+
+`android/app/native/hash_math_plugin_*` adds a second, independent leaf family
+for an opt-in RAFAELIA sidecar transform. It is deliberately not wired by
+rewriting MD5, SHA-2, BLAKE, BLAKE2, or BLAKE3 internals.
+
+The portable object has a compile-time enable/disable switch. The disabled build
+is required to export zero plugin globals. The Arm specializations are:
+
+- ARMv7-A: 128-bit NEON, 16 `u8` lanes per physical vector operation;
+- AArch64: 128-bit Advanced SIMD, 16 `u8` lanes per physical vector operation,
+  with two vectors issued per 32-byte software stage.
+
+A 10-target cross-compile matrix checks structural freestanding portability for
+ARMv7, AArch64, x86-64, i386, RISC-V 64/32, PPC64LE, s390x, MIPS32LE, and
+MIPS64LE. This matrix is coverage, not a market-share claim.
+
+Run:
+
+```sh
+bash .github/scripts/rafaelia/hash-math-plugin-freestanding-gate.sh
+```
+
+The gate attempts every target before issuing the final aggregate result. See
+`docs/hash-math-plugin-freestanding.md` for the standards boundary, authorship
+boundary, plugin semantics, architecture matrix, security non-claim, and open
+physical `TOKEN_VAZIO` gates.
+
 ## Scope and non-goals
 
 This profile does not claim that every transitive subproject is already
@@ -68,9 +96,9 @@ and target platform code.  The top-level repository can only provide a safe
 selector that removes the obvious hosted/GC layers and exposes compile-time
 macros for downstream enforcement.
 
-The strict ARM32 leaf core is narrower and stronger than that top-level profile.
-Its structural PASS must not be generalized into a claim that all Frida
-subprojects are freestanding.
+The strict ARM32 leaf core and the hash-math sidecar are narrower and stronger
+than that top-level profile. Their structural PASS must not be generalized into
+a claim that all Frida subprojects are freestanding.
 
 ## Two-cycle validation loop
 
@@ -92,6 +120,12 @@ For the strict ARM32 leaf object, also run:
 
 ```sh
 bash .github/scripts/rafaelia/arm32-neon4096-freestanding-gate.sh
+```
+
+For the hash-math sidecar, run:
+
+```sh
+bash .github/scripts/rafaelia/hash-math-plugin-freestanding-gate.sh
 ```
 
 ## Example configuration
