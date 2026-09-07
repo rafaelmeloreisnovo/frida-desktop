@@ -1,0 +1,2 @@
+STAGING_MARKER_ONLY
+The actual MainActivity replacement is applied in the following commit. This marker exists to preserve the design transition in branch history.
