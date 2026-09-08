@@ -1,0 +1,139 @@
+{
+  "boundaries": [
+    "DIAGNOSTIC_PASS!=MODEL_VALIDATION_PASS",
+    "ZERO_OBSERVATIONS_IN_OFF_MODE!=TRAINING_FAILURE",
+    "PHYSICAL_DEVICE_RECEIPT!=PERFORMANCE_SUPERIORITY",
+    "NEON_SELFTEST_PASS!=SCALAR_COMPARATIVE_BENCHMARK",
+    "GPU_TOKEN_VAZIO!=GPU_FAIL",
+    "NO_RECOVERED_TAIL!=RECOVERY_TEST_PASS",
+    "CLAIM_ALLOWED=false"
+  ],
+  "claim_allowed": false,
+  "claim_matrix": {
+    "automatic_active_enabled": false,
+    "frida_gadget_elf_loaded": true,
+    "gpu_backend_validated": false,
+    "learning_or_training_executed": false,
+    "neon128_backend_observed": true,
+    "performance_superiority_claim_allowed": false,
+    "physical_android_arm32_runtime_observed": true,
+    "scientific_claim_allowed": false,
+    "simd_fold_selftest_pass": true,
+    "source_built_elf_probe_loaded": true,
+    "validate_shadow_validated": false
+  },
+  "diagnostic_state": "PASS",
+  "evidence_class": "PHYSICAL_DEVICE",
+  "evidence_level": 6,
+  "evidence_timestamp": "TOKEN_VAZIO_NOT_PROVIDED",
+  "ingested_on": "2026-09-07",
+  "learning": {
+    "automatic_active": "DISABLED",
+    "committed_records": 0,
+    "mode": "OFF",
+    "overhead_ns": {
+      "p50": 0,
+      "p95": 0,
+      "p99": 0
+    },
+    "predictor_entries": {
+      "capacity": 1024,
+      "used": 0
+    },
+    "recovered_tail": "NO",
+    "rfl_epoch": 1,
+    "slab": {
+      "capacity_records": 64,
+      "used_records": 0
+    },
+    "store": "/mnt/expand/e8ecef58-6da2-49de-9135-1caec2557cb9/user/0/io.rafaelia.fridalab/files/frida-learning-v1.rfl",
+    "store_bytes": 64,
+    "tracked_memory_high_water_bytes": 0,
+    "training_confidence": {
+      "percent": 0.0,
+      "state": "INSUFFICIENT_EVIDENCE"
+    },
+    "training_correct": 0,
+    "training_error_ppm": 0,
+    "training_incorrect": 0,
+    "training_observations": 0,
+    "training_predictions": 0,
+    "write_policy": "READ_ONLY_NO_WRITE"
+  },
+  "neon4096_3_v1": {
+    "alternate_partition": {
+      "bytes_per_microblock": 512,
+      "microblocks": 8
+    },
+    "cache_geometry": {
+      "bytes_per_line": 64,
+      "lines": 64,
+      "lines_per_region": 21
+    },
+    "compiled_backend": "NEON128",
+    "contract_bytes": {
+      "bytes_per_region": 1344,
+      "control": 64,
+      "regions": 3,
+      "total": 4096
+    },
+    "crc32c_surfaces": [
+      "HOT",
+      "BUFFER",
+      "STORAGE",
+      "PAGE"
+    ],
+    "default_cpu_route": "CPU_NEON",
+    "gpu_compute_backend": "TOKEN_VAZIO_NOT_PROMOTED",
+    "gpu_routing_rule": "ONLY_AFTER_MEASURED_BACKEND_AND_TOTAL_COST_EVIDENCE",
+    "observed_os_page_bytes": 4096,
+    "observed_os_page_match": "MATCH_4096",
+    "selftest_page_crc32c": "0xed4a015e",
+    "simd_fold_selftest": "PASS",
+    "simd_geometry": {
+      "bits_per_vector": 128,
+      "vectors": 256,
+      "vectors_per_region": 84
+    }
+  },
+  "receipt_id": "RAFAELIA_FRIDA_LAB_RECEIPT_V1",
+  "runtime": {
+    "abi": "armeabi-v7a",
+    "android": 10,
+    "debuggable": true,
+    "gadget": {
+      "description": "Frida Gadget ELF",
+      "state": "LOADED"
+    },
+    "gadget_endpoint": "127.0.0.1:27042",
+    "package": "io.rafaelia.fridalab",
+    "pid": 31524,
+    "probe": {
+      "description": "Source-built ELF probe",
+      "state": "LOADED"
+    },
+    "sdk": 29
+  },
+  "schema": "rafaelia.frida.physical_device_receipt/v1",
+  "validate_shadow": {
+    "automatic_active_policy": "DISABLED",
+    "candidate_contexts_after_accuracy_support_gates": 0,
+    "confidence": {
+      "percent": 0.0,
+      "state": "INSUFFICIENT_EVIDENCE"
+    },
+    "contexts": {
+      "capacity": 1024,
+      "used": 0
+    },
+    "correct": 0,
+    "error_ppm": 0,
+    "incorrect": 0,
+    "model_frozen": false,
+    "observations": 0,
+    "prediction_misses": 0,
+    "predictions": 0,
+    "state": "INSUFFICIENT_EVIDENCE",
+    "validation_persistence": "TOKEN_VAZIO"
+  }
+}
