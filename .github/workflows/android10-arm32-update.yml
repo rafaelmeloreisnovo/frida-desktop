@@ -45,10 +45,73 @@ jobs:
           sudo apt-get update >/dev/null
           sudo apt-get install -y --no-install-recommends curl unzip xz-utils zip binutils >/dev/null
           yes | sdkmanager --licenses >/dev/null || true
-          sdkmanager "platforms;android-37" "build-tools;37.0.0" "ndk;${NDK_VERSION}" >/dev/null
-          echo "bt=${ANDROID_SDK_ROOT}/build-tools/37.0.0" >> "$GITHUB_OUTPUT"
-          echo "jar=${ANDROID_SDK_ROOT}/platforms/android-37/android.jar" >> "$GITHUB_OUTPUT"
-          echo "tc=${ANDROID_SDK_ROOT}/ndk/${NDK_VERSION}/toolchains/llvm/prebuilt/linux-x86_64/bin" >> "$GITHUB_OUTPUT"
+
+          sdk_list="$(mktemp)"
+          sdkmanager --list --channel=3 > "$sdk_list"
+
+          bt_pkg="$(
+            awk -F'|' '
+              {
+                pkg = $1
+                gsub(/^[[:space:]]+|[[:space:]]+$/, "", pkg)
+                if (pkg ~ /^build-tools;37\.[0-9]+\.[0-9]+$/)
+                  print pkg
+              }
+            ' "$sdk_list" | sort -Vu | tail -n 1
+          )"
+
+          platform_pkg="$(
+            awk -F'|' '
+              {
+                pkg = $1
+                gsub(/^[[:space:]]+|[[:space:]]+$/, "", pkg)
+                if (pkg ~ /^platforms;android-37(\.[0-9]+)?$/)
+                  print pkg
+              }
+            ' "$sdk_list" | sort -Vu | tail -n 1
+          )"
+
+          if [[ -z "$platform_pkg" ]]; then
+            platform_pkg="$(
+              awk -F'|' '
+                /platforms;android-CinnamonBun([[:space:]]|$)/ {
+                  gsub(/^[[:space:]]+|[[:space:]]+$/, "", $1)
+                  print $1
+                }
+              ' "$sdk_list" | head -n 1
+            )"
+          fi
+
+          [[ -n "$bt_pkg" ]] || {
+            echo "::error::No Android Build-Tools 37.x package found"
+            grep -E 'build-tools;37\.' "$sdk_list" || true
+            exit 43
+          }
+          [[ -n "$platform_pkg" ]] || {
+            echo "::error::No Android 17/API-37 platform package found"
+            grep -E 'platforms;android-(37|CinnamonBun)' "$sdk_list" || true
+            exit 44
+          }
+
+          sdkmanager --channel=3 "$platform_pkg" "$bt_pkg" "ndk;${NDK_VERSION}" >/dev/null
+
+          bt_version="${bt_pkg#build-tools;}"
+          platform_dir="${platform_pkg#platforms;}"
+          bt_dir="${ANDROID_SDK_ROOT}/build-tools/${bt_version}"
+          android_jar="${ANDROID_SDK_ROOT}/platforms/${platform_dir}/android.jar"
+          tc="${ANDROID_SDK_ROOT}/ndk/${NDK_VERSION}/toolchains/llvm/prebuilt/linux-x86_64/bin"
+
+          test -x "$bt_dir/aapt2"
+          test -x "$bt_dir/d8"
+          test -x "$bt_dir/apksigner"
+          test -x "$bt_dir/zipalign"
+          test -f "$android_jar"
+          test -x "$tc/armv7a-linux-androideabi${MIN_SDK}-clang"
+
+          printf 'platform_package=%s\nbuild_tools_package=%s\n' "$platform_pkg" "$bt_pkg" | tee evidence/android-toolchain-resolution.txt
+          echo "bt=$bt_dir" >> "$GITHUB_OUTPUT"
+          echo "jar=$android_jar" >> "$GITHUB_OUTPUT"
+          echo "tc=$tc" >> "$GITHUB_OUTPUT"
 
       - name: Fetch pinned ARM32 Frida Gadget
         shell: bash
