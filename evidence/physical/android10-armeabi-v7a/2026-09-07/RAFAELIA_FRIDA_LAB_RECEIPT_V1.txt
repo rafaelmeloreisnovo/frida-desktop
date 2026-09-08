@@ -1,0 +1,59 @@
+RAFAELIA_FRIDA_LAB_RECEIPT_V1
+diagnostic_state=PASS
+pid=31524
+package=io.rafaelia.fridalab
+sdk=29
+android=10
+abi=armeabi-v7a
+debuggable=true
+gadget_endpoint=127.0.0.1:27042
+probe=Source-built ELF probe: LOADED
+gadget=Frida Gadget ELF: LOADED
+learning_mode=OFF — só leitura; não grava
+store=/mnt/expand/e8ecef58-6da2-49de-9135-1caec2557cb9/user/0/io.rafaelia.fridalab/files/frida-learning-v1.rfl
+automatic_active=DISABLED
+claim_allowed=false
+--- METRICS ---
+Learning runtime
+  logical mode: OFF
+  RFL epoch: 1
+  training observations: 0
+  training predictions: 0
+  training correct/incorrect: 0 / 0
+  training error: 0 ppm
+  training confidence: INSUFFICIENT_EVIDENCE / 0.00%
+  predictor entries: 0/1024
+  RFL committed records: 0
+  RFL slab: 0/64 records
+  RFL store bytes: 64
+  tracked memory high-water: 0 B
+  learning overhead p50/p95/p99: 0 / 0 / 0 ns
+
+VALIDATE_SHADOW
+  model frozen: NO
+  observations: 0
+  predictions: 0
+  correct/incorrect: 0 / 0
+  prediction misses: 0
+  error: 0 ppm
+  confidence: INSUFFICIENT_EVIDENCE / 0.00%
+  validation contexts: 0/1024
+  candidate contexts after accuracy/support gates: 0
+  validation persistence: TOKEN_VAZIO
+  automatic ACTIVE policy: DISABLED
+
+NEON4096/3 V1
+  contract: 4096 B = 64 B control + 3 x 1344 B
+  alternate partition: 8 x 512 B microblocks
+  cache geometry: 64 x 64 B lines; 21 lines/region
+  SIMD geometry: 256 x 128-bit vectors; 84 vectors/region
+  observed OS page: 4096 B (MATCH_4096)
+  compiled backend: NEON128
+  default CPU route: CPU_NEON
+  CRC32C: HOT + BUFFER + STORAGE + PAGE
+  SIMD fold selftest: PASS
+  selftest page CRC32C: 0xed4a015e
+  GPU compute backend: TOKEN_VAZIO / not promoted
+  GPU routing rule: only after measured backend + total-cost evidence
+
+RFL recovered tail: NO
