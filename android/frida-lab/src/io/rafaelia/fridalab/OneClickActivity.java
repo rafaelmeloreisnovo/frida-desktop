@@ -6,6 +6,9 @@ import android.content.ClipboardManager;
 import android.content.Context;
 import android.content.Intent;
 import android.content.pm.ApplicationInfo;
+import android.content.pm.PackageInfo;
+import android.content.pm.PackageManager;
+import android.content.pm.Signature;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
@@ -22,6 +25,7 @@ import android.widget.Toast;
 import java.io.File;
 import java.io.FileOutputStream;
 import java.lang.reflect.Method;
+import java.security.MessageDigest;
 
 /**
  * Minimal operator surface for the already-working Frida/RFL lab.
@@ -31,7 +35,7 @@ import java.lang.reflect.Method;
  */
 public final class OneClickActivity extends Activity {
     private static final int LEARN_SHADOW = 2;
-    private static final long MIN_OBSERVATIONS = 64L; // one complete RFL slab
+    private static final long MIN_OBSERVATIONS = 64L;
     private static final long POLL_MS = 1000L;
 
     private final Handler handler = new Handler(Looper.getMainLooper());
@@ -119,7 +123,6 @@ public final class OneClickActivity extends Activity {
 
     @Override protected void onCreate(Bundle state) {
         super.onCreate(state);
-
         ScrollView scroll = new ScrollView(this);
         LinearLayout root = new LinearLayout(this);
         root.setOrientation(LinearLayout.VERTICAL);
@@ -170,7 +173,6 @@ public final class OneClickActivity extends Activity {
             }
         });
         root.addView(details);
-
         setContentView(scroll);
     }
 
@@ -192,7 +194,6 @@ public final class OneClickActivity extends Activity {
         resetSteps();
         startButton.setEnabled(false);
         stateView.setText("Iniciando...");
-
         try {
             System.loadLibrary("rafaelia-probe");
             probeState = "LOADED";
@@ -202,7 +203,6 @@ public final class OneClickActivity extends Activity {
             fail("ELF probe falhou");
             return;
         }
-
         try {
             System.loadLibrary("frida-gadget");
             gadgetState = "LOADED";
@@ -212,22 +212,14 @@ public final class OneClickActivity extends Activity {
             fail("Frida Gadget falhou");
             return;
         }
-
         try {
             bindNative();
             storePath = new File(getFilesDir(), "frida-learning-v1.rfl").getAbsolutePath();
             int initRc = ((Integer) nativeInit.invoke(null, storePath)).intValue();
-            if (initRc != 0) {
-                fail("RFL init rc=" + initRc);
-                return;
-            }
+            if (initRc != 0) { fail("RFL init rc=" + initRc); return; }
             complete(rflBox, "3. RFL inicializado: OK");
-
             int modeRc = ((Integer) nativeSetMode.invoke(null, LEARN_SHADOW)).intValue();
-            if (modeRc != 0) {
-                fail("LEARN_SHADOW rc=" + modeRc);
-                return;
-            }
+            if (modeRc != 0) { fail("LEARN_SHADOW rc=" + modeRc); return; }
             complete(shadowBox, "4. LEARN_SHADOW: RODANDO");
             stateView.setText("Rodando. Aguardando observações reais...");
             polling = true;
@@ -271,6 +263,50 @@ public final class OneClickActivity extends Activity {
         return (getApplicationInfo().flags & ApplicationInfo.FLAG_DEBUGGABLE) != 0;
     }
 
+    private PackageInfo packageInfo() throws Exception {
+        if (Build.VERSION.SDK_INT >= 28) {
+            return getPackageManager().getPackageInfo(getPackageName(), PackageManager.GET_SIGNING_CERTIFICATES);
+        }
+        return getPackageManager().getPackageInfo(getPackageName(), PackageManager.GET_SIGNATURES);
+    }
+
+    private long installedVersionCode() {
+        try {
+            PackageInfo info = packageInfo();
+            return Build.VERSION.SDK_INT >= 28 ? info.getLongVersionCode() : info.versionCode;
+        } catch (Throwable t) {
+            return -1L;
+        }
+    }
+
+    private String installedVersionName() {
+        try {
+            String value = packageInfo().versionName;
+            return value == null ? "TOKEN_VAZIO" : value;
+        } catch (Throwable t) {
+            return "TOKEN_VAZIO";
+        }
+    }
+
+    private String installedSignerSha256() {
+        try {
+            PackageInfo info = packageInfo();
+            Signature[] signatures;
+            if (Build.VERSION.SDK_INT >= 28) {
+                signatures = info.signingInfo == null ? null : info.signingInfo.getApkContentsSigners();
+            } else {
+                signatures = info.signatures;
+            }
+            if (signatures == null || signatures.length == 0) return "TOKEN_VAZIO";
+            byte[] digest = MessageDigest.getInstance("SHA-256").digest(signatures[0].toByteArray());
+            StringBuilder out = new StringBuilder(64);
+            for (byte b : digest) out.append(String.format("%02x", b & 0xff));
+            return out.toString();
+        } catch (Throwable t) {
+            return "TOKEN_VAZIO";
+        }
+    }
+
     private void generateReceipt() {
         try {
             invokeInt(nativeFlush);
@@ -279,6 +315,10 @@ public final class OneClickActivity extends Activity {
                     + "diagnostic_state=PASS\n"
                     + "pid=" + Process.myPid() + "\n"
                     + "package=" + getPackageName() + "\n"
+                    + "apk_version_code=" + installedVersionCode() + "\n"
+                    + "apk_version_name=" + installedVersionName() + "\n"
+                    + "apk_signer_sha256=" + installedSignerSha256() + "\n"
+                    + "update_identity_observed=true\n"
                     + "sdk=" + Build.VERSION.SDK_INT + "\n"
                     + "android=" + Build.VERSION.RELEASE + "\n"
                     + "abi=" + primaryAbi() + "\n"
@@ -287,11 +327,12 @@ public final class OneClickActivity extends Activity {
                     + "probe=Source-built ELF probe: " + probeState + "\n"
                     + "gadget=Frida Gadget ELF: " + gadgetState + "\n"
                     + "learning_mode=LEARN_SHADOW — aprender sem agir\n"
+                    + "learning_observation_source=REAL_FRIDA_HOOKS_ONLY\n"
+                    + "healthy_gate_min_observations=" + MIN_OBSERVATIONS + "\n"
                     + "store=" + storePath + "\n"
                     + "automatic_active=DISABLED\n"
                     + "claim_allowed=false\n"
                     + "--- METRICS ---\n" + lastSnapshot + "\n";
-
             File dir = getExternalFilesDir(null);
             if (dir == null) dir = getFilesDir();
             File out = new File(dir, "RAFAELIA_FRIDA_LAB_RECEIPT_V1_" + System.currentTimeMillis() + ".txt");
@@ -299,7 +340,6 @@ public final class OneClickActivity extends Activity {
             stream.write(receipt.getBytes("UTF-8"));
             stream.flush();
             stream.close();
-
             ClipboardManager clipboard = (ClipboardManager) getSystemService(Context.CLIPBOARD_SERVICE);
             clipboard.setPrimaryClip(ClipData.newPlainText("RAFAELIA Frida receipt", receipt));
             stateView.setText("RECEIPT GERADO E COPIADO\n" + out.getAbsolutePath());
