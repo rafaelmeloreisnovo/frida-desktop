@@ -110,6 +110,7 @@ jobs:
           test -f "$android_jar"
           test -x "$tc/armv7a-linux-androideabi${MIN_SDK}-clang"
 
+          mkdir -p evidence
           printf 'platform_package=%s\nbuild_tools_package=%s\n' "$platform_pkg" "$bt_pkg" | tee evidence/android-toolchain-resolution.txt
           echo "bt=$bt_dir" >> "$GITHUB_OUTPUT"
           echo "jar=$android_jar" >> "$GITHUB_OUTPUT"
@@ -300,6 +301,7 @@ jobs:
           name: frida-arm32-${{ steps.apk.outputs.artifact_class }}-${{ github.run_id }}
           if-no-files-found: error
           retention-days: 14
+          include-hidden-files: true
           path: |
             dist/
             evidence/
