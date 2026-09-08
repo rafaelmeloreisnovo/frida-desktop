@@ -289,7 +289,10 @@ jobs:
           Path('dist/receipt.arm32-update.v1.json').write_text(json.dumps(receipt,indent=2,sort_keys=True)+'\n')
           print(json.dumps(receipt,indent=2,sort_keys=True))
           PY
-          sha256sum dist/frida-lab-arm32-update.apk dist/receipt.arm32-update.v1.json > dist/SHA256SUMS.txt
+          find dist evidence -type f ! -path 'dist/SHA256SUMS.txt' -print0 \
+            | sort -z \
+            | xargs -0 sha256sum > dist/SHA256SUMS.txt
+          sha256sum -c dist/SHA256SUMS.txt
 
       - name: Upload ARM32 artifact and evidence with semantic class
         uses: actions/upload-artifact@v4
