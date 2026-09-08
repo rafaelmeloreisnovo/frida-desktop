@@ -193,7 +193,7 @@ jobs:
             --min-sdk-version "$MIN_SDK" --target-sdk-version "$TARGET_SDK" \
             --version-code "$VERSION_CODE" --version-name "$VERSION_NAME"
           cp build/update/apk/base.apk build/update/apk/unsigned.apk
-          (cd build/update/dex && zip -q ../../apk/unsigned.apk classes.dex)
+          (cd build/update/dex && zip -q ../apk/unsigned.apk classes.dex)
 
           cp build/update/native/armeabi-v7a/libfrida-gadget.so build/update/apk/stage/lib/armeabi-v7a/
           cp build/update/native/armeabi-v7a/librafaelia-probe.so build/update/apk/stage/lib/armeabi-v7a/
