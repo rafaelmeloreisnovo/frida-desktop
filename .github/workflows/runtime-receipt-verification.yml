@@ -1,0 +1,35 @@
+name: runtime receipt verification
+
+on:
+  push:
+    branches:
+      - audit/receipt-canonical-hash-20260908
+    paths:
+      - 'modules/runtime-learning-engine/receipt-generator.ts'
+      - 'modules/runtime-learning-engine/receipt-generator.test.ts'
+      - 'modules/runtime-learning-engine/package.json'
+      - '.github/workflows/runtime-receipt-verification.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  receipt-verification:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: modules/runtime-learning-engine
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: modules/runtime-learning-engine/package-lock.json
+      - name: Install dependencies
+        run: npm ci
+      - name: Execute receipt falsifiers
+        run: npm test -- --runInBand receipt-generator.test.ts
