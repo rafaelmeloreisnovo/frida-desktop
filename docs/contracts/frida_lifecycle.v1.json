@@ -1,0 +1,140 @@
+{
+  "schema": "rafaelia.frida.lifecycle/v1",
+  "lifecycle_id": "FRIDA-LIFECYCLE-CONTROL-PLANE-20260907-V1",
+  "baseline": {
+    "repository": "rafaelmeloreisnovo/frida-desktop",
+    "main_commit": "a60fb030e9c1d858e10201d93c112784b1efe877",
+    "state": "BOOTSTRAP_UNPROTECTED_PENDING_GATE"
+  },
+  "source_first": true,
+  "claim_allowed": false,
+  "automatic_merge": false,
+  "automatic_stable_release": false,
+  "principles": [
+    "SOURCE!=DERIVED_INDEX!=EXECUTION!=EVIDENCE!=CLAIM",
+    "TOKEN_VAZIO!=0",
+    "GREEN_GATE_PROMOTES_ONLY_MEASURED_SCOPE",
+    "DATASET_INFORMS!=MISSION_AUTHORITY",
+    "MODEL_PROPOSAL!=EXECUTION_PERMISSION",
+    "PR_PASS!=SERVER_SIDE_PROTECTION",
+    "HOSTED_CI!=PHYSICAL_DEVICE_EVIDENCE",
+    "ARTIFACT!=RELEASE_AUTHORITY",
+    "ROLLBACK_PLAN!=ROLLBACK_EXECUTED"
+  ],
+  "lanes": [
+    {
+      "order": 0,
+      "branch": "00-intake",
+      "channel": "test",
+      "role": "SOURCE_INTAKE_AND_BOUNDED_TEST",
+      "accepts_from": ["feature/*", "fix/*", "docs/*", "chore/*", "hotfix/*", "external-fork-pr"],
+      "promotes_to": "01-integration",
+      "direct_push_desired": false,
+      "provider_protection_state": "TOKEN_VAZIO_PROVIDER_ADMIN",
+      "purpose": "Accept, classify, provenance-check and test new or external code without granting release authority."
+    },
+    {
+      "order": 1,
+      "branch": "01-integration",
+      "channel": "alpha",
+      "role": "INTEGRATION_AND_CANARY",
+      "accepts_from": ["00-intake"],
+      "promotes_to": "02-beta",
+      "direct_push_desired": false,
+      "provider_protection_state": "TOKEN_VAZIO_PROVIDER_ADMIN",
+      "purpose": "Integrate subsystem changes, run compatibility and canary evidence, and reject cross-layer regressions."
+    },
+    {
+      "order": 2,
+      "branch": "02-beta",
+      "channel": "beta",
+      "role": "BETA_AND_RELEASE_CANDIDATE",
+      "accepts_from": ["01-integration"],
+      "promotes_to": "main",
+      "direct_push_desired": false,
+      "provider_protection_state": "TOKEN_VAZIO_PROVIDER_ADMIN",
+      "purpose": "Stabilize release candidates, aggregate evidence and prepare release notes without publishing production."
+    },
+    {
+      "order": 3,
+      "branch": "main",
+      "channel": "stable",
+      "role": "STABLE_UPSTREAM_RELEASE_BOUNDARY",
+      "accepts_from": ["02-beta"],
+      "promotes_to": null,
+      "direct_push_desired": false,
+      "provider_protection_state": "OBSERVED_UNPROTECTED_AT_BASELINE",
+      "purpose": "Stable baseline and existing upstream release graph boundary; production publication remains separately governed."
+    }
+  ],
+  "promotion": {
+    "topology": "feature/external -> 00-intake -> 01-integration -> 02-beta -> main",
+    "mechanism": "PULL_REQUEST_ONLY_AFTER_SERVER_PROTECTION",
+    "automation_scope": "OPEN_AND_VALIDATE_PROMOTION_PR_ONLY",
+    "auto_merge": false,
+    "required_common_evidence": [
+      "lifecycle-governance receipt",
+      "workflow architecture contract receipt",
+      "RAFAELIA provenance receipt"
+    ],
+    "targeted_evidence_rule": "Subsystem-specific workflows remain required when their governed paths are touched.",
+    "failure_rule": "Any failed, cancelled, missing or TOKEN_VAZIO-required gate blocks promotion."
+  },
+  "versioning": {
+    "semantic_versioning": true,
+    "channels": {
+      "test": "artifact-only; no Git tag required",
+      "alpha": "artifact-only until upstream release-tag isolation is proven",
+      "beta": "artifact-only until upstream release-tag isolation is proven",
+      "stable": "existing upstream release authority; no automatic tag creation by lifecycle automation"
+    },
+    "future_prerelease_tag_pattern": "rafaelia-vMAJOR.MINOR.PATCH-{alpha|beta|rc}.N",
+    "tag_creation_state": "TOKEN_VAZIO_RELEASE_GRAPH_ISOLATION_REQUIRED"
+  },
+  "artifacts": {
+    "canonical_machine_state": "evidence/lifecycle/lifecycle-state.v1.json",
+    "human_summary": "evidence/lifecycle/lifecycle-state.v1.md",
+    "static_viewer": "evidence/lifecycle/index.html",
+    "checksums": "evidence/lifecycle/SHA256SUMS",
+    "transport": "GitHub Actions artifact",
+    "dashboard_adapter": "read-only consumer of canonical lifecycle JSON",
+    "artifact_is_claim": false
+  },
+  "rollback": {
+    "normal_strategy": "REVERT_PR_THROUGH_SAME_LIFECYCLE",
+    "emergency_strategy": "PLAN_ONLY_UNTIL_PROTECTED_PROVIDER_AUTHORITY_IS_EVIDENCED",
+    "must_capture": ["target SHA", "current SHA", "reason", "affected lane", "diff/log inventory", "gate results", "operator or automation identity", "post-rollback readback"],
+    "automatic_force_push": false,
+    "automatic_history_rewrite": false
+  },
+  "desired_branch_protection": {
+    "apply_state": "TOKEN_VAZIO_PROVIDER_ADMIN",
+    "branches": ["00-intake", "01-integration", "02-beta", "main"],
+    "requirements": ["pull request required", "required status checks", "dismiss stale approvals", "conversation resolution", "block force pushes", "block branch deletion", "administrative enforcement when provider permits"]
+  },
+  "github_surfaces": {
+    "pull_request_template": ".github/PULL_REQUEST_TEMPLATE/lifecycle-promotion.md",
+    "issue_forms": [".github/ISSUE_TEMPLATE/lifecycle-intake.yml", ".github/ISSUE_TEMPLATE/release-readiness.yml"],
+    "release_notes_config": ".github/release.yml",
+    "governance_workflow": ".github/workflows/lifecycle-governance.yml",
+    "promotion_workflow": ".github/workflows/lifecycle-promotion.yml"
+  },
+  "documentation_taxonomy": {
+    "roadmap": "docs/lifecycle/ROADMAP.md",
+    "branching": "docs/lifecycle/BRANCHING_AND_PROMOTION.md",
+    "versioning": "docs/lifecycle/VERSIONING_AND_RELEASES.md",
+    "artifact_catalog": "docs/lifecycle/ARTIFACT_CATALOG.md",
+    "rollback": "docs/lifecycle/ROLLBACK_AND_RECOVERY.md",
+    "contribution": "docs/lifecycle/CONTRIBUTION_AND_INTAKE.md",
+    "maintenance_eol": "docs/lifecycle/MAINTENANCE_EOL.md",
+    "glossary": "docs/lifecycle/GLOSSARY.md",
+    "adr_template": "docs/adr/0000-template.md",
+    "rfc_template": "docs/rfc/0000-template.md"
+  },
+  "runtime_boundaries": {
+    "physical_android_execution": "TOKEN_VAZIO_DEVICE",
+    "provider_branch_protection_apply": "TOKEN_VAZIO_PROVIDER_ADMIN",
+    "production_release_authority": "SEPARATE_EXISTING_UPSTREAM_GRAPH",
+    "model_weight_training_authority": "NONE"
+  }
+}

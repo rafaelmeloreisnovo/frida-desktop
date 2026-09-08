@@ -1,0 +1,72 @@
+name: Frida Lifecycle Promotion
+
+on:
+  workflow_dispatch:
+    inputs:
+      from_lane:
+        description: Source lifecycle branch
+        required: true
+        type: choice
+        options:
+          - 00-intake
+          - 01-integration
+          - 02-beta
+      to_lane:
+        description: Target lifecycle branch
+        required: true
+        type: choice
+        options:
+          - 01-integration
+          - 02-beta
+          - main
+      expected_sha:
+        description: Exact source commit SHA to promote
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  pull-requests: write
+
+concurrency:
+  group: frida-promotion-${{ inputs.from_lane }}-${{ inputs.to_lane }}
+  cancel-in-progress: false
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  open-promotion-pr:
+    name: open promotion PR / never auto-merge
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - name: Checkout control plane
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2 / Node 24
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Validate and open bounded promotion PR
+        env:
+          GH_TOKEN: ${{ github.token }}
+          FROM_LANE: ${{ inputs.from_lane }}
+          TO_LANE: ${{ inputs.to_lane }}
+          EXPECTED_SHA: ${{ inputs.expected_sha }}
+        run: |
+          set -euo pipefail
+          bash .github/scripts/rafaelia/lifecycle-promotion.sh \
+            "$FROM_LANE" "$TO_LANE" "$EXPECTED_SHA"
+
+      - name: Record authority boundary
+        run: |
+          {
+            echo '## Promotion automation boundary'
+            echo
+            echo '- opens or reuses a PR only'
+            echo '- auto-merge: false'
+            echo '- direct branch mutation: false'
+            echo '- production publish: false'
+            echo '- provider branch protection: TOKEN_VAZIO until authoritative readback'
+          } >> "$GITHUB_STEP_SUMMARY"
