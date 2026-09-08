@@ -19,6 +19,8 @@ jobs:
       TARGET_SDK: "37"
       NDK_VERSION: "29.0.14206865"
       FRIDA_VERSION: "17.9.11"
+      SOURCE_HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+      TESTED_SHA: ${{ github.sha }}
       UPDATE_KEYSTORE_B64: ${{ secrets.RAFAELIA_UPDATE_KEYSTORE_B64 }}
       UPDATE_STORE_PASSWORD: ${{ secrets.RAFAELIA_UPDATE_STORE_PASSWORD }}
       UPDATE_KEY_PASSWORD: ${{ secrets.RAFAELIA_UPDATE_KEY_PASSWORD }}
@@ -228,8 +230,8 @@ jobs:
             --ks-key-alias "$alias" --out dist/frida-lab-arm32-update.apk build/update/apk/aligned.apk
           "$BT/apksigner" verify --verbose --print-certs dist/frida-lab-arm32-update.apk | tee dist/apksigner-verify.txt
           "$BT/zipalign" -c -p 4 dist/frida-lab-arm32-update.apk
-          signer_sha256="$(sed -n 's/^Signer #1 certificate SHA-256 digest: //p' dist/apksigner-verify.txt | head -n1)"
-          test -n "$signer_sha256"
+          signer_sha256="$(sed -n 's/^.*certificate SHA-256 digest:[[:space:]]*//p' dist/apksigner-verify.txt | head -n1)"
+          [[ "$signer_sha256" =~ ^[0-9a-fA-F]{64}$ ]]
           printf 'version_code=%s\nversion_name=%s\nsigning_mode=%s\nupdate_compatible=%s\nsigner_sha256=%s\n' \
             "$VERSION_CODE" "$VERSION_NAME" "$signing_mode" "$update_compatible" "$signer_sha256" \
             | tee dist/update-build.env
@@ -256,7 +258,9 @@ jobs:
           apk_sha=hashlib.sha256(p.read_bytes()).hexdigest()
           receipt={
             'schema':'rafaelia.frida.arm32-update.receipt.v1',
-            'source_commit':os.environ['GITHUB_SHA'],
+            'source_commit':os.environ['SOURCE_HEAD_SHA'],
+            'source_head_sha':os.environ['SOURCE_HEAD_SHA'],
+            'tested_commit_sha':os.environ['TESTED_SHA'],
             'package':'io.rafaelia.fridalab',
             'abi':'armeabi-v7a',
             'android_target':'Android 10 / API 29 device-compatible; minSdk 21',
