@@ -206,6 +206,7 @@ jobs:
           "$BT/zipalign" -p -f 4 build/update/apk/unsigned.apk build/update/apk/aligned.apk
 
           signing_mode="EPHEMERAL_LAB"
+          artifact_class="ephemeral-lab"
           update_compatible="false"
           ks=build/update/ephemeral.keystore
           storepass=android
@@ -220,6 +221,7 @@ jobs:
             keypass="$UPDATE_KEY_PASSWORD"
             alias="$UPDATE_KEY_ALIAS"
             signing_mode="STABLE_UPDATE"
+            artifact_class="stable-update"
             update_compatible="true"
           else
             keytool -genkeypair -keystore "$ks" -storepass "$storepass" -alias "$alias" -keypass "$keypass" \
@@ -232,12 +234,13 @@ jobs:
           "$BT/zipalign" -c -p 4 dist/frida-lab-arm32-update.apk
           signer_sha256="$(sed -n 's/^.*certificate SHA-256 digest:[[:space:]]*//p' dist/apksigner-verify.txt | head -n1)"
           [[ "$signer_sha256" =~ ^[0-9a-fA-F]{64}$ ]]
-          printf 'version_code=%s\nversion_name=%s\nsigning_mode=%s\nupdate_compatible=%s\nsigner_sha256=%s\n' \
-            "$VERSION_CODE" "$VERSION_NAME" "$signing_mode" "$update_compatible" "$signer_sha256" \
+          printf 'version_code=%s\nversion_name=%s\nsigning_mode=%s\nartifact_class=%s\nupdate_compatible=%s\nsigner_sha256=%s\n' \
+            "$VERSION_CODE" "$VERSION_NAME" "$signing_mode" "$artifact_class" "$update_compatible" "$signer_sha256" \
             | tee dist/update-build.env
           echo "version_code=$VERSION_CODE" >> "$GITHUB_OUTPUT"
           echo "version_name=$VERSION_NAME" >> "$GITHUB_OUTPUT"
           echo "signing_mode=$signing_mode" >> "$GITHUB_OUTPUT"
+          echo "artifact_class=$artifact_class" >> "$GITHUB_OUTPUT"
           echo "update_compatible=$update_compatible" >> "$GITHUB_OUTPUT"
           echo "signer_sha256=$signer_sha256" >> "$GITHUB_OUTPUT"
 
@@ -247,6 +250,7 @@ jobs:
           VERSION_CODE: ${{ steps.apk.outputs.version_code }}
           VERSION_NAME: ${{ steps.apk.outputs.version_name }}
           SIGNING_MODE: ${{ steps.apk.outputs.signing_mode }}
+          ARTIFACT_CLASS: ${{ steps.apk.outputs.artifact_class }}
           UPDATE_COMPATIBLE: ${{ steps.apk.outputs.update_compatible }}
           SIGNER_SHA256: ${{ steps.apk.outputs.signer_sha256 }}
         run: |
@@ -271,6 +275,7 @@ jobs:
             'compiled_activities':['MainActivity','OneClickActivity'],
             'dex_one_click_gate':'PASS',
             'signing_mode':os.environ['SIGNING_MODE'],
+            'artifact_semantic_class':os.environ['ARTIFACT_CLASS'],
             'signer_sha256':os.environ['SIGNER_SHA256'],
             'update_compatible_with_same_signer':os.environ['UPDATE_COMPATIBLE']=='true',
             'installed_signer_match':'TOKEN_VAZIO_DEVICE',
@@ -286,10 +291,10 @@ jobs:
           PY
           sha256sum dist/frida-lab-arm32-update.apk dist/receipt.arm32-update.v1.json > dist/SHA256SUMS.txt
 
-      - name: Upload ARM32 update candidate and evidence
+      - name: Upload ARM32 artifact and evidence with semantic class
         uses: actions/upload-artifact@v4
         with:
-          name: frida-arm32-update-${{ github.run_id }}
+          name: frida-arm32-${{ steps.apk.outputs.artifact_class }}-${{ github.run_id }}
           if-no-files-found: error
           retention-days: 14
           path: |
