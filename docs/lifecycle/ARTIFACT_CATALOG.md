@@ -24,6 +24,23 @@ GitHub artifact name includes `run_id` and `run_attempt` to avoid overwrite ambi
 
 The repository already contains independent evidence-producing gates for Android APK/ELF/DEX, ARM32/NEON4096 freestanding paths, physical-benchmark adapters, RFL self-tests, runtime-aided debugging, runtime learning, crash observability, hash backends and provenance. Lifecycle orchestration **indexes** them; it does not redefine their technical assertions.
 
+## Physical-device evidence register
+
+Canonical physical-device receipts are grouped under `evidence/physical/`; their human interpretations and next-evidence plans live under `docs/evidence/physical/`.
+
+The first registered receipt is `RAFAELIA_FRIDA_LAB_RECEIPT_V1`, classified as evidence level **6 — PHYSICAL_DEVICE** for its observed Android 10 / `armeabi-v7a` runtime, loaded source-built ELF probe, loaded Frida Gadget ELF and NEON4096 SIMD fold selftest. Its bounded interpretation explicitly leaves VALIDATE_SHADOW, validation persistence, recovery, comparative NEON performance and GPU promotion unresolved where the receipt does not prove them.
+
+Physical evidence rules:
+
+- raw receipts are append-only historical records;
+- normalized JSON may add machine-readable classification but must preserve source values;
+- ingestion time is not substituted for a missing measurement timestamp;
+- a diagnostic PASS does not imply model-validation or performance PASS;
+- `TOKEN_VAZIO` remains explicit until measured;
+- physical-device evidence may resolve hosted-CI uncertainty only for the exact measured scope.
+
+Index: `docs/evidence/physical/README.md`.
+
 ## Evidence levels
 
 1. **SOURCE** — code/config/document exists and hashes.
