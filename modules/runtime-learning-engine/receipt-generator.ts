@@ -59,22 +59,30 @@ export class ReceiptGenerator {
     }
   }
 
+  private calculateVerificationHash(receipt: Omit<Receipt, 'verification_hash'> | Receipt): string {
+    const receiptCopy = { ...receipt } as Partial<Receipt>;
+    delete receiptCopy.verification_hash;
+    return generateHash(JSON.stringify(receiptCopy));
+  }
+
   generateReceipt(
     action: string,
     resourceId: string,
     data: Record<string, any> = {}
   ): Receipt {
-    const receiptId = `rcpt_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-    const verificationHash = generateHash(JSON.stringify({ action, resourceId, timestamp: Date.now(), data }));
-
-    const receipt: Receipt = {
+    const timestamp = Date.now();
+    const receiptId = `rcpt_${timestamp}_${Math.random().toString(36).substr(2, 9)}`;
+    const receiptWithoutHash: Omit<Receipt, 'verification_hash'> = {
       receipt_id: receiptId,
-      timestamp: Date.now(),
+      timestamp,
       action,
       resource_id: resourceId,
       status: 'pending',
-      data,
-      verification_hash: verificationHash
+      data
+    };
+    const receipt: Receipt = {
+      ...receiptWithoutHash,
+      verification_hash: this.calculateVerificationHash(receiptWithoutHash)
     };
 
     this.receipts.set(receiptId, receipt);
@@ -94,7 +102,7 @@ export class ReceiptGenerator {
     receipt.status = 'completed';
     receipt.completion_time = Date.now();
     receipt.data = { ...receipt.data, ...resultData };
-    receipt.verification_hash = generateHash(JSON.stringify(receipt));
+    receipt.verification_hash = this.calculateVerificationHash(receipt);
 
     this.saveReceipts();
     console.log(`[ReceiptGenerator] Completed receipt: ${receiptId}`);
@@ -111,7 +119,7 @@ export class ReceiptGenerator {
     receipt.status = 'failed';
     receipt.completion_time = Date.now();
     receipt.error = error;
-    receipt.verification_hash = generateHash(JSON.stringify(receipt));
+    receipt.verification_hash = this.calculateVerificationHash(receipt);
 
     this.saveReceipts();
     console.log(`[ReceiptGenerator] Failed receipt: ${receiptId}: ${error}`);
@@ -119,12 +127,8 @@ export class ReceiptGenerator {
   }
 
   verifyReceipt(receipt: Receipt): boolean {
-    const receiptCopy = { ...receipt };
-    const originalHash = receiptCopy.verification_hash;
-    delete (receiptCopy as any).verification_hash;
-
-    const calculatedHash = generateHash(JSON.stringify(receiptCopy));
-    const isValid = calculatedHash === originalHash;
+    const calculatedHash = this.calculateVerificationHash(receipt);
+    const isValid = calculatedHash === receipt.verification_hash;
 
     if (!isValid) {
       console.warn(`[ReceiptGenerator] Receipt verification failed: ${receipt.receipt_id}`);
@@ -167,13 +171,14 @@ export class ReceiptGenerator {
     const completed = receipts.filter(r => r.status === 'completed').length;
     const failed = receipts.filter(r => r.status === 'failed').length;
     const pending = receipts.filter(r => r.status === 'pending').length;
+    const settled = completed + failed;
 
     return {
       total: receipts.length,
       completed,
       failed,
       pending,
-      successRate: receipts.length > 0 ? (completed / (completed + failed)) * 100 : 0
+      successRate: settled > 0 ? (completed / settled) * 100 : 0
     };
   }
 
