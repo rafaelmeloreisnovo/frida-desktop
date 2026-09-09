@@ -1,0 +1,73 @@
+{
+  "schema": "rafaelia.audit.receipt/v1",
+  "receipt_id": "FRIDA-GENERIC-CI-PREJOB-PARENT-INVARIANCE-20260909-V4",
+  "cycle_id": "RAFAELIA-FED-20260909-CI-PREJOB-04",
+  "predecessor_receipt": "FRIDA-GENERIC-CI-PREJOB-ORIGIN-BOUNDARY-20260909-V3",
+  "repository": "rafaelmeloreisnovo/frida-desktop",
+  "source": {
+    "failing_head": "ca13bae28fb214e9b8e194f70cefd6a554751938",
+    "parents": [
+      "1aa7f67099b88deca74287301ffb54058abf04d1",
+      "e8b754a6b021958e83a069ca869b1f5c72ae7cc4"
+    ],
+    "workflow_path": ".github/workflows/ci.yml",
+    "trigger": "push"
+  },
+  "observations": {
+    "workflow_content_head_vs_parent1": "OBSERVED_IDENTICAL_CONTENT",
+    "workflow_content_head_vs_parent2": "OBSERVED_IDENTICAL_CONTENT",
+    "compare_parent1_to_head_workflow_changed": false,
+    "compare_parent2_to_head_files_changed": [],
+    "merge_commit_changed_ci_yml": false,
+    "head_commit_files": "ARM32 NEON4096 implementation/evidence additions; ci.yml absent from changed files"
+  },
+  "inference_boundary": {
+    "falsified_hypothesis": "PR37 merge introduced a ci.yml text delta that caused the generic CI pre-job failure",
+    "remaining_hypotheses": [
+      "pre-existing workflow structural incompatibility",
+      "repository/provider configuration or policy",
+      "referenced reusable/local action resolution at workflow validation time",
+      "provider-side validation diagnostic not exposed by current connector"
+    ],
+    "claim_allowed": false
+  },
+  "gap": {
+    "gap_id": "TV-FRIDA-GENERIC-CI-PREJOB-ORIGIN-CAUSE",
+    "token": "TOKEN_VAZIO_PREJOB_ORIGIN_CAUSE",
+    "source_pointer": "github:rafaelmeloreisnovo/frida-desktop@ca13bae28fb214e9b8e194f70cefd6a554751938:.github/workflows/ci.yml",
+    "missing_field": "specific workflow-validation or repository-policy cause",
+    "blocking_dependency": "provider diagnostic not yet observed",
+    "evidence_needed": "validation annotation/message or minimal structural delta that changes job materialization",
+    "falsifier": "observable jobs>0 for identical workflow/ref/config or provider diagnostic identifying another cause",
+    "next_probe": "resolve exact ci.yml blob SHA at head and both parents, then inspect workflow validation-sensitive references and repository Actions policy without modifying default branch",
+    "owner_authority": "GitHub Actions provider evidence",
+    "urgency": "P0",
+    "closure_gate": "observable cause plus reproducible/minimal validation evidence",
+    "claim_allowed": false,
+    "predecessor_lineage": [
+      "receipt:FRIDA-GENERIC-CI-PREJOB-ORIGIN-BOUNDARY-20260909-V3",
+      "commit:ca13bae28fb214e9b8e194f70cefd6a554751938",
+      "parent:1aa7f67099b88deca74287301ffb54058abf04d1",
+      "parent:e8b754a6b021958e83a069ca869b1f5c72ae7cc4"
+    ]
+  },
+  "memory_projection": {
+    "L": "generic CI pre-job failure persists across merge boundary with ci.yml text invariant",
+    "O": "two independent merge parents carry the same observed workflow content",
+    "T": "workflow validation <-> repository policy <-> local/reusable action references",
+    "C": "source-text causality narrowed; provider/config causality remains open",
+    "P": "identity anchored by commit SHAs, path and append-only receipt"
+  },
+  "F_ok": [
+    "merge-local ci.yml mutation hypothesis falsified",
+    "both parents inspected",
+    "parent-to-head compare shows no ci.yml change",
+    "causal search moved from PR37 delta to pre-existing validation/config boundary"
+  ],
+  "F_gap": [
+    "TOKEN_VAZIO_PREJOB_ORIGIN_CAUSE",
+    "exact provider validation diagnostic"
+  ],
+  "F_next": "inspect validation-sensitive workflow references/policies and obtain exact blob identities before proposing any hotfix",
+  "claim_allowed": false
+}
