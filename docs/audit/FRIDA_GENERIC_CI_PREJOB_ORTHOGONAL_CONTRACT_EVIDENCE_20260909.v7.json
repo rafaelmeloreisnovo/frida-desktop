@@ -1,0 +1,95 @@
+{
+  "schema": "rafaelia.audit.receipt/v1",
+  "receipt_id": "FRIDA-GENERIC-CI-PREJOB-ORTHOGONAL-CONTRACT-20260909-V7",
+  "cycle_id": "RAFAELIA-FED-20260909-CI-PREJOB-07",
+  "predecessor": "FRIDA_GENERIC_CI_PREJOB_LOCAL_ACTION_COVERAGE_20260909.v6.json",
+  "repository": "rafaelmeloreisnovo/frida-desktop",
+  "target_commit": "ca13bae28fb214e9b8e194f70cefd6a554751938",
+  "generic_ci": {
+    "workflow_path": ".github/workflows/ci.yml",
+    "run_id": 34074595293,
+    "run_number": 280,
+    "check_suite_id": 92312836959,
+    "jobs_observed": 0,
+    "classification": "OBSERVED_PRE_JOB_FAILURE"
+  },
+  "orthogonal_evidence": {
+    "workflow_run_id": 34074117942,
+    "job_id": 101596827756,
+    "job_name": "Workflow topology + catalyst contract",
+    "conclusion": "success",
+    "same_target_commit": true,
+    "contract_output": "WORKFLOW_CONTRACT_PASS workflows=9 catalysts=16 errors=0 warnings=1",
+    "warning": "arm32-neon4096-freestanding.yml WORKFLOW_CLASSIFICATION: workflow is not yet classified by the local contract",
+    "artifact_id": 10001449888,
+    "artifact_name": "workflow-contract-34074117942",
+    "artifact_sha256": "8f6a9f0220c5cbeff62942bdec53d884496ee6c7a5f7a4e6ea326d9df67ca43f",
+    "artifact_size_bytes": 4130
+  },
+  "check_run_cross_section": {
+    "commit_check_runs_observed": 5,
+    "generic_ci_check_run_observed": false,
+    "interpretation": "the generic CI failure did not materialize a check-run/job while independent GitHub Actions workflows on the same commit did"
+  },
+  "hypothesis_updates": [
+    {
+      "hypothesis": "repository-wide GitHub Actions outage",
+      "state": "CONTRADICTED"
+    },
+    {
+      "hypothesis": "local RAFAELIA workflow-contract detects a topology/catalyst error at the same commit",
+      "state": "CONTRADICTED",
+      "evidence": "errors=0"
+    },
+    {
+      "hypothesis": "GitHub provider-side validation or unsupported semantic element specific to ci.yml",
+      "state": "OPEN"
+    }
+  ],
+  "gap": {
+    "gap_id": "TV-FRIDA-GENERIC-CI-PREJOB-PROVIDER-SEMANTIC",
+    "token": "TOKEN_VAZIO_PROVIDER_SEMANTIC",
+    "source_pointer": "github:rafaelmeloreisnovo/frida-desktop/actions/runs/34074595293#suite=92312836959",
+    "missing_field": "GitHub provider diagnostic or minimal semantic element that causes ci.yml to be rejected before job creation",
+    "blocking_dependency": "generic CI suite exposes no materialized job/check-run diagnostic through current connector surface",
+    "evidence_needed": "provider validation annotation or a minimal diagnostic workflow reproducing the rejection",
+    "falsifier": "generic ci.yml materializes a job unchanged, or provider evidence attributes failure to a non-semantic external cause",
+    "next_probe": "inspect workflow-contract validator scope; then prepare a minimal diagnostic workflow on audit branch that incrementally exercises ci.yml validation-sensitive semantics without changing production ci.yml",
+    "owner_authority": "GitHub Actions provider evidence",
+    "urgency": "P0",
+    "closure_gate": "specific reproducible cause with observable provider/job evidence",
+    "claim_allowed": false,
+    "predecessor_lineage": [
+      "run:34074595293",
+      "check_suite:92312836959",
+      "commit:ca13bae28fb214e9b8e194f70cefd6a554751938",
+      "orthogonal_run:34074117942",
+      "orthogonal_job:101596827756",
+      "artifact:10001449888"
+    ]
+  },
+  "memory_projection": {
+    "L": "ci #280 jobs=0; same-commit workflow-contract job succeeds",
+    "O": "independent GitHub Actions execution contradicts repository-wide outage and local-contract topology failure",
+    "T": "generic CI provider validation <-> local workflow contract <-> check-run cross-section",
+    "C": "provider-semantic cause remains unresolved; no production hotfix justified",
+    "P": "identity anchored by commit, run, suite, job, artifact and digest"
+  },
+  "uncertainty_before": "missing-local-action OR needs-graph OR provider-semantic OR repository-wide-actions",
+  "uncertainty_after": "provider-semantic OR semantic class not covered by local workflow-contract",
+  "F_ok": [
+    "same-commit orthogonal workflow-contract execution observed",
+    "WORKFLOW_CONTRACT_PASS workflows=9 catalysts=16 errors=0 observed",
+    "evidence artifact identity and SHA256 anchored",
+    "repository-wide Actions outage contradicted",
+    "generic CI has no materialized check-run among observed commit check-runs",
+    "receipt persisted append-only"
+  ],
+  "F_gap": [
+    "TOKEN_VAZIO_PROVIDER_SEMANTIC",
+    "provider diagnostic absent",
+    "workflow-contract semantic coverage relative to GitHub parser not yet proven"
+  ],
+  "F_next": "inspect workflow-contract.py coverage and prepare a minimal audit-only diagnostic workflow targeting uncovered GitHub validation semantics; do not modify production ci.yml yet",
+  "claim_allowed": false
+}
