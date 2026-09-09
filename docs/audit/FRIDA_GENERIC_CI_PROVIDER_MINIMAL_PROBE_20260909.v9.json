@@ -1,0 +1,55 @@
+{
+  "schema": "rafaelia.audit.receipt/v1",
+  "cycle_id": "RAFAELIA-FED-20260909-CI-PREJOB-09",
+  "predecessor": "docs/audit/FRIDA_GENERIC_CI_PREJOB_VALIDATOR_BLINDSPOTS_20260909.v8.json",
+  "contract": "SOURCE->TRANSFORM->CLAIM->TEST/EVIDENCE->RECEIPT->INDEX->MEMORY",
+  "sources": [
+    "github:rafaelmeloreisnovo/frida-desktop@ca13bae28fb214e9b8e194f70cefd6a554751938:.github/workflows/ci.yml",
+    "github:tree/ca13bae28fb214e9b8e194f70cefd6a554751938",
+    "gdrive:RAFAELIA — Implementação Latentes e Papers — Drive GitHub V1.txt"
+  ],
+  "transform": {
+    "kind": "isolated_provider_semantic_probe",
+    "path": ".github/workflows/rafaelia-ci-provider-minimal.yml",
+    "branch": "audit/ci-prejob-evidence-receipt-20260909",
+    "commit": "1e123c7747316ce26004fbf9d85bb8383774dcfa",
+    "properties": ["single_job", "ubuntu-latest", "no_local_actions", "no_needs", "no_matrix", "no_secrets", "contents_read_only"]
+  },
+  "observed": {
+    "immediate_runs_for_head_sha": 0,
+    "observation_state": "OBSERVED_NO_RUN_YET",
+    "interpretation": "absence of an immediate run is not evidence of provider rejection"
+  },
+  "coverage": {
+    "drive_primary_memory_revalidated": true,
+    "ci_source_revalidated": true,
+    "commit_tree_revalidated": true,
+    "diagnostic_probe_materialized": true
+  },
+  "gap": {
+    "gap_id": "TV-FRIDA-GENERIC-CI-PREJOB-PROVIDER-SEMANTIC",
+    "token": "TOKEN_VAZIO_PROVIDER_SEMANTIC",
+    "source_pointer": "github:rafaelmeloreisnovo/frida-desktop/actions?head_sha=1e123c7747316ce26004fbf9d85bb8383774dcfa",
+    "missing_field": "provider acceptance/materialization result for isolated minimal workflow",
+    "blocking_dependency": "workflow run/check-suite has not materialized at observation time",
+    "evidence_needed": "workflow run with job materialized, or provider validation diagnostic",
+    "falsifier": "provider-minimal job materializes successfully, proving baseline provider semantic acceptance on audit branch",
+    "next_probe": "re-observe Actions runs/check-suite for commit 1e123c7747316ce26004fbf9d85bb8383774dcfa; if successful, introduce exactly one suspect semantic class in a successor diagnostic workflow",
+    "owner_authority": "GitHub Actions provider evidence",
+    "urgency": "P0",
+    "closure_gate": "observable provider result for isolated workflow",
+    "claim_allowed": false,
+    "predecessor_lineage": ["receipt:v8", "commit:ca13bae28fb214e9b8e194f70cefd6a554751938", "commit:1e123c7747316ce26004fbf9d85bb8383774dcfa"]
+  },
+  "memory_projection": {
+    "L": "v8 blindspots -> v9 isolated provider probe",
+    "O": "generic ci failure contrasted with independent minimal provider workflow",
+    "T": "Drive primary memory <-> GitHub workflow source <-> provider evidence",
+    "C": "diagnostic only; production ci.yml unchanged",
+    "P": "append-only identity by cycle_id, path, branch and commit SHA"
+  },
+  "F_ok": ["primary Drive memory revalidated", "minimal diagnostic workflow materialized on audit branch", "production ci.yml untouched"],
+  "F_gap": ["TOKEN_VAZIO_PROVIDER_SEMANTIC", "TOKEN_VAZIO_MINIMAL_RUN_RESULT"],
+  "F_next": "re-observe provider result for commit 1e123c7747316ce26004fbf9d85bb8383774dcfa before adding any semantic complexity",
+  "claim_allowed": false
+}
