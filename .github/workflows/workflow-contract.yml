@@ -53,9 +53,17 @@ jobs:
           bash -n .github/scripts/rafaelia/runtime-learning-engine-ci.sh
           bash -n .github/scripts/rafaelia/provenance-ci.sh
           bash -n .github/scripts/rafaelia/android-crash-observability-ci.sh
+          bash -n .github/scripts/rafaelia/atlas-mission-consumer-gate.sh
+          bash -n .github/scripts/rafaelia/arm32-neon4096-freestanding-gate.sh
+          bash -n .github/scripts/rafaelia/arm32-neon4096-physical-bench-adapter-gate.sh
+          bash -n .github/scripts/rafaelia/hash-bitexact-backend-gate.sh
+          bash -n .github/scripts/rafaelia/hash-bitexact-streaming-neon-gate.sh
+          bash -n .github/scripts/rafaelia/hash-math-plugin-freestanding-gate.sh
           python3 -m py_compile .github/scripts/rafaelia/workflow-contract.py
           python3 -m py_compile tools/validate-rafaelia-provenance.py
+          python3 -m py_compile tools/validate_frida_atlas_mission_binding.py
           grep -Fq 'run: bash .github/scripts/rafaelia/on-device-receipt-verifier-gate.sh' .github/workflows/android17-apk-elf-dex.yml
+          grep -Fq 'final-verdict:' .github/workflows/01.yml
 
       - name: Run fail-closed workflow + catalyst contract
         run: python3 .github/scripts/rafaelia/workflow-contract.py
@@ -64,6 +72,7 @@ jobs:
         run: git diff --check HEAD^ HEAD
 
       - name: Upload workflow contract evidence
+        if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1, Node 24
         with:
           name: workflow-contract-${{ github.run_id }}

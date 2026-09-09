@@ -5,6 +5,7 @@ on:
     paths:
       - 'docs/contracts/frida_atlas_mission_execution_consumer.v1.json'
       - 'tools/validate_frida_atlas_mission_binding.py'
+      - '.github/scripts/rafaelia/atlas-mission-consumer-gate.sh'
       - '.github/workflows/atlas-mission-consumer-gate.yml'
   push:
     branches:
@@ -12,20 +13,30 @@ on:
     paths:
       - 'docs/contracts/frida_atlas_mission_execution_consumer.v1.json'
       - 'tools/validate_frida_atlas_mission_binding.py'
+      - '.github/scripts/rafaelia/atlas-mission-consumer-gate.sh'
       - '.github/workflows/atlas-mission-consumer-gate.yml'
   workflow_dispatch:
 
 permissions:
   contents: read
 
+concurrency:
+  group: atlas-mission-consumer-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+defaults:
+  run:
+    shell: bash
+
 jobs:
   validate-source-boundary:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - name: Check out repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2, Node 24
         with:
-          python-version: '3.12'
+          persist-credentials: false
+
       - name: Validate Frida ATLAS mission binding
-        run: python3 tools/validate_frida_atlas_mission_binding.py
+        run: bash .github/scripts/rafaelia/atlas-mission-consumer-gate.sh
