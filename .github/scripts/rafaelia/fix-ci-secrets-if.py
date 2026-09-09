@@ -20,8 +20,8 @@ text = text.replace(job_anchor, job_replacement, 1)
 
 bad_if = "if: ${{ secrets.ANDROID_ARTIFACT_SIGNING_KEY != '' && secrets.ANDROID_ARTIFACT_SIGNING_KEY_ID != '' }}"
 good_if = "if: ${{ env.ANDROID_ARTIFACT_SIGNING_KEY != '' && env.ANDROID_ARTIFACT_SIGNING_KEY_ID != '' }}"
-if text.count(bad_if) != 2:
-    raise SystemExit(f"FIX_FAIL expected 2 invalid secret conditionals, observed {text.count(bad_if)}")
+if text.count(bad_if) != 3:
+    raise SystemExit(f"FIX_FAIL expected 3 invalid secret conditionals, observed {text.count(bad_if)}")
 text = text.replace(bad_if, good_if)
 
 secret_echo = 'echo "${{ secrets.ANDROID_ARTIFACT_SIGNING_KEY }}" | gpg --batch --import'
@@ -37,11 +37,12 @@ if text.count(secret_id) != 1:
 text = text.replace(secret_id, safer_id, 1)
 
 # Avoid shell xtrace around secret-bearing steps.
-block_anchor = """      - name: Import signing key\n        if: ${{ env.ANDROID_ARTIFACT_SIGNING_KEY != '' && env.ANDROID_ARTIFACT_SIGNING_KEY_ID != '' }}\n        run: |\n          set -euxo pipefail\n"""
-block_replacement = """      - name: Import signing key\n        if: ${{ env.ANDROID_ARTIFACT_SIGNING_KEY != '' && env.ANDROID_ARTIFACT_SIGNING_KEY_ID != '' }}\n        run: |\n          set -euo pipefail\n"""
-if text.count(block_anchor) != 1:
-    raise SystemExit("FIX_FAIL signing import block drifted")
-text = text.replace(block_anchor, block_replacement, 1)
+for step_name in ("Import signing key", "Sign Android native package"):
+    block_anchor = f"""      - name: {step_name}\n        if: ${{{{ env.ANDROID_ARTIFACT_SIGNING_KEY != '' && env.ANDROID_ARTIFACT_SIGNING_KEY_ID != '' }}}}\n        run: |\n          set -euxo pipefail\n"""
+    block_replacement = f"""      - name: {step_name}\n        if: ${{{{ env.ANDROID_ARTIFACT_SIGNING_KEY != '' && env.ANDROID_ARTIFACT_SIGNING_KEY_ID != '' }}}}\n        run: |\n          set -euo pipefail\n"""
+    if text.count(block_anchor) != 1:
+        raise SystemExit(f"FIX_FAIL {step_name!r} block drifted")
+    text = text.replace(block_anchor, block_replacement, 1)
 
 PATH.write_text(text, encoding="utf-8")
-print("FIX_OK ci.yml secret conditionals migrated to job env context")
+print("FIX_OK ci.yml: 3 secret conditionals migrated to job env; xtrace removed")
