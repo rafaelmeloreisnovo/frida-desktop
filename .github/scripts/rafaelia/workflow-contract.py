@@ -71,7 +71,7 @@ def sha256(path):
 
 def extract_actions(text):
     out = []
-    for match in re.finditer(r"(?m)^\s*uses:\s*([^\s#]+)", text):
+    for match in re.finditer(r"(?m)^\s*(?:-\s*)?uses:\s*([^\s#]+)", text):
         value = match.group(1)
         if value.startswith("./") or "@" not in value:
             continue
