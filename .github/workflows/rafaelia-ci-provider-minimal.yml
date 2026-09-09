@@ -1,0 +1,21 @@
+name: RAFAELIA CI provider minimal probe
+
+on:
+  push:
+    branches:
+      - audit/ci-prejob-evidence-receipt-20260909
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  provider-minimal:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Provider accepted workflow and materialized job
+        shell: bash
+        run: |
+          set -eu
+          printf '%s\n' 'RAFAELIA_PROVIDER_MINIMAL_PASS'
