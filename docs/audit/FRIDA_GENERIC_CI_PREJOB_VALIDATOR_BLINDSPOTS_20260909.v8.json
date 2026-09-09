@@ -1,0 +1,92 @@
+{
+  "schema": "rafaelia.audit.receipt/v1",
+  "receipt_id": "FRIDA-GENERIC-CI-PREJOB-VALIDATOR-BLINDSPOTS-20260909-V8",
+  "cycle_id": "RAFAELIA-FED-20260909-CI-PREJOB-08",
+  "predecessor": "docs/audit/FRIDA_GENERIC_CI_PREJOB_ORTHOGONAL_CONTRACT_EVIDENCE_20260909.v7.json",
+  "repository": "rafaelmeloreisnovo/frida-desktop",
+  "source_commit": "ca13bae28fb214e9b8e194f70cefd6a554751938",
+  "source_tree": "fd9d43e69fbe945502e449d9fb110ff0a51c8624",
+  "ci_blob": "89e0d85799420136cbe76a3645e65e6af8de3613",
+  "validator_path": ".github/scripts/rafaelia/workflow-contract.py",
+  "validator_blob": "3152c3388856ca164747f26734805c92a6e5a8cc",
+  "validator_bytes": 16968,
+  "observed_run": {
+    "run_id": 34074595293,
+    "workflow_id": 285775214,
+    "run_number": 280,
+    "check_suite_id": 92312836959,
+    "event": "push",
+    "branch": "main",
+    "status": "completed",
+    "conclusion": "failure",
+    "created_at": "2026-09-07T01:55:59Z",
+    "updated_at": "2026-09-07T01:55:59Z"
+  },
+  "transform": "read validator source and classify what it validates versus GitHub provider semantics not represented in its checks",
+  "observed_validator_scope": {
+    "checks": [
+      "tabs/final-newline/pull_request_target/write-all/floating branch refs",
+      "custom workflow required textual controls",
+      "bounded external catalyst allowlist and pins",
+      "selected upstream ci.yml anchor tokens",
+      "selected publish permissions anchors",
+      "presence of top-level env"
+    ],
+    "method": "text/regex/token checks over workflow files; no GitHub Actions schema/parser execution"
+  },
+  "blindspots_observed": [
+    "does not parse YAML into a semantic job graph",
+    "does not prove every needs target names an existing job",
+    "does not validate expression syntax or context legality",
+    "does not validate matrix/include/exclude semantics",
+    "does not validate job-level uses/reusable-workflow semantics",
+    "does not validate local action metadata against GitHub's action schema",
+    "does not invoke GitHub's workflow parser/validator",
+    "does not observe repository/org Actions policy or provider-side validation diagnostics"
+  ],
+  "evidence_boundary": {
+    "workflow_contract_pass_means": "repository-local textual engineering invariants passed",
+    "workflow_contract_pass_does_not_mean": "GitHub provider accepts and materializes every job in ci.yml",
+    "claim_allowed": false
+  },
+  "gap": {
+    "gap_id": "TV-FRIDA-GENERIC-CI-PREJOB-PROVIDER-SEMANTIC",
+    "token": "TOKEN_VAZIO_PROVIDER_SEMANTIC",
+    "source_pointer": "github:rafaelmeloreisnovo/frida-desktop@ca13bae28fb214e9b8e194f70cefd6a554751938:.github/workflows/ci.yml#blob=89e0d85799420136cbe76a3645e65e6af8de3613",
+    "missing_field": "specific GitHub Actions semantic/schema rejection causing zero materialized jobs",
+    "blocking_dependency": "provider validation diagnostic not exposed by currently observed run/jobs surface",
+    "evidence_needed": "provider diagnostic or controlled minimal workflow reproducer isolating a semantic class",
+    "falsifier": "materialized generic-ci job under identical semantic surface or diagnostic proving a non-semantic cause",
+    "next_probe": "create an audit-only minimal diagnostic workflow that tests provider acceptance independently, then incrementally introduce validation-sensitive classes; do not modify production ci.yml",
+    "owner_authority": "GitHub Actions provider evidence",
+    "urgency": "P0",
+    "closure_gate": "reproducible minimal provider-side failure or explicit provider diagnostic",
+    "claim_allowed": false,
+    "predecessor_lineage": [
+      "run:34074595293",
+      "check_suite:92312836959",
+      "commit:ca13bae28fb214e9b8e194f70cefd6a554751938",
+      "ci_blob:89e0d85799420136cbe76a3645e65e6af8de3613",
+      "validator_blob:3152c3388856ca164747f26734805c92a6e5a8cc"
+    ]
+  },
+  "memory_projection": {
+    "L": "V7 orthogonal PASS -> V8 validator semantic blindspots enumerated",
+    "O": "successful repository-local validator is bounded evidence, not provider semantic proof",
+    "T": "ci.yml <-> workflow-contract.py <-> GitHub provider parser boundary",
+    "C": "PRE_JOB failure remains provider-semantic/configuration unresolved",
+    "P": "identity anchored by commit/tree/blob/run/suite"
+  },
+  "F_ok": [
+    "validator source blob resolved exactly",
+    "validator scope classified from source",
+    "semantic blindspots enumerated",
+    "false inference contract-pass=>provider-valid explicitly blocked"
+  ],
+  "F_gap": [
+    "TOKEN_VAZIO_PROVIDER_SEMANTIC",
+    "TOKEN_VAZIO_CHECK_RUN_DIAGNOSTIC"
+  ],
+  "F_next": "materialize an audit-only minimal diagnostic workflow to test GitHub provider acceptance without touching production ci.yml",
+  "claim_allowed": false
+}
