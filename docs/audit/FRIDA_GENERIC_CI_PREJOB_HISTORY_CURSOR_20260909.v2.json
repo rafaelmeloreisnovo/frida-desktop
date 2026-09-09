@@ -1,0 +1,22 @@
+{
+  "schema":"rafaelia.audit.receipt/v1",
+  "receipt_id":"FRIDA-GENERIC-CI-PREJOB-HISTORY-CURSOR-20260909-V2",
+  "predecessor":"FRIDA-GENERIC-CI-PREJOB-EVIDENCE-20260909-V1",
+  "cycle_id":"RAFAELIA-FED-20260909-CI-PREJOB-02",
+  "repository":"rafaelmeloreisnovo/frida-desktop",
+  "workflow_id":285775214,
+  "cursor":{"before":"actions/runs page=1","after":"actions/runs page=6","per_page":100,"provider_total_count_observed":1247},
+  "observations":[
+    {"run_id":34363098640,"workflow_id":344914568,"head_sha":"442bb20779a9e00d11cc31a88ae583ab2eb2df6c","conclusion":"success","meaning":"receipt commit triggered independent provenance gate successfully"},
+    {"run_id":34171620127,"workflow_id":285775214,"run_number":435,"head_sha":"bb6bb61f894105a6cd1a96591071b970eca9333b","event":"push","conclusion":"failure","created_at":"2026-09-07T23:55:17Z"},
+    {"run_id":34078141444,"workflow_id":285775214,"run_number":351,"head_sha":"ab19a1af2520a9fc46dd40f0a1d88151a1194302","event":"push","conclusion":"failure","created_at":"2026-09-07T03:00:18Z","jobs_count_observed":0}
+  ],
+  "transform":"bulk cursor pagination of repository Actions history plus direct jobs probe for oldest ci.yml run surfaced in processed window",
+  "evidence_state":{"pages_processed":6,"nominal_run_slots_scanned":600,"oldest_ci_run_directly_probed":34078141444,"oldest_ci_run_number_directly_probed":351,"oldest_ci_jobs_count":0,"boundary_jobs_gt_zero_observed":false,"claim_allowed":false},
+  "gap":{"gap_id":"TV-FRIDA-CI-FIRST-PREJOB-BOUNDARY","token":"TOKEN_VAZIO_FIRST_JOBS_GT_ZERO","source_pointer":"github:rafaelmeloreisnovo/frida-desktop/actions/workflows/285775214","missing_field":"nearest older ci.yml run with jobs>0","blocking_dependency":"history cursor has not yet reached a jobs>0 ci.yml occurrence","evidence_needed":"run_id + jobs_count>0 + head_sha + workflow blob","falsifier":"no historical run of workflow 285775214 materializes jobs across complete retained history","next_probe":"continue repository Actions history from page 7 and directly probe each older ci.yml occurrence until jobs>0 is found","owner_authority":"GitHub Actions provider evidence","urgency":"P0","closure_gate":"adjacent or nearest supported jobs>0 -> jobs=0 boundary with comparable workflow blob/event/ref","claim_allowed":false,"predecessor_lineage":["FRIDA-GENERIC-CI-PREJOB-EVIDENCE-20260909-V1","run:34302379679","run:34078141444"]},
+  "memory_projection":{"L":"run 466 jobs=0 <- run 351 jobs=0; first healthy boundary remains older","O":"provenance gate on receipt commit succeeded independently","T":"Actions history <-> ci.yml <-> audit receipt","C":"generic CI pre-job diagnosis only; no scientific validation claim","P":"workflow_id/run_id/head_sha anchored append-only"},
+  "F_ok":["history cursor advanced through six 100-slot pages","run 34078141444 directly confirmed jobs=[]","failure window extended back to ci.yml run_number 351","receipt branch provenance gate succeeded on predecessor commit"],
+  "F_gap":["TOKEN_VAZIO_FIRST_JOBS_GT_ZERO","TOKEN_VAZIO_PREJOB_CAUSE"],
+  "F_next":"continue from page 7; stop only at first directly observed ci.yml jobs>0 boundary, then compare source blobs/event/ref",
+  "claim_allowed":false
+}
