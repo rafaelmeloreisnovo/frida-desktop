@@ -1,5 +1,6 @@
 name: 00 · Temporary CI YAML Repair
 
+# Temporary branch-only bootstrap. Removed before merge.
 on:
   push:
     branches:
