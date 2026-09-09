@@ -27,9 +27,7 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: '20'
-          cache: npm
-          cache-dependency-path: modules/runtime-learning-engine/package-lock.json
       - name: Install dependencies
-        run: npm ci
+        run: npm install --ignore-scripts --no-audit --no-fund
       - name: Execute receipt falsifiers
         run: npm test -- --runInBand receipt-generator.test.ts
