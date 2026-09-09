@@ -1,0 +1,20 @@
+{
+  "schema":"rafaelia.audit.receipt/v1",
+  "receipt_id":"FRIDA-GENERIC-CI-PREJOB-VALIDATION-SURFACE-20260909-V5",
+  "cycle_id":"RAFAELIA-FED-20260909-CI-PREJOB-05",
+  "predecessor":"docs/audit/FRIDA_GENERIC_CI_PREJOB_PARENT_INVARIANCE_20260909.v4.json",
+  "source":{"repository":"rafaelmeloreisnovo/frida-desktop","run_id":34074595293,"run_number":280,"workflow_id":285775214,"check_suite_id":92312836959,"head_sha":"ca13bae28fb214e9b8e194f70cefd6a554751938","head_tree":"fd9d43e69fbe945502e449d9fb110ff0a51c8624","workflow_path":".github/workflows/ci.yml","event":"push","created_at":"2026-09-07T01:55:59Z","updated_at":"2026-09-07T01:55:59Z"},
+  "observations":[
+    {"state":"OBSERVED","fact":"run #280 completed failure with created_at == updated_at"},
+    {"state":"OBSERVED","fact":"workflow source contains jobs graph, so workflow-empty hypothesis is contradicted"},
+    {"state":"OBSERVED","fact":"ci.yml content at merge and both parents is invariant across the PR37 merge boundary"},
+    {"state":"OBSERVED","fact":"workflow contains local actions plus needs/if/permissions/expression surfaces that are provider-validation-sensitive"}
+  ],
+  "hypotheses":{"workflow_empty":"CONTRADICTED","pr37_textual_ci_delta":"CONTRADICTED","specific_validation_element":"TOKEN_VAZIO"},
+  "gap":{"gap_id":"TV-FRIDA-GENERIC-CI-PREJOB-VALIDATION-ELEMENT","token":"TOKEN_VAZIO_VALIDATION_ELEMENT","source_pointer":"github:rafaelmeloreisnovo/frida-desktop/actions/runs/34074595293#check_suite=92312836959","missing_field":"specific workflow element or repository/provider policy that prevents job materialization","blocking_dependency":"provider validation annotation is not present in observed run/jobs evidence","evidence_needed":"minimal structural isolation or provider diagnostic identifying the rejected element","falsifier":"a run of the identical workflow/repository-policy state that materializes at least one job","next_probe":"resolve exact ci.yml blob identity, enumerate local action references and needs targets, then construct a minimal validation-only candidate on audit branch without altering main","owner_authority":"GitHub Actions validation evidence","urgency":"P0","closure_gate":"observable jobs>0 after minimal structural correction or explicit provider diagnostic","claim_allowed":false,"predecessor_lineage":["run:34074595293","check_suite:92312836959","commit:ca13bae28fb214e9b8e194f70cefd6a554751938","receipt:v4"]},
+  "memory_projection":{"L":"run280 pre-job failure -> parent-invariance -> validation-surface isolation","O":"other independent Actions gates can materialize jobs; generic CI remains isolated","T":"workflow source <-> local actions <-> needs graph <-> provider validation","C":"no hotfix promoted; cause unresolved","P":"repository/run/check-suite/commit identities retained append-only"},
+  "uncertainty_before":"merge-local mutation or preexisting validation/configuration cause","uncertainty_after":"merge-local textual mutation contradicted; validation-sensitive preexisting structure/configuration remains","claim_allowed":false,
+  "F_ok":["workflow source re-observed","run identity re-observed","validation-sensitive surface classified","successor receipt persisted"],
+  "F_gap":["TOKEN_VAZIO_VALIDATION_ELEMENT","provider diagnostic absent"],
+  "F_next":"enumerate every local action path and every needs target referenced by ci.yml at ca13bae2; classify missing/broken references before preparing a minimal validation candidate"
+}
