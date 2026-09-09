@@ -1,0 +1,97 @@
+{
+  "schema": "rafaelia.audit.receipt/v1",
+  "receipt_id": "FRIDA-GENERIC-CI-PREJOB-ORIGIN-BOUNDARY-20260909-V3",
+  "cycle_id": "RAFAELIA-FED-20260909-CI-PREJOB-03",
+  "predecessor_receipts": [
+    "FRIDA-GENERIC-CI-PREJOB-EVIDENCE-20260909-V1",
+    "FRIDA_GENERIC_CI_PREJOB_HISTORY_CURSOR_20260909.v2.json"
+  ],
+  "repository": "rafaelmeloreisnovo/frida-desktop",
+  "repository_id": 1253795628,
+  "work_branch": "audit/ci-prejob-evidence-receipt-20260909",
+  "observed_scope": {
+    "actions_pages": [7, 8, 9],
+    "page_size": 100,
+    "total_runs_reported_at_page_7": 1265,
+    "workflow_id": 285775214,
+    "workflow_path": ".github/workflows/ci.yml",
+    "search_semantics": "cursor-first historical origin probe"
+  },
+  "oldest_observed_generic_ci_run_in_scanned_boundary": {
+    "run_id": 34074595293,
+    "run_number": 280,
+    "head_branch": "main",
+    "head_sha": "ca13bae28fb214e9b8e194f70cefd6a554751938",
+    "head_tree": "fd9d43e69fbe945502e449d9fb110ff0a51c8624",
+    "event": "push",
+    "status": "completed",
+    "conclusion": "failure",
+    "created_at": "2026-09-07T01:55:59Z",
+    "updated_at": "2026-09-07T01:55:59Z",
+    "jobs_count_observed": 0,
+    "jobs_observed": []
+  },
+  "adjacent_observations": {
+    "page_7_contains_generic_ci_runs": true,
+    "page_8_generic_ci_match_observed": false,
+    "page_9_generic_ci_match_observed": false,
+    "interpretation": "Within the scanned Actions history window, run #280 is the oldest observed execution of workflow_id 285775214 and it already fails before any job is observable. Search misses on pages 8 and 9 are bounded observations, not proof of global non-existence outside this provider history surface."
+  },
+  "path_history_probe": {
+    "path": ".github/workflows/ci.yml",
+    "commits_endpoint_observed": true,
+    "note": "Path history exists independently of the Actions run boundary; therefore workflow source lineage predates the first observed execution in this fork history and must be analyzed by blob/ref provenance rather than assuming introduction at run #280."
+  },
+  "state_transition": {
+    "previous_hypothesis": "Find nearest older generic-ci run with jobs>0 to define jobs>0 -> jobs=0 boundary.",
+    "result": "No jobs>0 predecessor was observed in the scanned historical run boundary; the oldest observed generic-ci run already has jobs=0.",
+    "next_hypothesis": "The actionable causal boundary is source/provenance/configuration at or before the first observed execution, not a later runtime regression between generic-ci runs."
+  },
+  "gap": {
+    "gap_id": "TV-FRIDA-GENERIC-CI-PREJOB-ORIGIN-CAUSE",
+    "token": "TOKEN_VAZIO_PREJOB_ORIGIN_CAUSE",
+    "source_pointer": "github:rafaelmeloreisnovo/frida-desktop/actions/runs/34074595293 + path:.github/workflows/ci.yml",
+    "missing_field": "specific source/provenance/provider condition causing the first observed generic-ci execution to materialize zero jobs",
+    "blocking_dependency": "need blob-level comparison between workflow source at first observed failing run and an authoritative known-good source/revision or parser diagnostic",
+    "evidence_needed": "workflow blob SHA and exact structural delta versus known-good predecessor/upstream revision, or GitHub validation annotation identifying the invalid construct",
+    "falsifier": "an older observed run of workflow_id 285775214 with one or more materialized jobs, or evidence that run 34074595293 did materialize a job",
+    "next_probe": "fetch .github/workflows/ci.yml at ca13bae28fb214e9b8e194f70cefd6a554751938, identify its blob SHA, then compare against the nearest authoritative predecessor/upstream workflow blob to isolate parser-sensitive structural divergence",
+    "owner_authority": "GitHub source history + Actions provider evidence",
+    "urgency": "P0",
+    "closure_gate": "minimal reproducible source/configuration delta that explains jobs=0 or authoritative provider diagnostic",
+    "claim_allowed": false,
+    "predecessor_lineage": [
+      "run:34302379679",
+      "run:34074818880",
+      "run:34074595293",
+      "workflow:285775214"
+    ]
+  },
+  "memory_projection": {
+    "L": "generic-ci observed failing pre-job from run #466 back through oldest scanned run #280",
+    "O": "other RAFAELIA workflows materialize jobs around the same period, so repository-wide Actions outage is not sufficient explanation",
+    "T": "Actions history -> workflow source lineage -> provenance receipt",
+    "C": "cause unresolved; generic CI is not scientific validation; no runtime/source defect claim promoted",
+    "P": "identity anchored by repository_id, workflow_id, run_id, head_sha and path"
+  },
+  "coverage_delta": {
+    "cursor_before": "page=7",
+    "cursor_after": "page=9 + path-history probe",
+    "boundary_before": "oldest directly probed generic-ci run #288",
+    "boundary_after": "oldest observed generic-ci run #280 with jobs_count=0",
+    "uncertainty_reduced": true
+  },
+  "F_ok": [
+    "historical cursor advanced through pages 7-9",
+    "oldest observed generic-ci execution in scanned boundary identified as run #280",
+    "run #280 jobs endpoint directly observed with zero jobs",
+    "search for jobs>0 predecessor in adjacent older pages produced bounded misses",
+    "causal search redirected from endless run pagination to workflow source/provenance origin"
+  ],
+  "F_gap": [
+    "TOKEN_VAZIO_PREJOB_ORIGIN_CAUSE",
+    "provider parser/validation diagnostic not observed"
+  ],
+  "F_next": "resolve the workflow blob at ca13bae28fb214e9b8e194f70cefd6a554751938 and compare it with the nearest authoritative known-good predecessor/upstream blob before proposing any hotfix",
+  "claim_allowed": false
+}
