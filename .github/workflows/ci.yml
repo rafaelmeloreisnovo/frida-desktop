@@ -1655,6 +1655,9 @@ jobs:
         arch: [x86, x86_64, arm, arm64]
       fail-fast: false
     runs-on: ubuntu-latest
+    env:
+      ANDROID_ARTIFACT_SIGNING_KEY: ${{ secrets.ANDROID_ARTIFACT_SIGNING_KEY }}
+      ANDROID_ARTIFACT_SIGNING_KEY_ID: ${{ secrets.ANDROID_ARTIFACT_SIGNING_KEY_ID }}
     steps:
       - name: Check out repo
         uses: actions/checkout@v4
@@ -1741,17 +1744,17 @@ jobs:
       - name: Package Android native artifacts
         run: .github/scripts/package-android-native-artifacts.sh "${{ matrix.arch }}" "$FRIDA_PREFIX"
       - name: Import signing key
-        if: ${{ secrets.ANDROID_ARTIFACT_SIGNING_KEY != '' && secrets.ANDROID_ARTIFACT_SIGNING_KEY_ID != '' }}
+        if: ${{ env.ANDROID_ARTIFACT_SIGNING_KEY != '' && env.ANDROID_ARTIFACT_SIGNING_KEY_ID != '' }}
         run: |
-          set -euxo pipefail
-          echo "${{ secrets.ANDROID_ARTIFACT_SIGNING_KEY }}" | gpg --batch --import
+          set -euo pipefail
+          printf '%s' "$ANDROID_ARTIFACT_SIGNING_KEY" | gpg --batch --import
       - name: Sign Android native package
-        if: ${{ secrets.ANDROID_ARTIFACT_SIGNING_KEY != '' && secrets.ANDROID_ARTIFACT_SIGNING_KEY_ID != '' }}
+        if: ${{ env.ANDROID_ARTIFACT_SIGNING_KEY != '' && env.ANDROID_ARTIFACT_SIGNING_KEY_ID != '' }}
         run: |
-          set -euxo pipefail
+          set -euo pipefail
           PKG="frida-android-${{ matrix.arch }}.tar.xz"
           gpg --batch --yes --armor --detach-sign \
-            --local-user "${{ secrets.ANDROID_ARTIFACT_SIGNING_KEY_ID }}" \
+            --local-user "$ANDROID_ARTIFACT_SIGNING_KEY_ID" \
             "$PKG"
       - name: Upload Android native package
         uses: actions/upload-artifact@v4
@@ -1759,7 +1762,7 @@ jobs:
           name: frida-android-package-${{ matrix.arch }}
           path: frida-android-${{ matrix.arch }}.tar.xz
       - name: Upload Android native package signature
-        if: ${{ secrets.ANDROID_ARTIFACT_SIGNING_KEY != '' && secrets.ANDROID_ARTIFACT_SIGNING_KEY_ID != '' }}
+        if: ${{ env.ANDROID_ARTIFACT_SIGNING_KEY != '' && env.ANDROID_ARTIFACT_SIGNING_KEY_ID != '' }}
         uses: actions/upload-artifact@v4
         with:
           name: frida-android-package-signature-${{ matrix.arch }}
