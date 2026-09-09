@@ -38,10 +38,10 @@ jobs:
         run: |
           set -euo pipefail
           git diff --check
-          git diff --exit-code -- .github/workflows/ci.yml && {
+          if git diff --quiet -- .github/workflows/ci.yml; then
             echo "Expected ci.yml to change" >&2
             exit 1
-          }
+          fi
 
       - name: Commit repaired workflow
         run: |
