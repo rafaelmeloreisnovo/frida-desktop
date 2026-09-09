@@ -1,0 +1,377 @@
+name: 01 · RAFAELIA Pipeline Orchestrator
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: rafaelia-01-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+defaults:
+  run:
+    shell: bash
+
+env:
+  COMPILE_SDK: "37"
+  TARGET_SDK: "37"
+  MIN_SDK: "21"
+  NDK_VERSION: "29.0.14206865"
+  FRIDA_VERSION: "17.9.11"
+
+jobs:
+  contract:
+    name: 01.1 · workflow topology contract
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+        with:
+          fetch-depth: 2
+          persist-credentials: false
+      - name: Validate workflow architecture
+        run: |
+          set -euo pipefail
+          python3 -m py_compile .github/scripts/rafaelia/workflow-contract.py
+          python3 .github/scripts/rafaelia/workflow-contract.py
+      - name: Upload workflow contract evidence
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: 01-workflow-contract-${{ github.run_id }}
+          path: evidence/workflow-contract/
+          if-no-files-found: error
+          retention-days: 14
+
+  atlas:
+    name: 01.2 · ATLAS mission boundary
+    needs: contract
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+        with:
+          persist-credentials: false
+      - run: bash .github/scripts/rafaelia/atlas-mission-consumer-gate.sh
+
+  provenance:
+    name: 01.3 · provenance fail-closed
+    needs: contract
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - run: bash .github/scripts/rafaelia/provenance-ci.sh all
+      - name: Upload provenance evidence
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: 01-provenance-${{ github.run_id }}
+          path: evidence/provenance/
+          if-no-files-found: error
+          retention-days: 30
+
+  arm32-strict:
+    name: 01.4 · ARM32 strict freestanding
+    needs: contract
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+        with:
+          persist-credentials: false
+      - run: bash .github/scripts/rafaelia/arm32-neon4096-freestanding-gate.sh
+      - if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: 01-arm32-strict-${{ github.run_id }}
+          path: evidence/arm32-neon4096-freestanding/
+          if-no-files-found: error
+          retention-days: 14
+
+  arm32-adapter:
+    name: 01.5 · ARM32 physical adapter
+    needs: arm32-strict
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+        with:
+          persist-credentials: false
+      - run: bash .github/scripts/rafaelia/arm32-neon4096-physical-bench-adapter-gate.sh
+      - if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: 01-arm32-adapter-${{ github.run_id }}
+          path: |
+            evidence/arm32-neon4096-physical-bench-adapter/
+            evidence/arm32-neon4096-freestanding/
+          if-no-files-found: error
+          retention-days: 14
+
+  hash-backend:
+    name: 01.6 · hash bit-exact backend
+    needs: contract
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+        with:
+          persist-credentials: false
+      - run: bash .github/scripts/rafaelia/hash-bitexact-backend-gate.sh
+      - if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: 01-hash-backend-${{ github.run_id }}
+          path: evidence/hash-bitexact-backend/
+          if-no-files-found: error
+          retention-days: 14
+
+  hash-streaming:
+    name: 01.7 · hash streaming + NEON
+    needs: hash-backend
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+        with:
+          persist-credentials: false
+      - run: bash .github/scripts/rafaelia/hash-bitexact-streaming-neon-gate.sh
+      - if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: 01-hash-streaming-${{ github.run_id }}
+          path: evidence/hash-bitexact-streaming-neon/
+          if-no-files-found: error
+          retention-days: 14
+
+  hash-math:
+    name: 01.8 · hash math freestanding
+    needs: hash-streaming
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+        with:
+          persist-credentials: false
+      - run: bash .github/scripts/rafaelia/hash-math-plugin-freestanding-gate.sh
+      - if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: 01-hash-math-${{ github.run_id }}
+          path: evidence/hash-math-plugin-freestanding/
+          if-no-files-found: error
+          retention-days: 14
+
+  rfl:
+    name: 01.9 · RFL + NEON4096 selftest
+    needs: contract
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+        with:
+          persist-credentials: false
+      - run: bash .github/scripts/rafaelia/rfl-neon4096-selftest.sh compile
+      - run: bash .github/scripts/rafaelia/rfl-neon4096-selftest.sh run
+      - run: bash .github/scripts/rafaelia/rfl-neon4096-selftest.sh evidence
+      - if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: 01-rfl-${{ github.run_id }}
+          path: evidence/rfl-neon4096/
+          if-no-files-found: error
+          retention-days: 14
+
+  runtime-hardening:
+    name: 01.10 · runtime hardening
+    needs: rfl
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+        with:
+          persist-credentials: false
+      - run: bash .github/scripts/rafaelia/runtime-aided-hardening.sh hosted
+      - run: bash .github/scripts/rafaelia/runtime-aided-hardening.sh freestanding
+      - run: bash .github/scripts/rafaelia/runtime-aided-hardening.sh sanitizers
+      - run: bash .github/scripts/rafaelia/runtime-aided-hardening.sh evidence
+      - if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: 01-runtime-hardening-${{ github.run_id }}
+          path: evidence/runtime-aided-hardening/
+          if-no-files-found: error
+          retention-days: 14
+
+  runtime-learning:
+    name: 01.11 · runtime learning integration
+    needs: runtime-hardening
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+        with:
+          fetch-depth: 2
+          persist-credentials: false
+      - run: bash .github/scripts/rafaelia/runtime-learning-engine-ci.sh
+      - if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: 01-runtime-learning-${{ github.run_id }}
+          path: evidence/runtime-learning-engine/
+          if-no-files-found: error
+          retention-days: 14
+
+  crash-observability:
+    name: 01.12 · Android crash observability
+    needs: runtime-learning
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+        with:
+          persist-credentials: false
+      - run: bash .github/scripts/rafaelia/android-crash-observability-ci.sh all
+      - if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: 01-crash-observability-${{ github.run_id }}
+          path: evidence/android-crash-observability/
+          if-no-files-found: error
+          retention-days: 14
+
+  android17:
+    name: 01.13 · Android 17 APK + ELF + DEX
+    needs:
+      - atlas
+      - provenance
+      - arm32-adapter
+      - hash-math
+      - crash-observability
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+        with:
+          persist-credentials: false
+      - run: bash .github/scripts/rafaelia/on-device-receipt-verifier-gate.sh
+      - name: Set up Java 17
+        uses: actions/setup-java@03ad4de0992f5dab5e18fcb136590ce7c4a0ac95
+        with:
+          distribution: temurin
+          java-version: "17"
+          check-latest: false
+      - name: Expose Android SDK command-line tools
+        uses: android-actions/setup-android@40fd30fb8d7440372e1316f5d1809ec01dcd3699
+        with:
+          packages: ""
+          accept-android-sdk-licenses: false
+          log-accepted-android-sdk-licenses: false
+      - run: bash .github/scripts/rafaelia/host-tools.sh
+      - run: bash .github/scripts/rafaelia/android-lab-ci.sh resolve-sdk
+      - name: Fetch pinned official Frida Gadget assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: bash .github/scripts/rafaelia/android-lab-ci.sh fetch-frida
+      - run: bash .github/scripts/rafaelia/android-lab-ci.sh build-native
+      - run: bash .github/scripts/rafaelia/android-lab-ci.sh verify-native
+      - run: bash .github/scripts/rafaelia/android-lab-ci.sh build-dex
+      - run: bash .github/scripts/rafaelia/android-lab-ci.sh package-apks
+      - run: bash .github/scripts/rafaelia/android-lab-ci.sh receipt
+      - name: Upload Android lab evidence
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: 01-android17-${{ github.run_id }}
+          compression-level: 0
+          if-no-files-found: error
+          retention-days: 14
+          path: |
+            dist/android17-lab/
+            build/android17/native/
+            build/android17/dex/classes.dex
+            evidence/android17-lab/
+            android/app/on-device-smoke.sh
+            android/app/ONE_SCREEN_OPERATOR_V1.md
+
+  final-verdict:
+    name: 01.14 · final pipeline verdict
+    if: always()
+    needs:
+      - contract
+      - atlas
+      - provenance
+      - arm32-strict
+      - arm32-adapter
+      - hash-backend
+      - hash-streaming
+      - hash-math
+      - rfl
+      - runtime-hardening
+      - runtime-learning
+      - crash-observability
+      - android17
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Build fail-closed final receipt
+        env:
+          CONTRACT: ${{ needs.contract.result }}
+          ATLAS: ${{ needs.atlas.result }}
+          PROVENANCE: ${{ needs.provenance.result }}
+          ARM32_STRICT: ${{ needs.arm32-strict.result }}
+          ARM32_ADAPTER: ${{ needs.arm32-adapter.result }}
+          HASH_BACKEND: ${{ needs.hash-backend.result }}
+          HASH_STREAMING: ${{ needs.hash-streaming.result }}
+          HASH_MATH: ${{ needs.hash-math.result }}
+          RFL: ${{ needs.rfl.result }}
+          RUNTIME_HARDENING: ${{ needs.runtime-hardening.result }}
+          RUNTIME_LEARNING: ${{ needs.runtime-learning.result }}
+          CRASH_OBSERVABILITY: ${{ needs.crash-observability.result }}
+          ANDROID17: ${{ needs.android17.result }}
+        run: |
+          set -euo pipefail
+          mkdir -p evidence/orchestration
+          python3 - <<'PY'
+          import json, os
+          names = [
+              'CONTRACT','ATLAS','PROVENANCE','ARM32_STRICT','ARM32_ADAPTER',
+              'HASH_BACKEND','HASH_STREAMING','HASH_MATH','RFL',
+              'RUNTIME_HARDENING','RUNTIME_LEARNING','CRASH_OBSERVABILITY','ANDROID17'
+          ]
+          results = {name.lower(): os.environ[name] for name in names}
+          ok = all(v == 'success' for v in results.values())
+          receipt = {
+              'schema': 'rafaelia.pipeline.orchestrator.receipt.v1',
+              'status': 'PASS' if ok else 'FAIL',
+              'source_sha': os.environ.get('GITHUB_SHA', 'TOKEN_VAZIO_SOURCE_SHA'),
+              'run_id': os.environ.get('GITHUB_RUN_ID', 'TOKEN_VAZIO_RUN_ID'),
+              'results': results,
+              'claim_allowed': False,
+          }
+          with open('evidence/orchestration/01-final-verdict.json', 'w', encoding='utf-8') as f:
+              json.dump(receipt, f, indent=2, sort_keys=True)
+              f.write('\n')
+          if not ok:
+              raise SystemExit('01_PIPELINE_FAIL ' + json.dumps(results, sort_keys=True))
+          print('01_PIPELINE_PASS')
+          PY
+      - name: Upload final orchestration receipt
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: 01-final-verdict-${{ github.run_id }}
+          path: evidence/orchestration/01-final-verdict.json
+          if-no-files-found: error
+          retention-days: 30
