@@ -1,0 +1,85 @@
+{
+  "schema": "rafaelia.audit.receipt/v1",
+  "receipt_id": "FRIDA-GENERIC-CI-PREJOB-EVIDENCE-20260909-V1",
+  "cycle_id": "RAFAELIA-FED-20260909-CI-PREJOB-01",
+  "observed_at": "2026-09-09T14:16:00Z",
+  "repository": "rafaelmeloreisnovo/frida-desktop",
+  "repository_id": 1253795628,
+  "default_branch": "main",
+  "baseline_commit": "a60fb030e9c1d858e10201d93c112784b1efe877",
+  "baseline_tree": "f68e6fbbdc53646eec29e937a6c77c65f91751df",
+  "work_branch": "audit/ci-prejob-evidence-receipt-20260909",
+  "contract": "SOURCE->TRANSFORM->CLAIM->TEST/EVIDENCE->RECEIPT->INDEX->MEMORY",
+  "separation": [
+    "VISION!=ARTIFACT",
+    "ARTIFACT!=EXECUTION",
+    "EXECUTION!=EVIDENCE",
+    "EVIDENCE!=CLAIM",
+    "TOKEN_VAZIO!=0"
+  ],
+  "source": {
+    "workflow_run_id": 34302379679,
+    "workflow_id": 285775214,
+    "workflow_path": ".github/workflows/ci.yml",
+    "check_suite_id": 92923426167,
+    "head_branch": "audit/receipt-canonical-hash-20260908",
+    "head_sha": "f3c8d67690478cce13266fd3616a9bfbf9477244",
+    "head_tree": "e8ecce2da895f162467dec2b051daec995e09ab1",
+    "event": "push",
+    "status": "completed",
+    "conclusion": "failure",
+    "created_at": "2026-09-09T02:13:55Z",
+    "updated_at": "2026-09-09T02:13:55Z",
+    "jobs_observed": [],
+    "jobs_count_observed": 0
+  },
+  "evidence_state": {
+    "run_observed": true,
+    "jobs_endpoint_observed": true,
+    "job_steps_observed": false,
+    "failure_annotation_observed": false,
+    "provider_access_revalidated": true,
+    "classification": "OBSERVED_PRE_JOB_FAILURE_CANDIDATE",
+    "scientific_validation": false,
+    "claim_allowed": false
+  },
+  "gap": {
+    "gap_id": "TV-FRIDA-GENERIC-CI-PREJOB-CAUSE",
+    "token": "TOKEN_VAZIO_PREJOB_CAUSE",
+    "source_pointer": "github:rafaelmeloreisnovo/frida-desktop/actions/runs/34302379679#check_suite=92923426167",
+    "missing_field": "provider validation diagnostic identifying why no job materialized",
+    "blocking_dependency": "check-suite/parser diagnostic not observed through current evidence surface",
+    "evidence_needed": "GitHub validation annotation or adjacent historical boundary with jobs>0 and comparable workflow revision/event/ref",
+    "falsifier": "any materialized job/step for run 34302379679 or evidence showing the failure occurred after job creation",
+    "next_probe": "locate nearest historical run of workflow 285775214 with jobs>0, then compare workflow blob/event/ref against the first adjacent jobs=0 run",
+    "owner_authority": "GitHub Actions provider evidence",
+    "urgency": "P0",
+    "closure_gate": "specific reproducible structural/provider cause with observable evidence",
+    "claim_allowed": false,
+    "predecessor_lineage": [
+      "run:34302379679",
+      "check_suite:92923426167",
+      "commit:f3c8d67690478cce13266fd3616a9bfbf9477244"
+    ]
+  },
+  "memory_projection": {
+    "L": "run 34302379679 -> jobs_count=0 -> cause unresolved",
+    "O": "independent RAFAELIA gates are separate evidence and do not explain generic CI failure",
+    "T": "GitHub Actions <-> Frida producer <-> audit receipt",
+    "C": "generic CI failure; no scientific claim promotion",
+    "P": "identity anchored by repository_id, run_id, check_suite_id and commit SHA"
+  },
+  "F_ok": [
+    "repository identity revalidated",
+    "historical run re-observed",
+    "jobs endpoint re-observed with zero jobs",
+    "provider-access 404 hypothesis falsified for run 34302379679",
+    "gap materialized as append-only receipt on audit branch"
+  ],
+  "F_gap": [
+    "TOKEN_VAZIO_PREJOB_CAUSE",
+    "nearest historical workflow run with jobs>0 not yet observed"
+  ],
+  "F_next": "enumerate the nearest older workflow-285775214 run that materialized jobs and compare its workflow blob/event/ref with the jobs=0 boundary",
+  "claim_allowed": false
+}
