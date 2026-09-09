@@ -1,0 +1,52 @@
+name: 00 · Temporary CI YAML Repair
+
+on:
+  push:
+    branches:
+      - fix/workflow-orchestration-01
+    paths:
+      - ".github/workflows/00-fix-ci-bootstrap.yml"
+      - ".github/scripts/rafaelia/fix-ci-secrets-if.py"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: temporary-ci-yaml-repair-${{ github.ref }}
+  cancel-in-progress: true
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  repair:
+    name: Repair invalid secret conditionals and commit
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Check out repair branch
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: true
+
+      - name: Apply fail-closed narrow repair
+        run: python3 .github/scripts/rafaelia/fix-ci-secrets-if.py
+
+      - name: Verify patch integrity
+        run: |
+          set -euo pipefail
+          git diff --check
+          git diff --exit-code -- .github/workflows/ci.yml && {
+            echo "Expected ci.yml to change" >&2
+            exit 1
+          }
+
+      - name: Commit repaired workflow
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add .github/workflows/ci.yml
+          git commit -m "ci: fix secret conditionals before job scheduling"
+          git push origin HEAD:${GITHUB_REF_NAME}
