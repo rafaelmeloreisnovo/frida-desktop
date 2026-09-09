@@ -1,0 +1,87 @@
+{
+  "schema": "rafaelia.audit.receipt/v1",
+  "receipt_id": "FRIDA-GENERIC-CI-PROVIDER-MINIMAL-RESULT-20260909-V10",
+  "cycle_id": "RAFAELIA-FED-20260909-CI-PROVIDER-10",
+  "predecessor": "FRIDA_GENERIC_CI_PROVIDER_MINIMAL_PROBE_20260909.v9.json",
+  "repository": "rafaelmeloreisnovo/frida-desktop",
+  "branch": "audit/ci-prejob-evidence-receipt-20260909",
+  "contract": "SOURCE->TRANSFORM->CLAIM->TEST/EVIDENCE->RECEIPT->INDEX->MEMORY",
+  "source": {
+    "probe_commit": "1e123c7747316ce26004fbf9d85bb8383774dcfa",
+    "workflow_path": ".github/workflows/rafaelia-ci-provider-minimal.yml",
+    "workflow_id": 354424709,
+    "run_id": 34410765957,
+    "run_number": 1,
+    "check_suite_id": 93221736427,
+    "event": "push",
+    "status": "completed",
+    "conclusion": "success",
+    "job_id": 102664388392,
+    "job_name": "provider-minimal",
+    "job_conclusion": "success",
+    "steps": [
+      {"number":1,"name":"Set up job","conclusion":"success"},
+      {"number":2,"name":"Provider accepted workflow and materialized job","conclusion":"success"},
+      {"number":3,"name":"Complete job","conclusion":"success"}
+    ]
+  },
+  "evidence_state": {
+    "minimal_workflow_materialized": true,
+    "minimal_job_materialized": true,
+    "minimal_job_executed": true,
+    "minimal_job_succeeded": true,
+    "repository_wide_actions_outage": "CONTRADICTED",
+    "provider_basic_push_acceptance": "REPRODUCED",
+    "generic_ci_specific_semantic_or_configuration_cause": "SUPPORTED_AS_SEARCH_SPACE_NOT_CAUSE",
+    "claim_allowed": false
+  },
+  "gap_resolution": {
+    "resolved": ["TOKEN_VAZIO_MINIMAL_RUN_RESULT"],
+    "remaining": ["TOKEN_VAZIO_PROVIDER_SEMANTIC", "TOKEN_VAZIO_CHECK_RUN_DIAGNOSTIC"]
+  },
+  "gap": {
+    "gap_id": "TV-FRIDA-GENERIC-CI-PREJOB-PROVIDER-SEMANTIC",
+    "token": "TOKEN_VAZIO_PROVIDER_SEMANTIC",
+    "source_pointer": "github:rafaelmeloreisnovo/frida-desktop:.github/workflows/ci.yml",
+    "missing_field": "minimal semantic class that reproduces jobs=0 pre-job failure",
+    "blocking_dependency": "incremental diagnostic workflow has not yet introduced suspect semantic classes",
+    "evidence_needed": "first diagnostic increment whose run changes from materialized-success to pre-job failure, followed by single-variable confirmation",
+    "falsifier": "all suspect semantic classes materialize successfully in isolated probes",
+    "next_probe": "extend the audit-only diagnostic workflow with exactly one suspect class while retaining the successful provider-minimal control",
+    "owner_authority": "GitHub Actions provider evidence",
+    "urgency": "P0",
+    "closure_gate": "reproducible minimal failing semantic delta or explicit provider diagnostic",
+    "claim_allowed": false,
+    "predecessor_lineage": [
+      "commit:1e123c7747316ce26004fbf9d85bb8383774dcfa",
+      "workflow:354424709",
+      "run:34410765957",
+      "check_suite:93221736427",
+      "job:102664388392"
+    ]
+  },
+  "memory_projection": {
+    "L": "minimal probe created -> run materialized -> job executed -> success",
+    "O": "generic ci jobs=0 coexists with successful minimal workflow in same repository",
+    "T": "GitHub provider basic acceptance separated from generic-ci semantic surface",
+    "C": "basic push workflow is provider-valid; generic CI cause remains unresolved",
+    "P": "identity anchored by commit/workflow/run/check-suite/job IDs"
+  },
+  "uncertainty_before": "minimal provider result unknown + generic-ci semantic cause unknown",
+  "uncertainty_after": "basic provider acceptance reproduced; generic-ci semantic cause remains TOKEN_VAZIO",
+  "coverage_before": "diagnostic workflow source only",
+  "coverage_after": "diagnostic source + run + suite + job + step conclusions",
+  "F_ok": [
+    "minimal provider workflow succeeded",
+    "job materialization directly observed",
+    "TOKEN_VAZIO_MINIMAL_RUN_RESULT closed with evidence",
+    "repository-wide Actions outage contradicted",
+    "lineage extended through job and steps"
+  ],
+  "F_gap": [
+    "TOKEN_VAZIO_PROVIDER_SEMANTIC",
+    "TOKEN_VAZIO_CHECK_RUN_DIAGNOSTIC"
+  ],
+  "F_next": "introduce exactly one provider-semantic suspect class into an audit-only diagnostic successor and compare against this successful control",
+  "claim_allowed": false
+}
