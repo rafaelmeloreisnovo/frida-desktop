@@ -24,9 +24,13 @@ jobs:
     needs: provider-minimal
     runs-on: ubuntu-latest
     timeout-minutes: 5
+    strategy:
+      fail-fast: false
+      matrix:
+        probe: [alpha, beta]
     steps:
-      - name: Provider accepted simple needs dependency
+      - name: Provider accepted simple needs plus minimal matrix
         shell: bash
         run: |
           set -eu
-          printf '%s\n' 'RAFAELIA_PROVIDER_NEEDS_PASS'
+          printf '%s:%s\n' 'RAFAELIA_PROVIDER_MATRIX_PASS' '${{ matrix.probe }}'
