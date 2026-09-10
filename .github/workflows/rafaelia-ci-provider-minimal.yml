@@ -19,3 +19,14 @@ jobs:
         run: |
           set -eu
           printf '%s\n' 'RAFAELIA_PROVIDER_MINIMAL_PASS'
+
+  provider-needs:
+    needs: provider-minimal
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Provider accepted simple needs dependency
+        shell: bash
+        run: |
+          set -eu
+          printf '%s\n' 'RAFAELIA_PROVIDER_NEEDS_PASS'
