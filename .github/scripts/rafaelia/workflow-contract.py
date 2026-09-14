@@ -32,11 +32,13 @@ CUSTOM_WORKFLOWS = {
     "rafaelia-provenance-gate.yml",
     "runtime-aided-debugger-hardening.yml",
     "runtime-learning-engine.yml",
+    "rafaelia-matrix-compose-observer-v1.yml",
     "workflow-contract.yml",
 }
 
 CATALYST_PINS = {
     "actions/checkout": "de0fac2e4500dabe0009e67214ff5f5447ce83dd",
+    "actions/setup-python": "a26af69be951a213d495a4c3e4e4022e16d87065",
     "actions/setup-java": "03ad4de0992f5dab5e18fcb136590ce7c4a0ac95",
     "actions/upload-artifact": "043fb46d1a93c77aae656e7c1c64a875d1fc6a0a",
     "android-actions/setup-android": "40fd30fb8d7440372e1316f5d1809ec01dcd3699",
@@ -44,6 +46,7 @@ CATALYST_PINS = {
 DEFAULT_ACTIONS = {"actions/checkout", "actions/upload-artifact"}
 ACTION_ALLOWLIST = {name: set(DEFAULT_ACTIONS) for name in CUSTOM_WORKFLOWS}
 ACTION_ALLOWLIST["atlas-mission-consumer-gate.yml"] = {"actions/checkout"}
+ACTION_ALLOWLIST["rafaelia-matrix-compose-observer-v1.yml"] = {"actions/checkout", "actions/setup-python"}
 ACTION_ALLOWLIST["android17-apk-elf-dex.yml"] = {
     "actions/checkout", "actions/setup-java", "actions/upload-artifact", "android-actions/setup-android"
 }
