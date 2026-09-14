@@ -8,6 +8,7 @@ on:
       - "tools/rafaelia-matrix-compose-agent.js"
       - ".github/scripts/rafaelia/matrix-compose-observer.py"
       - ".github/scripts/rafaelia/test_matrix_compose_observer.py"
+      - ".github/scripts/rafaelia/workflow-contract.py"
       - ".github/workflows/rafaelia-matrix-compose-observer-v1.yml"
 
 permissions:
@@ -22,7 +23,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
       - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
         with:
           python-version: "3.13"
