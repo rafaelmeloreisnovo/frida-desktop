@@ -25,7 +25,7 @@ jobs:
       - name: Profile syntax
         run: python3 -m json.tool profiles/matrix-compose-observer.v1.json >/dev/null
       - name: Observer tests
-        run: python3 -m unittest .github/scripts/rafaelia/test_matrix_compose_observer.py
+        run: python3 .github/scripts/rafaelia/test_matrix_compose_observer.py
       - name: Static Frida-agent safety boundary
         run: |
           grep -q 'rpc.exports' tools/rafaelia-matrix-compose-agent.js
