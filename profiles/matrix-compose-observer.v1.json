@@ -1,0 +1,16 @@
+{
+  "schema": "rafaelia.frida.matrix-compose-observer.profile.v1",
+  "version": "1.0.0",
+  "accepted_receipt_schema": "rafaelia.matrix-compose.receipt.v1",
+  "emitted_receipt_schema": "rafaelia.frida.matrix-compose-observer.receipt.v1",
+  "required_boundary": "SOURCE!=EXECUTION!=EVIDENCE!=CLAIM",
+  "claim_allowed": false,
+  "mode": "RECEIPT_OBSERVER_ONLY",
+  "physical_device": "TOKEN_VAZIO",
+  "forbidden": [
+    "arbitrary_command_execution",
+    "claim_promotion",
+    "payload_mutation",
+    "physical_device_inference"
+  ]
+}
