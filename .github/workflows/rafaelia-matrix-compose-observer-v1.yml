@@ -1,0 +1,32 @@
+name: RAFAELIA Matrix Compose Observer V1
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - "profiles/matrix-compose-observer.v1.json"
+      - "tools/rafaelia-matrix-compose-agent.js"
+      - ".github/scripts/rafaelia/matrix-compose-observer.py"
+      - ".github/scripts/rafaelia/test_matrix_compose_observer.py"
+      - ".github/workflows/rafaelia-matrix-compose-observer-v1.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  observer-contract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - name: Profile syntax
+        run: python3 -m json.tool profiles/matrix-compose-observer.v1.json >/dev/null
+      - name: Observer tests
+        run: python3 -m unittest .github/scripts/rafaelia/test_matrix_compose_observer.py
+      - name: Static Frida-agent safety boundary
+        run: |
+          grep -q 'rpc.exports' tools/rafaelia-matrix-compose-agent.js
+          ! grep -E 'Interceptor\.attach|NativeFunction|SystemFunction|exec\(|spawn\(' tools/rafaelia-matrix-compose-agent.js
