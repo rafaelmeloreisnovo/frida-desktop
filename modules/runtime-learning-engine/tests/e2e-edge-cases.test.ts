@@ -100,12 +100,13 @@ describe('RuntimeLearningEngine Edge Cases & Hardening', () => {
 
     test('Handles events at capacity limit', async () => {
       const capacityDir = `${testDir}_capacity`;
-      const testEngine = await initializeEngine({
+      const testEngine = new RuntimeLearningEngine({
         storage_path: capacityDir,
         bug_capacity: 10,
         confidence_threshold: 0.75,
         min_occurrences_before_fix: 3
       });
+      await testEngine.start();
 
       for (let i = 0; i < 15; i++) {
         await testEngine.captureBug({
@@ -282,11 +283,12 @@ describe('RuntimeLearningEngine Edge Cases & Hardening', () => {
 
     test('Handles storage cleanup on capacity exceeded', async () => {
       const storageDir = `${testDir}_storage`;
-      const testEngine = await initializeEngine({
+      const testEngine = new RuntimeLearningEngine({
         storage_path: storageDir,
         bug_capacity: 5,
         confidence_threshold: 0.75
       });
+      await testEngine.start();
       for (let i = 0; i < 20; i++) {
         await testEngine.captureBug({
           bug_type: 'crash',
