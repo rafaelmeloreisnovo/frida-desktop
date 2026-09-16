@@ -55,11 +55,8 @@ CATALYST_PINS = {
     },
     "actions/setup-python": {"a26af69be951a213d495a4c3e4e4022e16d87065"},
     "actions/setup-java": {"03ad4de0992f5dab5e18fcb136590ce7c4a0ac95"},
-    "actions/upload-artifact": {
-        "043fb46d1a93c77aae656e7c1c64a875d1fc6a0a",
-        "330a01c490aca151604b8cf639adc76d48f6c5d4",  # v5.0.0
-    },
-    "actions/download-artifact": {"634f93cb2916e3fdff6788551b99b062d0335ce0"},  # v5.0.0
+    "actions/upload-artifact": {"043fb46d1a93c77aae656e7c1c64a875d1fc6a0a"},  # v7.0.1
+    "actions/download-artifact": {"3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c"},  # v8.0.1
     "actions/dependency-review-action": {"a1d282b36b6f3519aa1f3fc636f609c47dddb294"},  # v5.0.0
     "github/codeql-action/init": {"b96794f015dfd88f77b49b1c93e0fa7110f94c63"},  # v4.38.0
     "github/codeql-action/analyze": {"b96794f015dfd88f77b49b1c93e0fa7110f94c63"},  # v4.38.0
