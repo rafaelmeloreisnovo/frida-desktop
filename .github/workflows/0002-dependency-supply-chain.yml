@@ -21,12 +21,33 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Dependency review on pull requests
-        if: github.event_name == 'pull_request'
+      - name: Dependency review on supported pull requests
+        if: github.event_name == 'pull_request' && github.event.repository.fork == false
         uses: actions/dependency-review-action@a1d282b36b6f3519aa1f3fc636f609c47dddb294 # v5.0.0
         with:
           fail-on-severity: high
           fail-on-scopes: runtime
+
+      - name: Record dependency-review platform boundary
+        if: github.event_name == 'pull_request' && github.event.repository.fork == true
+        run: |
+          set -euo pipefail
+          mkdir -p evidence/dependency-supply-chain
+          python3 - <<'PY'
+          import json, os, pathlib
+          out = {
+              "schema": "rafaelia.dependency-review-boundary.v1",
+              "status": "UNAVAILABLE_REPOSITORY_FORK",
+              "repository": os.environ.get("GITHUB_REPOSITORY", "TOKEN_VAZIO"),
+              "source_sha": os.environ.get("GITHUB_SHA", "TOKEN_VAZIO"),
+              "fallback_gate": "SHA256_DEPENDENCY_SURFACE_INVENTORY",
+              "claim_allowed": False,
+          }
+          pathlib.Path("evidence/dependency-supply-chain/dependency-review-boundary.json").write_text(
+              json.dumps(out, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+          )
+          print("DEPENDENCY_REVIEW_UNAVAILABLE_REPOSITORY_FORK")
+          PY
 
       - name: Build dependency surface inventory
         if: always()
