@@ -37,12 +37,34 @@ CUSTOM_WORKFLOWS = {
     "workflow-contract.yml",
 }
 
+CONTROL_WORKFLOWS = {
+    "0000-omega-integrator.yml",
+    "0001-foundation-policy.yml",
+    "0002-dependency-supply-chain.yml",
+    "0003-codeql-security.yml",
+    "0004-core-execution.yml",
+    "0005-provenance-attestation.yml",
+    "0006-openssf-scorecard.yml",
+    "0007-final-verdict.yml",
+}
+
 CATALYST_PINS = {
-    "actions/checkout": "de0fac2e4500dabe0009e67214ff5f5447ce83dd",
-    "actions/setup-python": "a26af69be951a213d495a4c3e4e4022e16d87065",
-    "actions/setup-java": "03ad4de0992f5dab5e18fcb136590ce7c4a0ac95",
-    "actions/upload-artifact": "043fb46d1a93c77aae656e7c1c64a875d1fc6a0a",
-    "android-actions/setup-android": "40fd30fb8d7440372e1316f5d1809ec01dcd3699",
+    "actions/checkout": {
+        "de0fac2e4500dabe0009e67214ff5f5447ce83dd",  # v6.0.2
+        "3d3c42e5aac5ba805825da76410c181273ba90b1",  # v7.0.1
+    },
+    "actions/setup-python": {"a26af69be951a213d495a4c3e4e4022e16d87065"},
+    "actions/setup-java": {"03ad4de0992f5dab5e18fcb136590ce7c4a0ac95"},
+    "actions/upload-artifact": {
+        "043fb46d1a93c77aae656e7c1c64a875d1fc6a0a",
+        "330a01c490aca151604b8cf639adc76d48f6c5d4",  # v5.0.0
+    },
+    "actions/download-artifact": {"634f93cb2916e3fdff6788551b99b062d0335ce0"},  # v5.0.0
+    "actions/dependency-review-action": {"a1d282b36b6f3519aa1f3fc636f609c47dddb294"},  # v5.0.0
+    "github/codeql-action": {"b96794f015dfd88f77b49b1c93e0fa7110f94c63"},  # v4.38.0
+    "actions/attest": {"c32b4b8b198b65d0bd9d63490e847ff7b53989d4"},  # v4.0.0
+    "ossf/scorecard-action": {"2d1146689b8cda280b9bc96326124645441f03bc"},  # v2.4.4
+    "android-actions/setup-android": {"40fd30fb8d7440372e1316f5d1809ec01dcd3699"},
 }
 DEFAULT_ACTIONS = {"actions/checkout", "actions/upload-artifact"}
 ACTION_ALLOWLIST = {name: set(DEFAULT_ACTIONS) for name in CUSTOM_WORKFLOWS}
@@ -117,8 +139,9 @@ def check_custom(path, text, findings):
             add(findings, "ERROR", path, "CATALYST_ACTION_NOT_ALLOWED", f"external action outside bounded set: {action}")
             continue
         expected = CATALYST_PINS.get(action)
-        if expected is None or ref != expected:
-            add(findings, "ERROR", path, "CATALYST_PIN_MISMATCH", f"{action} expected {expected}, observed {ref}")
+        if expected is None or ref not in expected:
+            allowed_refs = sorted(expected) if expected else []
+            add(findings, "ERROR", path, "CATALYST_PIN_MISMATCH", f"{action} expected one of {allowed_refs}, observed {ref}")
     if "actions/checkout" not in names:
         add(findings, "ERROR", path, "CATALYST_CHECKOUT_REQUIRED", "pinned checkout is required")
 
@@ -137,6 +160,24 @@ def check_custom(path, text, findings):
     if path.name == "atlas-mission-consumer-gate.yml":
         if ".github/scripts/rafaelia/atlas-mission-consumer-gate.sh" not in text:
             add(findings, "ERROR", path, "ATLAS_GATE_CONTRACT", "missing repository-owned ATLAS gate wrapper")
+
+
+def check_control(path, text, findings):
+    for token in ("permissions:", "concurrency:"):
+        if token not in text:
+            add(findings, "ERROR", path, "CONTROL_REQUIRED_CONTROL", f"missing required control: {token}")
+    if "secrets." in text:
+        add(findings, "ERROR", path, "CONTROL_NO_REPOSITORY_SECRETS", "control-plane workflow must not depend on repository secrets")
+    if "pull_request_target:" in text:
+        add(findings, "ERROR", path, "CONTROL_NO_PULL_REQUEST_TARGET", "pull_request_target is forbidden")
+    for action, ref in extract_actions(text):
+        expected = CATALYST_PINS.get(action)
+        if expected is None:
+            add(findings, "ERROR", path, "CONTROL_ACTION_NOT_ALLOWED", f"unclassified external action: {action}")
+        elif ref not in expected:
+            add(findings, "ERROR", path, "CONTROL_PIN_MISMATCH", f"{action} expected one of {sorted(expected)}, observed {ref}")
+    if "actions/upload-artifact" in text and "retention-days:" not in text:
+        add(findings, "ERROR", path, "ARTIFACT_RETENTION_EXPLICIT", "artifact upload requires retention-days")
 
 
 def check_upstream_ci(path, text, findings):
@@ -159,18 +200,20 @@ def main():
         return 2
     findings = []
     observed = {p.name for p in paths}
-    expected = CUSTOM_WORKFLOWS | {UPSTREAM_RELEASE_WORKFLOW}
+    expected = CUSTOM_WORKFLOWS | CONTROL_WORKFLOWS | {UPSTREAM_RELEASE_WORKFLOW}
     for name in sorted(expected - observed):
         findings.append(Finding("ERROR", name, "EXPECTED_WORKFLOW_PRESENT", "expected workflow is missing"))
 
     inventory = []
     for path in paths:
         text = path.read_text(encoding="utf-8")
-        role = "UPSTREAM_RELEASE_GRAPH" if path.name == UPSTREAM_RELEASE_WORKFLOW else "RAFAELIA_CUSTOM_ORCHESTRATION" if path.name in CUSTOM_WORKFLOWS else "UNCLASSIFIED_WORKFLOW"
+        role = "UPSTREAM_RELEASE_GRAPH" if path.name == UPSTREAM_RELEASE_WORKFLOW else "RAFAELIA_CUSTOM_ORCHESTRATION" if path.name in CUSTOM_WORKFLOWS else "RAFAELIA_CONTROL_PLANE" if path.name in CONTROL_WORKFLOWS else "UNCLASSIFIED_WORKFLOW"
         inventory.append({"path": str(path.relative_to(ROOT)), "sha256": sha256(path), "bytes": path.stat().st_size, "role": role, "external_actions": [{"action": a, "ref": r} for a, r in extract_actions(text)]})
         check_common(path, text, findings)
         if path.name in CUSTOM_WORKFLOWS:
             check_custom(path, text, findings)
+        elif path.name in CONTROL_WORKFLOWS:
+            check_control(path, text, findings)
         elif path.name == UPSTREAM_RELEASE_WORKFLOW:
             check_upstream_ci(path, text, findings)
         else:
