@@ -1,0 +1,41 @@
+name: RAFAELIA SUSTENTO T Observer V1
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - "profiles/sustento-t-observer.v1.json"
+      - "tools/rafaelia-sustento-t-agent.js"
+      - ".github/scripts/rafaelia/sustento-t-observer.py"
+      - ".github/scripts/rafaelia/test_sustento_t_observer.py"
+      - ".github/scripts/rafaelia/workflow-contract.py"
+      - ".github/workflows/rafaelia-sustento-t-observer-v1.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: rafaelia-sustento-t-observer-v1-${{ github.ref }}-${{ github.event_name }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  observer-contract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
+        with:
+          python-version: "3.13"
+
+      - name: Profile syntax
+        run: python3 -m json.tool profiles/sustento-t-observer.v1.json >/dev/null
+
+      - name: Observer tests
+        run: python3 .github/scripts/rafaelia/test_sustento_t_observer.py
+
+      - name: Static Frida-agent safety boundary
+        run: |
+          grep -q 'rpc.exports' tools/rafaelia-sustento-t-agent.js
+          ! grep -E 'Interceptor\.attach|NativeFunction|SystemFunction|exec\(|spawn\(' tools/rafaelia-sustento-t-agent.js
+          grep -q 'DIAGNOSTIC_AGGREGATOR_NOT_TRUTH_PROBABILITY' tools/rafaelia-sustento-t-agent.js
