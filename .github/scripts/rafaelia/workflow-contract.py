@@ -33,6 +33,7 @@ CUSTOM_WORKFLOWS = {
     "runtime-aided-debugger-hardening.yml",
     "runtime-learning-engine.yml",
     "rafaelia-matrix-compose-observer-v1.yml",
+    "rafaelia-sustento-t-observer-v1.yml",
     "workflow-contract.yml",
 }
 
@@ -47,6 +48,7 @@ DEFAULT_ACTIONS = {"actions/checkout", "actions/upload-artifact"}
 ACTION_ALLOWLIST = {name: set(DEFAULT_ACTIONS) for name in CUSTOM_WORKFLOWS}
 ACTION_ALLOWLIST["atlas-mission-consumer-gate.yml"] = {"actions/checkout"}
 ACTION_ALLOWLIST["rafaelia-matrix-compose-observer-v1.yml"] = {"actions/checkout", "actions/setup-python"}
+ACTION_ALLOWLIST["rafaelia-sustento-t-observer-v1.yml"] = {"actions/checkout", "actions/setup-python"}
 ACTION_ALLOWLIST["android17-apk-elf-dex.yml"] = {
     "actions/checkout", "actions/setup-java", "actions/upload-artifact", "android-actions/setup-android"
 }
