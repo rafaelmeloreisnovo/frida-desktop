@@ -24,6 +24,9 @@ jobs:
         with:
           persist-credentials: false
 
+      - name: Prepare Scorecard evidence directory
+        run: mkdir -p evidence/openssf-scorecard
+
       - name: Run OpenSSF Scorecard
         id: scorecard
         uses: ossf/scorecard-action@2d1146689b8cda280b9bc96326124645441f03bc # v2.4.4
