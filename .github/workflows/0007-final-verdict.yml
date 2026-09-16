@@ -1,0 +1,87 @@
+name: 0007 · Final Verdict
+
+on:
+  workflow_call:
+    inputs:
+      foundation_result:
+        required: true
+        type: string
+      dependencies_result:
+        required: true
+        type: string
+      codeql_result:
+        required: true
+        type: string
+      core_result:
+        required: true
+        type: string
+      provenance_result:
+        required: true
+        type: string
+      scorecard_result:
+        required: true
+        type: string
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: 0007-verdict-${{ github.run_id }}-${{ github.job }}
+  cancel-in-progress: false
+
+jobs:
+  verdict:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - name: Build fail-closed control-plane receipt
+        env:
+          FOUNDATION: ${{ inputs.foundation_result }}
+          DEPENDENCIES: ${{ inputs.dependencies_result }}
+          CODEQL: ${{ inputs.codeql_result }}
+          CORE: ${{ inputs.core_result }}
+          PROVENANCE: ${{ inputs.provenance_result }}
+          SCORECARD: ${{ inputs.scorecard_result }}
+        run: |
+          set -euo pipefail
+          mkdir -p evidence/0000-orchestration
+          python3 - <<'PY'
+          import json, os, pathlib
+          required = {
+              "foundation": os.environ.get("FOUNDATION") or "TOKEN_VAZIO",
+              "dependencies": os.environ.get("DEPENDENCIES") or "TOKEN_VAZIO",
+              "codeql": os.environ.get("CODEQL") or "TOKEN_VAZIO",
+              "core": os.environ.get("CORE") or "TOKEN_VAZIO",
+              "provenance": os.environ.get("PROVENANCE") or "TOKEN_VAZIO",
+          }
+          scorecard = os.environ.get("SCORECARD") or "TOKEN_VAZIO"
+          required_ok = all(v == "success" for v in required.values())
+          scorecard_ok = scorecard in {"success", "skipped"}
+          ok = required_ok and scorecard_ok
+          receipt = {
+              "schema": "rafaelia.0000.omega-integrator.receipt.v1",
+              "status": "PASS" if ok else "FAIL",
+              "source_sha": os.environ.get("GITHUB_SHA", "TOKEN_VAZIO"),
+              "run_id": os.environ.get("GITHUB_RUN_ID", "TOKEN_VAZIO"),
+              "required": required,
+              "scorecard": scorecard,
+              "source_execution_evidence_claim_separated": True,
+              "claim_allowed": False,
+          }
+          p = pathlib.Path("evidence/0000-orchestration/final-verdict.json")
+          p.write_text(json.dumps(receipt, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+          print(p.read_text())
+          if not ok:
+              raise SystemExit("0000_OMEGA_PIPELINE_FAIL")
+          print("0000_OMEGA_PIPELINE_PASS")
+          PY
+
+      - name: Upload final verdict
+        if: always()
+        uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5.0.0
+        with:
+          name: 0007-final-verdict-${{ github.run_id }}
+          path: evidence/0000-orchestration/final-verdict.json
+          if-no-files-found: error
+          retention-days: 90
