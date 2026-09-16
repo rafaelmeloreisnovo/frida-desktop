@@ -36,11 +36,11 @@ jobs:
           set -euo pipefail
           mkdir -p evidence/provenance-attestation
           mapfile -t apks < <(find inbound/android17 -type f -name '*.apk' -print | sort)
-          ((${{#apks[@]} == 3)) || {
-            printf 'EXPECTED_3_APKS observed=%s\n' "${{#apks[@]}" >&2
+          ((${#apks[@]} == 3)) || {
+            printf 'EXPECTED_3_APKS observed=%s\n' "${#apks[@]}" >&2
             exit 1
           }
-          sha256sum "${{apks[@]}" | tee evidence/provenance-attestation/SHA256SUMS.txt
+          sha256sum "${apks[@]}" | tee evidence/provenance-attestation/SHA256SUMS.txt
 
       - name: Attest APK build provenance
         id: attest
