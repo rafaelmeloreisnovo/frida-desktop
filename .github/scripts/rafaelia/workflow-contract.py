@@ -61,7 +61,9 @@ CATALYST_PINS = {
     },
     "actions/download-artifact": {"634f93cb2916e3fdff6788551b99b062d0335ce0"},  # v5.0.0
     "actions/dependency-review-action": {"a1d282b36b6f3519aa1f3fc636f609c47dddb294"},  # v5.0.0
-    "github/codeql-action": {"b96794f015dfd88f77b49b1c93e0fa7110f94c63"},  # v4.38.0
+    "github/codeql-action/init": {"b96794f015dfd88f77b49b1c93e0fa7110f94c63"},  # v4.38.0
+    "github/codeql-action/analyze": {"b96794f015dfd88f77b49b1c93e0fa7110f94c63"},  # v4.38.0
+    "github/codeql-action/upload-sarif": {"b96794f015dfd88f77b49b1c93e0fa7110f94c63"},  # v4.38.0
     "actions/attest": {"c32b4b8b198b65d0bd9d63490e847ff7b53989d4"},  # v4.0.0
     "ossf/scorecard-action": {"2d1146689b8cda280b9bc96326124645441f03bc"},  # v2.4.4
     "android-actions/setup-android": {"40fd30fb8d7440372e1316f5d1809ec01dcd3699"},
