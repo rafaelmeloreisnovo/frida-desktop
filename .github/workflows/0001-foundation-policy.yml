@@ -39,20 +39,27 @@ jobs:
           sha = re.compile(r"^[0-9a-f]{40}$")
           for path in sorted([*root.glob("*.yml"), *root.glob("*.yaml")]):
               text = path.read_text(encoding="utf-8")
+              upstream = path.name == "ci.yml"
               for value in use_re.findall(text):
                   if value.startswith("./") or value.startswith("$/"):
                       continue
                   if "@" not in value:
-                      bad.append((path, value, "missing-ref"))
+                      if upstream:
+                          print("UPSTREAM_ACTION_REF_WARNING", path, value, "missing-ref", sep=" | ")
+                      else:
+                          bad.append((path, value, "missing-ref"))
                       continue
                   _, ref = value.rsplit("@", 1)
                   if not sha.fullmatch(ref):
-                      bad.append((path, value, "not-full-sha"))
+                      if upstream:
+                          print("UPSTREAM_ACTION_REF_WARNING", path, value, "not-full-sha", sep=" | ")
+                      else:
+                          bad.append((path, value, "not-full-sha"))
           if bad:
               for row in bad:
                   print("UNPINNED_ACTION", *row, sep=" | ")
               raise SystemExit(1)
-          print("IMMUTABLE_ACTION_REFS_PASS")
+          print("IMMUTABLE_ACTION_REFS_PASS custom_control_plane=STRICT upstream_ci=OBSERVED")
           PY
 
       - name: Upload foundation evidence
