@@ -1,0 +1,91 @@
+name: 0000 · OMEGA Integrator
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+  schedule:
+    - cron: "17 3 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: 0000-omega-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  foundation:
+    name: 0001 · foundation policy
+    uses: ./.github/workflows/0001-foundation-policy.yml
+    permissions:
+      contents: read
+
+  dependencies:
+    name: 0002 · dependency supply chain
+    needs: foundation
+    uses: ./.github/workflows/0002-dependency-supply-chain.yml
+    permissions:
+      contents: read
+
+  codeql:
+    name: 0003 · CodeQL security
+    needs: foundation
+    uses: ./.github/workflows/0003-codeql-security.yml
+    permissions:
+      contents: read
+      security-events: write
+
+  core:
+    name: 0004 · core execution
+    needs:
+      - dependencies
+      - codeql
+    uses: ./.github/workflows/0004-core-execution.yml
+    permissions:
+      contents: read
+
+  provenance:
+    name: 0005 · provenance + attestation
+    needs: core
+    uses: ./.github/workflows/0005-provenance-attestation.yml
+    permissions:
+      actions: read
+      artifact-metadata: write
+      attestations: write
+      contents: read
+      id-token: write
+
+  scorecard:
+    name: 0006 · OpenSSF Scorecard
+    if: github.event_name != 'pull_request'
+    needs: foundation
+    uses: ./.github/workflows/0006-openssf-scorecard.yml
+    permissions:
+      actions: read
+      contents: read
+      id-token: write
+      security-events: write
+
+  verdict:
+    name: 0007 · final fail-closed verdict
+    if: always()
+    needs:
+      - foundation
+      - dependencies
+      - codeql
+      - core
+      - provenance
+      - scorecard
+    uses: ./.github/workflows/0007-final-verdict.yml
+    with:
+      foundation_result: ${{ needs.foundation.result }}
+      dependencies_result: ${{ needs.dependencies.result }}
+      codeql_result: ${{ needs.codeql.result }}
+      core_result: ${{ needs.core.result }}
+      provenance_result: ${{ needs.provenance.result }}
+      scorecard_result: ${{ needs.scorecard.result }}
+    permissions:
+      contents: read

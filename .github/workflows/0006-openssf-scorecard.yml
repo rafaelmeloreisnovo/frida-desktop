@@ -1,0 +1,74 @@
+name: 0006 · OpenSSF Scorecard
+
+on:
+  workflow_call:
+  workflow_dispatch:
+
+permissions:
+  actions: read
+  contents: read
+  id-token: write
+  security-events: write
+
+concurrency:
+  group: 0006-scorecard-${{ github.run_id }}-${{ github.job }}
+  cancel-in-progress: false
+
+jobs:
+  scorecard:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Prepare Scorecard evidence directory
+        run: mkdir -p evidence/openssf-scorecard
+
+      - name: Run OpenSSF Scorecard
+        id: scorecard
+        uses: ossf/scorecard-action@2d1146689b8cda280b9bc96326124645441f03bc # v2.4.4
+        with:
+          results_file: evidence/openssf-scorecard/results.sarif
+          results_format: sarif
+          publish_results: true
+
+      - name: Upload SARIF to code scanning
+        if: success()
+        uses: github/codeql-action/upload-sarif@b96794f015dfd88f77b49b1c93e0fa7110f94c63 # v4.38.0
+        with:
+          sarif_file: evidence/openssf-scorecard/results.sarif
+
+      - name: Write Scorecard receipt
+        if: always()
+        env:
+          SCORECARD_OUTCOME: ${{ steps.scorecard.outcome }}
+        run: |
+          set -euo pipefail
+          mkdir -p evidence/openssf-scorecard
+          python3 - <<'PY'
+          import json, os, pathlib
+          outcome = os.environ.get("SCORECARD_OUTCOME", "TOKEN_VAZIO")
+          out = {
+              "schema": "rafaelia.0006.openssf-scorecard.v1",
+              "source_sha": os.environ.get("GITHUB_SHA", "TOKEN_VAZIO"),
+              "run_id": os.environ.get("GITHUB_RUN_ID", "TOKEN_VAZIO"),
+              "scorecard_outcome": outcome,
+              "status": "PASS" if outcome == "success" else "FAIL",
+              "claim_allowed": False,
+          }
+          p = pathlib.Path("evidence/openssf-scorecard/receipt.json")
+          p.write_text(json.dumps(out, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+          print(p.read_text())
+          PY
+
+      - name: Upload Scorecard evidence
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: 0006-scorecard-${{ github.run_id }}
+          path: evidence/openssf-scorecard/
+          if-no-files-found: error
+          retention-days: 30

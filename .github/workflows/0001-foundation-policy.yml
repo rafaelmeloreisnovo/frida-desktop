@@ -1,0 +1,72 @@
+name: 0001 · Foundation Policy
+
+on:
+  workflow_call:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: 0001-foundation-${{ github.run_id }}-${{ github.job }}
+  cancel-in-progress: false
+
+jobs:
+  policy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 2
+          persist-credentials: false
+
+      - name: Validate repository workflow contract
+        run: |
+          set -euo pipefail
+          python3 -m py_compile .github/scripts/rafaelia/workflow-contract.py
+          python3 .github/scripts/rafaelia/workflow-contract.py
+
+      - name: Enforce immutable external action references
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import pathlib, re
+          root = pathlib.Path(".github/workflows")
+          bad = []
+          use_re = re.compile(r"(?m)^\s*(?:-\s*)?uses:\s*([^\s#]+)")
+          sha = re.compile(r"^[0-9a-f]{40}$")
+          for path in sorted([*root.glob("*.yml"), *root.glob("*.yaml")]):
+              text = path.read_text(encoding="utf-8")
+              upstream = path.name == "ci.yml"
+              for value in use_re.findall(text):
+                  if value.startswith("./") or value.startswith("$/"):
+                      continue
+                  if "@" not in value:
+                      if upstream:
+                          print("UPSTREAM_ACTION_REF_WARNING", path, value, "missing-ref", sep=" | ")
+                      else:
+                          bad.append((path, value, "missing-ref"))
+                      continue
+                  _, ref = value.rsplit("@", 1)
+                  if not sha.fullmatch(ref):
+                      if upstream:
+                          print("UPSTREAM_ACTION_REF_WARNING", path, value, "not-full-sha", sep=" | ")
+                      else:
+                          bad.append((path, value, "not-full-sha"))
+          if bad:
+              for row in bad:
+                  print("UNPINNED_ACTION", *row, sep=" | ")
+              raise SystemExit(1)
+          print("IMMUTABLE_ACTION_REFS_PASS custom_control_plane=STRICT upstream_ci=OBSERVED")
+          PY
+
+      - name: Upload foundation evidence
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: 0001-foundation-${{ github.run_id }}
+          path: evidence/workflow-contract/
+          if-no-files-found: error
+          retention-days: 30

@@ -1,0 +1,98 @@
+name: 0002 · Dependency Supply Chain
+
+on:
+  workflow_call:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: 0002-dependencies-${{ github.run_id }}-${{ github.job }}
+  cancel-in-progress: false
+
+jobs:
+  dependency-gate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Dependency review on supported pull requests
+        if: github.event_name == 'pull_request' && github.event.repository.fork == false
+        uses: actions/dependency-review-action@a1d282b36b6f3519aa1f3fc636f609c47dddb294 # v5.0.0
+        with:
+          fail-on-severity: high
+          fail-on-scopes: runtime
+
+      - name: Record dependency-review platform boundary
+        if: github.event_name == 'pull_request' && github.event.repository.fork == true
+        run: |
+          set -euo pipefail
+          mkdir -p evidence/dependency-supply-chain
+          python3 - <<'PY'
+          import json, os, pathlib
+          out = {
+              "schema": "rafaelia.dependency-review-boundary.v1",
+              "status": "UNAVAILABLE_REPOSITORY_FORK",
+              "repository": os.environ.get("GITHUB_REPOSITORY", "TOKEN_VAZIO"),
+              "source_sha": os.environ.get("GITHUB_SHA", "TOKEN_VAZIO"),
+              "fallback_gate": "SHA256_DEPENDENCY_SURFACE_INVENTORY",
+              "claim_allowed": False,
+          }
+          pathlib.Path("evidence/dependency-supply-chain/dependency-review-boundary.json").write_text(
+              json.dumps(out, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+          )
+          print("DEPENDENCY_REVIEW_UNAVAILABLE_REPOSITORY_FORK")
+          PY
+
+      - name: Build dependency surface inventory
+        if: always()
+        run: |
+          set -euo pipefail
+          mkdir -p evidence/dependency-supply-chain
+          python3 - <<'PY'
+          import hashlib, json, os, pathlib
+          names = {
+              "package.json", "package-lock.json", "npm-shrinkwrap.json",
+              "yarn.lock", "pnpm-lock.yaml", "requirements.txt",
+              "pyproject.toml", "poetry.lock", "Pipfile", "Pipfile.lock",
+              "go.mod", "go.sum", "Cargo.toml", "Cargo.lock",
+              "build.gradle", "build.gradle.kts", "settings.gradle",
+              "settings.gradle.kts", "gradle.properties", ".gitmodules",
+          }
+          rows = []
+          for p in pathlib.Path(".").rglob("*"):
+              if not p.is_file() or ".git" in p.parts or p.name not in names:
+                  continue
+              data = p.read_bytes()
+              rows.append({
+                  "path": p.as_posix(),
+                  "bytes": len(data),
+                  "sha256": hashlib.sha256(data).hexdigest(),
+              })
+          out = {
+              "schema": "rafaelia.dependency-surface.v1",
+              "event": os.environ.get("GITHUB_EVENT_NAME", "TOKEN_VAZIO"),
+              "source_sha": os.environ.get("GITHUB_SHA", "TOKEN_VAZIO"),
+              "count": len(rows),
+              "manifests": sorted(rows, key=lambda x: x["path"]),
+              "claim_allowed": False,
+          }
+          pathlib.Path("evidence/dependency-supply-chain/inventory.json").write_text(
+              json.dumps(out, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+          )
+          print(f"DEPENDENCY_SURFACE count={len(rows)}")
+          PY
+
+      - name: Upload dependency evidence
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: 0002-dependencies-${{ github.run_id }}
+          path: evidence/dependency-supply-chain/
+          if-no-files-found: error
+          retention-days: 30

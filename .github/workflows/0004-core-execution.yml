@@ -1,0 +1,19 @@
+name: 0004 · Core Execution
+
+on:
+  workflow_call:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: 0004-core-${{ github.run_id }}-${{ github.job }}
+  cancel-in-progress: false
+
+jobs:
+  core:
+    name: Existing 01 orchestrator
+    uses: ./.github/workflows/01.yml
+    permissions:
+      contents: read
