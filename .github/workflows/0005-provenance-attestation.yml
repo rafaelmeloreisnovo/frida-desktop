@@ -1,0 +1,81 @@
+name: 0005 · Provenance Attestation
+
+on:
+  workflow_call:
+  workflow_dispatch:
+
+permissions:
+  actions: read
+  artifact-metadata: write
+  attestations: write
+  contents: read
+  id-token: write
+
+concurrency:
+  group: 0005-provenance-${{ github.run_id }}-${{ github.job }}
+  cancel-in-progress: false
+
+jobs:
+  attest:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Download exact Android build evidence
+        uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0 # v5.0.0
+        with:
+          name: 01-android17-${{ github.run_id }}
+          path: inbound/android17
+
+      - name: Verify artifact surface and create checksums
+        run: |
+          set -euo pipefail
+          mkdir -p evidence/provenance-attestation
+          mapfile -t apks < <(find inbound/android17 -type f -name '*.apk' -print | sort)
+          ((${{#apks[@]} == 3)) || {
+            printf 'EXPECTED_3_APKS observed=%s\n' "${{#apks[@]}" >&2
+            exit 1
+          }
+          sha256sum "${{apks[@]}" | tee evidence/provenance-attestation/SHA256SUMS.txt
+
+      - name: Attest APK build provenance
+        id: attest
+        uses: actions/attest@c32b4b8b198b65d0bd9d63490e847ff7b53989d4 # v4.0.0
+        with:
+          subject-path: "inbound/android17/**/*.apk"
+
+      - name: Write provenance receipt
+        env:
+          ATTESTATION_ID: ${{ steps.attest.outputs.attestation-id }}
+          ATTESTATION_URL: ${{ steps.attest.outputs.attestation-url }}
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json, os, pathlib
+          out = {
+              "schema": "rafaelia.0005.provenance-attestation.v1",
+              "source_sha": os.environ.get("GITHUB_SHA", "TOKEN_VAZIO"),
+              "run_id": os.environ.get("GITHUB_RUN_ID", "TOKEN_VAZIO"),
+              "attestation_id": os.environ.get("ATTESTATION_ID", "TOKEN_VAZIO"),
+              "attestation_url": os.environ.get("ATTESTATION_URL", "TOKEN_VAZIO"),
+              "subjects": 3,
+              "status": "PASS",
+              "claim_allowed": False,
+          }
+          p = pathlib.Path("evidence/provenance-attestation/receipt.json")
+          p.write_text(json.dumps(out, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+          print(p.read_text())
+          PY
+
+      - name: Upload provenance receipt
+        if: always()
+        uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5.0.0
+        with:
+          name: 0005-provenance-${{ github.run_id }}
+          path: evidence/provenance-attestation/
+          if-no-files-found: error
+          retention-days: 90
