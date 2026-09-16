@@ -1,0 +1,115 @@
+version: 2
+
+updates:
+  - package-ecosystem: github-actions
+    directory: "/"
+    target-branch: main
+    schedule:
+      interval: weekly
+      day: monday
+      time: "04:17"
+      timezone: America/Sao_Paulo
+    open-pull-requests-limit: 10
+    rebase-strategy: auto
+    groups:
+      actions-minor-patch:
+        patterns:
+          - "*"
+        update-types:
+          - minor
+          - patch
+    commit-message:
+      prefix: "deps(actions)"
+
+  - package-ecosystem: gradle
+    directory: "/android"
+    target-branch: main
+    schedule:
+      interval: weekly
+      day: tuesday
+      time: "04:23"
+      timezone: America/Sao_Paulo
+    open-pull-requests-limit: 6
+    rebase-strategy: auto
+    groups:
+      gradle-minor-patch:
+        patterns:
+          - "*"
+        update-types:
+          - minor
+          - patch
+    commit-message:
+      prefix: "deps(gradle)"
+
+  - package-ecosystem: npm
+    directory: "/dashboard/backend"
+    target-branch: main
+    schedule:
+      interval: weekly
+      day: wednesday
+      time: "04:29"
+      timezone: America/Sao_Paulo
+    open-pull-requests-limit: 6
+    rebase-strategy: auto
+    groups:
+      npm-backend-minor-patch:
+        patterns:
+          - "*"
+        update-types:
+          - minor
+          - patch
+    commit-message:
+      prefix: "deps(npm-backend)"
+
+  - package-ecosystem: npm
+    directory: "/dashboard/web"
+    target-branch: main
+    schedule:
+      interval: weekly
+      day: thursday
+      time: "04:31"
+      timezone: America/Sao_Paulo
+    open-pull-requests-limit: 6
+    rebase-strategy: auto
+    groups:
+      npm-web-minor-patch:
+        patterns:
+          - "*"
+        update-types:
+          - minor
+          - patch
+    commit-message:
+      prefix: "deps(npm-web)"
+
+  - package-ecosystem: npm
+    directory: "/modules/runtime-learning-engine"
+    target-branch: main
+    schedule:
+      interval: weekly
+      day: friday
+      time: "04:37"
+      timezone: America/Sao_Paulo
+    open-pull-requests-limit: 6
+    rebase-strategy: auto
+    groups:
+      runtime-learning-minor-patch:
+        patterns:
+          - "*"
+        update-types:
+          - minor
+          - patch
+    commit-message:
+      prefix: "deps(runtime-learning)"
+
+  - package-ecosystem: gitsubmodule
+    directory: "/"
+    target-branch: main
+    schedule:
+      interval: weekly
+      day: saturday
+      time: "04:41"
+      timezone: America/Sao_Paulo
+    open-pull-requests-limit: 4
+    rebase-strategy: auto
+    commit-message:
+      prefix: "deps(submodules)"
