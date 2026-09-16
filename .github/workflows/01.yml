@@ -1,12 +1,8 @@
 name: 01 · RAFAELIA Pipeline Orchestrator
 
 on:
-  pull_request:
-  push:
-    branches:
-      - main
-  workflow_dispatch:
   workflow_call:
+  workflow_dispatch:
 
 permissions:
   contents: read
