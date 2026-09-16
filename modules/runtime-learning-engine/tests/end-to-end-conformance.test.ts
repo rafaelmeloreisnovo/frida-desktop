@@ -333,7 +333,7 @@ describe('Phase 4.4: End-to-End Conformance', () => {
 
       // Failsafe should be triggered and activated
       expect(result.failsafeActivations).toBeGreaterThan(0);
-      expect(passiveEvent || result.failsafeActivations > 0).toBe(true);
+      expect(Boolean(passiveEvent) || result.failsafeActivations > 0).toBe(true);
 
       console.log(`[E2E] Passive mode: engine restricted to read-only operations (failsafe: ${result.failsafeActivations})`);
     }, 10000);
