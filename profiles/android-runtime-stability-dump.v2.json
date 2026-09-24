@@ -1,18 +1,38 @@
 {
   "schema": "rafaelia.android.runtime-stability-dump/profile-v2",
-  "profile": "android-runtime-stability-dump-v2",
-  "intent": "Capture a privacy-safe structural runtime fingerprint that can be compared across authorized Frida sessions for recognition, drift and stability analysis.",
+  "profile": "android-runtime-stability-dump",
+  "intent": "Capture privacy-safe structural runtime evidence for recognition, drift, stability-context and falsifiable comparison across authorized Frida sessions.",
   "claim_allowed": false,
+  "evidence_law": [
+    "SOURCE != ARTIFACT != EXECUTION != EVIDENCE != CLAIM",
+    "TOKEN_VAZIO != 0",
+    "observed drift != defect",
+    "correlation != causality",
+    "visibility loss != target change",
+    "instrumentation drift != target drift"
+  ],
   "capture_mode": {
     "on_agent_load": true,
     "rpc_snapshot": true,
     "periodic_polling": false,
     "active_mutation": false,
-    "append_only_file_controller": true,
-    "condition_id": {
-      "default": "UNSPECIFIED",
-      "syntax": "[A-Za-z0-9_.-]{1,64}",
-      "semantics": "comparability label, not a causal variable"
+    "optional_event_observers": true,
+    "event_observers_default": false,
+    "append_only_file_controller": true
+  },
+  "consistency": {
+    "model": "BEST_EFFORT_NON_ATOMIC",
+    "sequential_collectors": true,
+    "wall_clock_recorded": true,
+    "monotonic_clock_recorded_when_java_available": true,
+    "observer_duration_recorded": true,
+    "observer_effect": "MEASURED_NOT_ASSUMED_ZERO",
+    "frida_cloak_semantics": "Process introspection may exclude Frida-cloaked runtime resources; observer cost is therefore tracked separately.",
+    "module_surface_endpoint_fence": {
+      "implemented": true,
+      "semantics": "module name+size surface captured at start and end",
+      "limitation": "equal endpoints do not prove absence of transient mid-capture churn",
+      "fail_closed": "detected endpoint churn => INCOMPARABLE_CAPTURE_RACE"
     }
   },
   "semantic_layers": {
@@ -21,91 +41,96 @@
       "pointer size",
       "page size",
       "platform",
-      "Android/ART build identity when Java is available"
+      "Android/ART build identity when Java is available",
+      "allowlisted Android platform contract: zygote/ABI, VNDK, build/boot security, FBE, memfd/memcg/LMKD tuning"
+    ],
+    "instrumentation_identity": [
+      "Frida version",
+      "Frida JavaScript runtime"
     ],
     "recognition_surface": [
-      "loaded module name+size set"
+      "full loaded module name+size projection"
     ],
-    "volatile_observations": [
-      "pid/tid",
-      "module base addresses",
+    "volatile_runtime": [
       "thread count/state summary",
-      "memory range count/size summary",
+      "exact-protection memory range summary",
       "managed/native heap counters",
-      "device elapsed time"
+      "debugger/code-signing state",
+      "allowlisted Android service state: lmkd, ashmemd, hidl_memory, tombstoned, traced",
+      "process PSS and native heap size/free/allocated counters"
     ],
-    "token_vazio": [
-      "kernel LMKD cause without independent evidence",
-      "SELinux causal attribution without denial evidence",
-      "physical memory pressure without a measured source",
-      "crash causality without reproduction/corroboration"
-    ],
-    "observer_context": [
-      "agent schema and Frida version",
-      "capture start/finish wall clock",
-      "capture duration",
-      "instrumentation presence",
-      "observer-effect declaration",
-      "Frida Cloak-aware introspection visibility",
-      "memory-range counting semantics",
-      "non-atomic capture consistency fence"
-    ],
-    "clock_context": [
-      "wall epoch",
-      "device elapsed time when Java is available",
-      "approximate boot epoch = wall - elapsed"
-    ],
-    "external_platform_context": [
-      "allowlisted local-Android getprop values when the controller itself runs on Android",
-      "selected /proc/meminfo counters",
-      "memory PSI when available",
-      "kernel release/machine",
-      "context is external to the target and cannot by itself establish causality"
-    ],
-    "runtime_scope": [
-      "JAVA_AWARE when Java.available=true and Java/ART identity is observed",
-      "NATIVE_ONLY when Java.available=false; Java absence is an observation scope, not a failure"
-    ],
-    "process_instance_context": [
+    "process_instance": [
       "pid",
-      "Process.getStartElapsedRealtime when Java-aware",
-      "process age",
-      "per-process elapsed CPU time",
-      "process instance drift is distinct from platform identity drift"
+      "current tid",
+      "Android process start elapsed time when Java is available",
+      "process age/cumulative CPU are context-only counters"
     ],
-    "memory_context": [
-      "Java heap total/free/max",
-      "native heap size/allocated/free",
-      "PSS when Java-aware",
-      "selected same-device system memory/PSI context when available"
+    "observer_effect": [
+      "Frida heap size",
+      "capture duration",
+      "Kernel API visibility"
+    ],
+    "timing": [
+      "wall start/end",
+      "monotonic elapsed/uptime when available"
+    ],
+    "experimental_context": [
+      "condition_id",
+      "same-device boot_session_sha256 when controller can observe it"
+    ]
+  },
+  "comparator": {
+    "classifications": [
+      "INCOMPARABLE",
+      "INCOMPARABLE_VISIBILITY",
+      "INCOMPARABLE_CONDITION",
+      "INCOMPARABLE_CAPTURE_RACE",
+      "VISIBILITY_DRIFT",
+      "INSTRUMENTATION_DRIFT",
+      "IDENTITY_DRIFT",
+      "BOOT_SESSION_DRIFT",
+      "PROCESS_INSTANCE_DRIFT",
+      "MODULE_SURFACE_DRIFT",
+      "RUNTIME_DRIFT",
+      "NO_OBSERVED_DRIFT"
+    ],
+    "priority": [
+      "schema/required-field incomparability",
+      "shared missing core visibility fails closed",
+      "experimental condition mismatch",
+      "detected non-atomic module churn",
+      "visibility drift",
+      "instrumentation drift",
+      "platform identity drift",
+      "boot session drift when observable",
+      "process instance drift",
+      "module surface drift",
+      "runtime drift",
+      "no observed drift"
+    ],
+    "excluded_from_classification": [
+      "wall/monotonic clock position",
+      "capture sequence",
+      "capture reason",
+      "ASLR module bases",
+      "pid/tid process instance",
+      "observer capture duration",
+      "compact hash hints"
     ]
   },
   "recognition": {
-    "platform_key": [
-      "Process.arch",
-      "Process.pointerSize",
-      "Process.pageSize",
-      "Process.platform",
-      "Java build/runtime identity"
-    ],
-    "module_surface_key": [
-      "loaded module basename+size multiset",
-      "privacy-bounded recognition surface; not exact file identity"
-    ],
-    "combined_recognition_key": [
-      "platform_key",
-      "module_surface_key"
-    ],
-    "fingerprint_note": "FNV-1a 32-bit values are compact hints only; full structural fields remain authoritative",
+    "authoritative_platform_identity": "full stable_identity structure",
+    "authoritative_module_surface": "full module name+size projection",
+    "compact_fingerprint_role": "HINT_ONLY",
+    "module_binary_identity": "TOKEN_VAZIO_NAME_AND_SIZE_DO_NOT_PROVE_BINARY_IDENTITY",
     "excludes": [
       "ASLR module bases",
       "pid",
       "tid",
       "heap counters",
-      "thread counts"
-    ],
-    "module_surface_ambiguity": "duplicate module basenames are reported; full paths remain intentionally uncollected",
-    "java_scope_rule": "java_available is part of stable identity; java_identity is required only when java_available=true"
+      "thread counts",
+      "capture clocks"
+    ]
   },
   "privacy": {
     "forbidden": [
@@ -113,59 +138,119 @@
       "Android ID",
       "SIM identifiers",
       "subscriber identifiers",
+      "process name",
+      "module paths",
       "clipboard",
       "UI text",
       "application payload bytes",
       "file contents",
       "network payload",
-      "credentials"
+      "credentials",
+      "unknown caller reason text"
     ],
-    "module_paths": "not collected",
-    "process_name": "not collected",
-    "allowlisted_controller_file_reads": [
-      "/proc/meminfo selected counters only",
-      "/proc/pressure/memory parsed numeric pressure counters only"
-    ]
+    "caller_reason": "allowlist-or-CALLER_DEFINED",
+    "target_selector_persisted": false,
+    "safe_property_policy": {
+      "mode": "ALLOWLIST_ONLY",
+      "includes": [
+        "non-unique ABI/runtime/build/boot-security/memory-policy properties",
+        "selected init service states"
+      ],
+      "excludes": [
+        "serial/PSN",
+        "SIM/ICCID/IMSI/subscriber fields",
+        "operator/carrier identity",
+        "radio provisioning payloads"
+      ]
+    }
   },
-  "invariants": [
-    "platform identity drift, module-surface drift and volatile runtime drift are reported separately",
-    "module-surface drift may reflect legitimate lazy loading and is not automatically identity drift",
-    "runtime drift is not automatically classified as instability",
-    "absence of a source remains TOKEN_VAZIO",
-    "a dump is evidence, not a causal claim",
-    "the agent never repairs, resumes, patches or mutates the target",
-    "observer state and capture duration are evidence dimensions, not invisible implementation details",
-    "estimated boot epoch is approximate context, not a trusted clock authority",
-    "missing evidence is not equality",
-    "a non-atomic capture with module churn is incomparable for module-surface recognition",
-    "Frida Cloak-aware introspection may omit instrumentation-owned resources",
-    "memory ranges are enumerated once and aggregated by exact returned protection; overlapping permission filters are forbidden",
-    "device elapsed time is clock context and does not by itself constitute runtime drift",
-    "local platform context is CONTEXT_ONLY and is not target-process identity",
-    "Java unavailable != collector failure when java_available=false",
-    "JAVA_AWARE and NATIVE_ONLY observations are different stable identity scopes",
-    "condition mismatch is incomparable rather than drift",
-    "process restart/generation drift != platform identity drift",
-    "boot-session drift != runtime bug",
-    "PSS is contextual and may vary with shared-memory attribution"
-  ],
   "file_contract": {
     "default_directory": "~/.local/state/rafaelia/frida-runtime-stability",
     "append_only": true,
     "file_mode": "0600",
+    "directory_mode_attempt": "0700",
     "fsync": true,
     "sha256_sidecar": true,
-    "target_selector_persisted": false,
-    "atomic_publication": "temp + fsync + exclusive hard-link + directory fsync",
-    "strict_json_finite_numbers": true,
+    "hash_chain_ledger": "ledger.jsonl",
+    "default_max_bytes": 8388608,
+    "remote_endpoint_default": "REFUSED_UNLESS_EXPLICIT_ALLOW_REMOTE",
     "default_max_dumps": 256,
     "default_max_dir_bytes": 67108864,
     "default_min_free_bytes": 16777216,
-    "automatic_deletion": false,
-    "previous_dump_sha256": true,
-    "chain_semantics": "local append-order integrity only; never causal proof",
-    "non_loopback_endpoint": "requires explicit --allow-remote-endpoint"
+    "controller_run_id": true,
+    "condition_id": true,
+    "source_sha256": true
   },
-  "supersedes": "rafaelia.android.runtime-stability-dump/profile-v1",
-  "runtime_dump_schema": "rafaelia.android.runtime-stability/v2"
+  "alternative_modes": {
+    "snapshot_on_demand": {
+      "status": "IMPLEMENTED_DEFAULT",
+      "rationale": "bounded passive evidence with explicit collection duration"
+    },
+    "event_driven_module_thread_observers": {
+      "status": "IMPLEMENTED_OPT_IN",
+      "rationale": "captures transitions without periodic polling; initial surface can be suppressed"
+    },
+    "periodic_polling": {
+      "status": "REJECTED_AS_DEFAULT",
+      "rationale": "creates unnecessary observer load and temporal self-interference"
+    },
+    "full_memory_or_payload_dump": {
+      "status": "REJECTED",
+      "rationale": "privacy, volume and causal ambiguity"
+    },
+    "kernel_lmk_selinux_tombstone_corroboration": {
+      "status": "EXTERNAL_EVIDENCE_REQUIRED",
+      "rationale": "must remain independent source evidence before causal attribution"
+    },
+    "hypermemory_causal_tail": {
+      "status": "IMPLEMENTED_HOSTED_BRIDGE_V2",
+      "rationale": "bounded minimized dump/diff/outcome envelopes, source SHA validation and local predecessor linkage without raw module names or Java build identity",
+      "eviction_rule": "missing predecessor after ring eviction => TOKEN_VAZIO_EVICTED_PREDECESSOR",
+      "physical_bridge": "TOKEN_VAZIO_NOT_EXECUTED",
+      "claim_allowed": false
+    },
+    "application_exit_info": {
+      "status": "UNAVAILABLE_ON_CURRENT_TARGET",
+      "rationale": "Android historical exit-reason API starts at API30; current physical target is API29.",
+      "current_fallback": "independent lmkd/kernel/tombstone/log evidence"
+    }
+  },
+  "token_vazio": [
+    "LMKD cause without independent evidence",
+    "SELinux causal attribution without denial evidence",
+    "physical memory pressure without measured source",
+    "crash root cause without corroboration",
+    "module binary identity without independent artifact identity",
+    "atomic snapshot guarantee",
+    "transient module churn between equal endpoint fences",
+    "boot-session identity for remote/USB target without an independent bridge",
+    "physical causal support absent independent device receipts"
+  ],
+  "experimental_condition": {
+    "field": "capture_provenance.condition_id",
+    "default": "UNSPECIFIED",
+    "syntax": "[A-Za-z0-9_.-]{1,64}",
+    "semantics": "comparability label, not a causal variable",
+    "mismatch": "INCOMPARABLE_CONDITION"
+  },
+  "repeated_measure_baseline": {
+    "artifact": "tools/runtime-stability-baseline.py",
+    "minimum_distinct_captures": 3,
+    "numeric_center": "median",
+    "dispersion": "median_absolute_deviation",
+    "module_model": "empirical prevalence",
+    "authority": "descriptive/outlier screening only; no causal promotion"
+  },
+  "epistemic_gate": {
+    "artifact": "tools/runtime-stability-evidence-gate.py",
+    "ladder": [
+      "OBSERVED",
+      "REPEATED",
+      "ASSOCIATED",
+      "CAUSAL_CANDIDATE",
+      "CAUSAL_SUPPORTED"
+    ],
+    "boundary": "structural methodology readiness never self-authorizes scientific truth or claims",
+    "causal_claim_allowed": false
+  }
 }
