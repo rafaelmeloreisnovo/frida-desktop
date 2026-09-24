@@ -4,7 +4,7 @@ import * as path from 'path';
 import { HyperMemoryRuntime } from '../hypermemory-runtime';
 import { RuntimeStabilityHyperMemoryBridge } from '../runtime-stability-hypermemory-bridge';
 
-describe('RuntimeStabilityHyperMemoryBridge', () => {
+describe('RuntimeStabilityHyperMemoryBridge V2', () => {
   let storagePath: string;
   let memory: HyperMemoryRuntime;
   let bridge: RuntimeStabilityHyperMemoryBridge;
@@ -13,7 +13,7 @@ describe('RuntimeStabilityHyperMemoryBridge', () => {
     storagePath = fs.mkdtempSync(path.join(os.tmpdir(), 'frida-stability-bridge-'));
     memory = new HyperMemoryRuntime({
       storagePath,
-      capacityBytes: 16384,
+      capacityBytes: 128 * 1024,
       checkpointIntervalMs: 0
     });
     await memory.start();
@@ -25,58 +25,116 @@ describe('RuntimeStabilityHyperMemoryBridge', () => {
     fs.rmSync(storagePath, { recursive: true, force: true });
   });
 
-  test('stores a minimized stability dump without raw module names or Java identity', () => {
-    bridge.appendDump({
-      schema: 'rafaelia.android.runtime-stability/v1',
-      capture_seq: 7,
-      reason: 'BEFORE_CRASH',
-      captured_epoch_ms: 123456,
-      platform_key: 'plat',
-      module_surface_key: 'mods',
-      recognition_key: 'rec',
-      stable_identity: {
-        arch: 'arm',
-        pointer_size: 4,
-        page_size: 4096,
-        platform: 'linux'
-      },
-      runtime_state: {
-        pid: 42,
-        current_tid: 43,
-        debugger_attached: true,
-        modules: { count: 91 },
-        threads: { count: 17 }
-      },
-      gaps: {
-        crash_causality: 'TOKEN_VAZIO',
-        safe_value: 'OBSERVED'
+  const dump = () => ({
+    schema: 'rafaelia.android.runtime-stability/v2',
+    claim_allowed: false,
+    capture_seq: 7,
+    reason: 'BASELINE',
+    capture_provenance: { condition_id: 'idle-v1' },
+    instrumentation_identity: {
+      frida_version: '17.0.0',
+      script_runtime: 'QJS'
+    },
+    stable_identity: {
+      arch: 'arm',
+      pointer_size: 4,
+      page_size: 4096,
+      platform: 'linux',
+      java_available: true,
+      java_identity: {
+        build_fingerprint: 'PRIVATE-BUILD-IDENTITY-MUST-NOT-BRIDGE'
       }
-    });
-
-    const record = memory.readRecords(1)[0];
-    const payload = JSON.parse(record.payload.toString('utf8'));
-    const encoded = JSON.stringify(payload);
-
-    expect(payload.event_kind).toBe('STABILITY_DUMP');
-    expect(payload.previous_payload_sha256).toBe('GENESIS');
-    expect(payload.payload.runtime_state.module_count).toBe(91);
-    expect(payload.payload.unresolved_gap_keys).toEqual(['crash_causality']);
-    expect(encoded).not.toContain('libfoo');
-    expect(encoded).not.toContain('build_fingerprint');
-    expect(encoded).not.toContain('java_identity');
-    expect(payload.claim_allowed).toBe(false);
+    },
+    visibility: { modules: 'PASS', threads: 'PASS' },
+    consistency: {
+      snapshot_atomic: false,
+      module_surface_stable_during_capture: true
+    },
+    platform_key_hint: 'abcd',
+    module_surface_key_hint: 'efgh',
+    recognition_key_hint: 'ijkl',
+    platform_context: { boot_session_sha256: 'b'.repeat(64) },
+    runtime_state: {
+      pid: 123,
+      current_tid: 124,
+      debugger_attached: true,
+      modules: {
+        count: 2,
+        modules: [
+          { name: 'liba.so', size: 4096, base: '0x1000' },
+          { name: 'libb.so', size: 8192, base: '0x2000' }
+        ]
+      },
+      threads: { count: 3, states: { waiting: 3 } },
+      memory_ranges: { status: 'PASS', total_ranges: 5 },
+      java_runtime: {
+        process_start_elapsed_ms: 100,
+        process_age_ms: 25,
+        process_pss_kb: 1024,
+        native_heap_allocated_bytes: 2048
+      }
+    },
+    gaps: { crash_causality: 'TOKEN_VAZIO' }
   });
 
-  test('links successor envelopes by prior HyperMemory payload SHA-256', () => {
-    bridge.appendDiff({
-      schema: 'rafaelia.android.runtime-stability-diff/v2',
-      classification: 'RUNTIME_DRIFT',
-      platform_identity_match: true,
-      module_surface_match: true,
-      recognition_match: true,
-      runtime_changes: [{ path: 'runtime_state.threads.count' }]
+  test('projects V2 dump without raw modules or Java build identity', () => {
+    const sequence = bridge.appendDump(dump(), {
+      sourceSha256: 'a'.repeat(64)
     });
 
+    expect(sequence).toBe(1);
+    const record = memory.readRecords(1)[0];
+    const envelope = JSON.parse(record.payload.toString('utf8'));
+    const encoded = JSON.stringify(envelope);
+
+    expect(envelope.event_kind).toBe('STABILITY_DUMP');
+    expect(envelope.source_sha256).toBe('a'.repeat(64));
+    expect(envelope.payload.condition_id).toBe('idle-v1');
+    expect(envelope.payload.recognition.module_count).toBe(2);
+    expect(envelope.payload.raw_module_list_embedded).toBe(false);
+    expect(envelope.payload.java_build_identity_embedded).toBe(false);
+    expect(encoded).not.toContain('liba.so');
+    expect(encoded).not.toContain('PRIVATE-BUILD-IDENTITY');
+    expect(envelope.claim_allowed).toBe(false);
+  });
+
+  test('projects diff paths without before/after values or causal promotion', () => {
+    bridge.appendDiff({
+      schema: 'rafaelia.android.runtime-stability-diff/v2',
+      claim_allowed: false,
+      classification: 'MODULE_SURFACE_DRIFT',
+      comparison_status: 'COMPARABLE',
+      comparable: true,
+      condition_id: 'idle-v1',
+      recognition_match: false,
+      module_surface_changes: [{
+        path: 'runtime_state.modules.modules[name,size]',
+        before: [{ name: 'secret-before' }],
+        after: [{ name: 'secret-after' }]
+      }],
+      runtime_changes: [{
+        path: 'runtime_state.threads.count',
+        before: 3,
+        after: 4
+      }]
+    }, { sourceSha256: 'c'.repeat(64) });
+
+    const envelope = JSON.parse(
+      memory.readRecords(1)[0].payload.toString('utf8')
+    );
+    const encoded = JSON.stringify(envelope);
+
+    expect(envelope.payload.change_paths.modules).toEqual([
+      'runtime_state.modules.modules[name,size]'
+    ]);
+    expect(envelope.payload.before_after_values_embedded).toBe(false);
+    expect(encoded).not.toContain('secret-before');
+    expect(encoded).not.toContain('secret-after');
+    expect(envelope.payload.causality).toBe('NOT_INFERRED');
+  });
+
+  test('links causal-tail envelopes and records outcomes as observations only', () => {
+    bridge.appendDump(dump());
     const first = memory.readRecords(1)[0];
 
     bridge.appendOutcome({
@@ -89,108 +147,75 @@ describe('RuntimeStabilityHyperMemoryBridge', () => {
       evidence_ref: 'receipt://tombstone/abc'
     });
 
-    const second = memory.readRecords(1)[0];
-    const secondPayload = JSON.parse(second.payload.toString('utf8'));
+    const records = memory.readRecords();
+    const second = records[records.length - 1];
+    const envelope = JSON.parse(second.payload.toString('utf8'));
 
-    expect(secondPayload.previous_payload_sha256).toBe(first.sha256);
-    expect(secondPayload.event_kind).toBe('OUTCOME');
-    expect(secondPayload.payload.causal_role).toBe('OBSERVATION_ONLY');
+    expect(envelope.previous_payload_sha256).toBe(first.sha256);
+    expect(envelope.event_kind).toBe('OUTCOME');
+    expect(envelope.payload.causal_role).toBe('OBSERVATION_ONLY');
+    expect(envelope.claim_allowed).toBe(false);
   });
 
-  test('accepts fail-closed diff v2 and preserves only gap keys', () => {
-    bridge.appendDiff({
+  test('marks predecessor unknown after causal-tail eviction', () => {
+    const tiny = new HyperMemoryRuntime({
+      storagePath: storagePath + '-tiny',
+      capacityBytes: 4096,
+      checkpointIntervalMs: 0
+    });
+
+    return tiny.start().then(async () => {
+      const tinyBridge = new RuntimeStabilityHyperMemoryBridge(tiny);
+      tinyBridge.appendOutcome({
+        timestamp: 1,
+        layer: 'PROCESS',
+        event_type: 'START',
+        source: 'lifecycle'
+      });
+      for (let i = 0; i < 16; i++) {
+        tiny.append('noise', 'x'.repeat(700));
+      }
+      tinyBridge.appendOutcome({
+        timestamp: 2,
+        layer: 'PROCESS',
+        event_type: 'RESTART',
+        source: 'lifecycle'
+      });
+
+      const records = tiny.readRecords();
+      const envelope = JSON.parse(
+        records[records.length - 1].payload.toString('utf8')
+      );
+      expect(envelope.previous_payload_sha256).toBe(
+        'TOKEN_VAZIO_EVICTED_PREDECESSOR'
+      );
+      await tiny.stop();
+      fs.rmSync(storagePath + '-tiny', { recursive: true, force: true });
+    });
+  });
+
+  test('fails closed on schema, claim boundary and malformed source hash', () => {
+    expect(() => bridge.appendDump({
+      schema: 'rafaelia.android.runtime-stability/v1',
+      claim_allowed: false
+    })).toThrow(/unsupported/);
+
+    expect(() => bridge.appendDiff({
       schema: 'rafaelia.android.runtime-stability-diff/v2',
-      classification: 'INSUFFICIENT_OBSERVATION',
-      comparison_status: 'FAIL_CLOSED',
-      platform_identity_match: 'TOKEN_VAZIO',
-      module_surface_match: 'TOKEN_VAZIO',
-      recognition_match: 'TOKEN_VAZIO',
-      baseline_observation_gaps: ['stable_identity.java_identity'],
-      candidate_observation_gaps: ['runtime_state.modules.state']
-    });
+      claim_allowed: true
+    })).toThrow(/claim_allowed=false/);
 
-    const payload = JSON.parse(memory.readRecords(1)[0].payload.toString('utf8'));
-    expect(payload.payload.diff_schema).toBe(
-      'rafaelia.android.runtime-stability-diff/v2'
-    );
-    expect(payload.payload.comparison_status).toBe('FAIL_CLOSED');
-    expect(payload.payload.baseline_observation_gaps).toEqual([
-      'stable_identity.java_identity'
-    ]);
-    expect(payload.payload.candidate_observation_gaps).toEqual([
-      'runtime_state.modules.state'
-    ]);
-    expect(payload.claim_allowed).toBe(false);
+    expect(() => bridge.appendDump(dump(), {
+      sourceSha256: 'not-a-hash'
+    })).toThrow(/sourceSha256/);
   });
 
-  test('stores change paths but not before/after values from a diff', () => {
-    bridge.appendDiff({
-      schema: 'rafaelia.android.runtime-stability-diff/v1',
-      classification: 'MODULE_SURFACE_DRIFT',
-      observer_changes: [{ path: 'observer.frida_version' }],
-      module_surface_changes: [
-        { path: 'runtime_state.modules.modules[name,size]' }
-      ],
-      runtime_changes: [
-        { path: 'runtime_state.java_runtime.java_heap_total_bytes' }
-      ],
-      hint_changes: [{ path: 'platform_key' }]
-    });
-
-    const payload = JSON.parse(memory.readRecords(1)[0].payload.toString('utf8'));
-    expect(payload.payload.observer_change_paths).toEqual(['observer.frida_version']);
-    expect(payload.payload.hint_change_paths).toEqual(['platform_key']);
-    expect(payload.payload.module_surface_change_paths).toEqual([
-      'runtime_state.modules.modules[name,size]'
-    ]);
-    expect(payload.payload.runtime_change_paths).toEqual([
-      'runtime_state.java_runtime.java_heap_total_bytes'
-    ]);
-    expect(payload.payload.causality).toBe('NOT_INFERRED');
-  });
-
-  test('marks predecessor unknown after HyperMemory eviction instead of inventing GENESIS', () => {
-    bridge.appendDiff({
-      schema: 'rafaelia.android.runtime-stability-diff/v1',
-      classification: 'RUNTIME_DRIFT'
-    });
-
-    for (let i = 0; i < 24; i++) {
-      memory.append('noise', 'x'.repeat(900));
-    }
-
-    bridge.appendOutcome({
-      timestamp: 333,
-      layer: 'PROCESS',
-      event_type: 'RESTARTED',
-      source: 'lifecycle-receipt'
-    });
-
-    const payload = JSON.parse(memory.readRecords(1)[0].payload.toString('utf8'));
-    expect(payload.previous_payload_sha256).toBe(
-      'TOKEN_VAZIO_EVICTED_PREDECESSOR'
-    );
-  });
-
-  test('accepts historical v1 stability diffs during schema transition', () => {
-    expect(() =>
-      bridge.appendDiff({
-        schema: 'rafaelia.android.runtime-stability-diff/v1',
-        classification: 'NO_OBSERVED_DRIFT'
-      })
-    ).not.toThrow();
-  });
-
-  test('fails closed on unsupported schemas and malformed outcomes', () => {
-    expect(() => bridge.appendDump({ schema: 'unknown' })).toThrow(/unsupported/);
-    expect(() => bridge.appendDiff({ schema: 'unknown' })).toThrow(/unsupported/);
-    expect(() =>
-      bridge.appendOutcome({
-        timestamp: -1,
-        layer: 'UNKNOWN',
-        event_type: '',
-        source: ''
-      })
-    ).toThrow(/timestamp/);
+  test('rejects malformed outcome independently of dump schemas', () => {
+    expect(() => bridge.appendOutcome({
+      timestamp: -1,
+      layer: 'UNKNOWN',
+      event_type: '',
+      source: ''
+    })).toThrow(/timestamp/);
   });
 });
