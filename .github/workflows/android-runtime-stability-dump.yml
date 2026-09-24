@@ -1,0 +1,56 @@
+name: Android runtime stability dump
+
+on:
+  pull_request:
+    paths:
+      - 'agents/android-runtime-stability-dump.js'
+      - 'profiles/android-runtime-stability-dump.v1.json'
+      - 'tools/runtime-stability-diff.py'
+      - 'docs/android-runtime-stability-dump.md'
+      - '.github/scripts/rafaelia/android-runtime-stability-dump-ci.sh'
+      - '.github/workflows/android-runtime-stability-dump.yml'
+  push:
+    branches:
+      - main
+    paths:
+      - 'agents/android-runtime-stability-dump.js'
+      - 'profiles/android-runtime-stability-dump.v1.json'
+      - 'tools/runtime-stability-diff.py'
+      - 'docs/android-runtime-stability-dump.md'
+      - '.github/scripts/rafaelia/android-runtime-stability-dump-ci.sh'
+      - '.github/workflows/android-runtime-stability-dump.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: android-runtime-stability-dump-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  structural-gate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Check out exact revision
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+
+      - name: Validate runtime stability dump
+        run: bash .github/scripts/rafaelia/android-runtime-stability-dump-ci.sh
+
+      - name: Upload evidence
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: android-runtime-stability-dump-${{ github.run_id }}
+          path: evidence/android-runtime-stability-dump/
+          if-no-files-found: error
+          retention-days: 14
