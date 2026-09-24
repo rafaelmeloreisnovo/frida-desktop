@@ -1,0 +1,70 @@
+{
+  "schema": "rafaelia.runtime-stability.methodology/v1",
+  "purpose": "Make runtime stability analysis falsifiable, repeatable, multiscale and fail-closed.",
+  "claim_allowed": false,
+  "evidence_ladder": [
+    {
+      "level": "OBSERVED",
+      "meaning": "A directly measured value or structural delta exists."
+    },
+    {
+      "level": "REPEATED",
+      "meaning": "The observation recurs across at least three independent captures and an explicit falsifier has been attempted."
+    },
+    {
+      "level": "ASSOCIATED",
+      "meaning": "Repeated observation co-varies with an outcome and at least two independent source types contribute evidence; causality remains forbidden."
+    },
+    {
+      "level": "CAUSAL_CANDIDATE",
+      "meaning": "Association also has temporal precedence, explicit falsifier testing and alternative-explanation review."
+    },
+    {
+      "level": "CAUSAL_SUPPORTED",
+      "meaning": "Causal candidate additionally survives controlled intervention or reversal/reproduction."
+    }
+  ],
+  "baseline": {
+    "minimum_independent_snapshots": 3,
+    "identity_invariant_required": true,
+    "required_observation_completeness": 1.0,
+    "numeric_center": "median",
+    "numeric_dispersion": "median_absolute_deviation",
+    "robust_sigma_scale": 1.4826,
+    "outlier_threshold": 6.0,
+    "module_model": "empirical_prevalence",
+    "zero_mad_rule": "candidate outside observed min/max is deviation, not causality"
+  },
+  "observation_quality": {
+    "dimensions": [
+      "schema validity",
+      "required field completeness",
+      "stable identity consistency",
+      "source provenance",
+      "clock semantics",
+      "observer/instrumentation state"
+    ],
+    "rule": "low-quality or incomparable observations must become TOKEN_VAZIO rather than negative evidence"
+  },
+  "multiscale_rule": "Evidence from one scale cannot promote another scale without an explicit bridge.",
+  "alternative_explanations": [
+    "lazy module loading",
+    "ASLR movement",
+    "normal thread scheduling",
+    "GC/JIT tier transitions",
+    "thermal/power state",
+    "LMKD or memory pressure",
+    "SELinux denial",
+    "process restart/generation change",
+    "instrumentation observer effect"
+  ],
+  "falsifiability_invariants": [
+    "drift != instability",
+    "association != causation",
+    "absence != zero",
+    "TOKEN_VAZIO != FAIL",
+    "hosted evidence != physical-device evidence",
+    "same app identity != same process generation",
+    "compact fingerprint != authoritative structure"
+  ]
+}
