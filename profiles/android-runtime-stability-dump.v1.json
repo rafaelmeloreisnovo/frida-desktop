@@ -50,6 +50,7 @@
       "platform_key",
       "module_surface_key"
     ],
+    "fingerprint_note": "FNV-1a 32-bit values are compact hints only; full structural fields remain authoritative",
     "excludes": [
       "ASLR module bases",
       "pid",
@@ -72,7 +73,7 @@
       "credentials"
     ],
     "module_paths": "not collected",
-    "process_name": "non-reversible short tag only"
+    "process_name": "not collected"
   },
   "invariants": [
     "platform identity drift, module-surface drift and volatile runtime drift are reported separately",
