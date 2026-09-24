@@ -338,6 +338,52 @@ cat > "$BUILD_DIR/causal-pass-packet.json" <<'JSON'
 }
 JSON
 
+cat > "$BUILD_DIR/contradiction-packet.json" <<'JSON'
+{
+  "schema": "rafaelia.runtime-stability.falsifiability-packet/v1",
+  "hypothesis_id": "H-CONTRADICTED",
+  "hypothesis": "a structurally complete causal hypothesis survives contradictory evidence",
+  "requested_level": "CAUSAL_SUPPORTED",
+  "study_mode": "CONFIRMATORY",
+  "hypothesis_registered_before_test": true,
+  "falsifiers": ["contradictory independent evidence must block promotion"],
+  "observations": [{"id":1},{"id":2},{"id":3}],
+  "evidence": [
+    {"source_type":"frida_runtime_dump","independence_group":"frida-agent","ref":"dump://a"},
+    {"source_type":"tombstone","independence_group":"android-tombstoned","ref":"tombstone://a"}
+  ],
+  "falsifier_attempted": true,
+  "temporal_precedence": true,
+  "intervention_or_reversal": true,
+  "alternative_explanations_checked": true,
+  "contradictory_evidence": [
+    {"ref":"control://negative","resolved":false}
+  ]
+}
+JSON
+
+cat > "$BUILD_DIR/exploratory-causal-packet.json" <<'JSON'
+{
+  "schema": "rafaelia.runtime-stability.falsifiability-packet/v1",
+  "hypothesis_id": "H-EXPLORATORY-CAUSAL",
+  "hypothesis": "a causal-support-ready exploratory packet remains non-publishable",
+  "requested_level": "CAUSAL_SUPPORTED",
+  "study_mode": "EXPLORATORY",
+  "hypothesis_registered_before_test": false,
+  "falsifiers": ["remove intervention and require outcome to disappear"],
+  "observations": [{"id":1},{"id":2},{"id":3}],
+  "evidence": [
+    {"source_type":"frida_runtime_dump","independence_group":"frida-agent","ref":"dump://a"},
+    {"source_type":"tombstone","independence_group":"android-tombstoned","ref":"tombstone://a"}
+  ],
+  "falsifier_attempted": true,
+  "temporal_precedence": true,
+  "intervention_or_reversal": true,
+  "alternative_explanations_checked": true,
+  "contradictory_evidence": []
+}
+JSON
+
 cat > "$BUILD_DIR/duplicate-observation-packet.json" <<'JSON'
 {
   "schema": "rafaelia.runtime-stability.falsifiability-packet/v1",
@@ -391,6 +437,14 @@ JSON
 
 python3 tools/runtime-stability-evidence-gate.py   "$BUILD_DIR/repeated-packet.json" --out "$BUILD_DIR/repeated-result.json"
 python3 tools/runtime-stability-evidence-gate.py   "$BUILD_DIR/causal-pass-packet.json" --out "$BUILD_DIR/causal-pass-result.json"
+
+python3 tools/runtime-stability-evidence-gate.py   "$BUILD_DIR/exploratory-causal-packet.json" --out "$BUILD_DIR/exploratory-causal-result.json"
+
+set +e
+python3 tools/runtime-stability-evidence-gate.py   "$BUILD_DIR/contradiction-packet.json" --out "$BUILD_DIR/contradiction-result.json"
+CONTRADICTION_RC=$?
+set -e
+[[ "$CONTRADICTION_RC" -eq 2 ]] || rafaelia_die "unresolved contradictory evidence was accepted"
 
 set +e
 python3 tools/runtime-stability-evidence-gate.py   "$BUILD_DIR/duplicate-observation-packet.json" --out "$BUILD_DIR/duplicate-observation-result.json"
@@ -450,6 +504,15 @@ assert causal_pass['confirmatory_ready'] is False
 assert causal_pass['publication_grade_causal_support'] is False
 assert causal_pass['scientific_claim_review_required'] is True
 assert causal_pass['claim_allowed'] is False
+exploratory = json.loads((root/'exploratory-causal-result.json').read_text())
+assert exploratory['gate'] == 'PASS'
+assert exploratory['causal_support_structure_complete'] is True
+assert exploratory['confirmatory_structure_ready'] is False
+assert exploratory['publication_grade_causal_support'] is False
+assert exploratory['claim_allowed'] is False
+contradiction = json.loads((root/'contradiction-result.json').read_text())
+assert contradiction['gate'] == 'FAIL'
+assert contradiction['claim_allowed'] is False
 duplicate_observation = json.loads((root/'duplicate-observation-result.json').read_text())
 assert duplicate_observation['gate'] == 'FAIL'
 false_independence = json.loads((root/'false-independence-result.json').read_text())
@@ -489,6 +552,8 @@ receipt = {
     'confirmatory_preregistration_gate': 'PASS',
     'methodology_gate_never_self_authorizes_scientific_claim': 'PASS',
     'methods_matrix_contract': 'PASS',
+    'unresolved_contradiction_fail_closed': 'PASS',
+    'exploratory_causal_structure_not_publication_grade': 'PASS',
     'unsupported_causal_claim_fail_closed': 'PASS',
     'duplicate_baseline_rejected': 'PASS',
     'distinct_controller_run_provenance_required': 'PASS',
