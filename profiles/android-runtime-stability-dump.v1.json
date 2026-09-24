@@ -1,0 +1,95 @@
+{
+  "schema": "rafaelia.android.runtime-stability-dump/profile-v1",
+  "profile": "android-runtime-stability-dump",
+  "intent": "Capture a privacy-safe structural runtime fingerprint that can be compared across authorized Frida sessions for recognition, drift and stability analysis.",
+  "claim_allowed": false,
+  "capture_mode": {
+    "on_agent_load": true,
+    "rpc_snapshot": true,
+    "periodic_polling": false,
+    "active_mutation": false,
+    "append_only_file_controller": true
+  },
+  "semantic_layers": {
+    "stable_identity": [
+      "architecture",
+      "pointer size",
+      "page size",
+      "platform",
+      "Android/ART build identity when Java is available"
+    ],
+    "recognition_surface": [
+      "loaded module name+size set"
+    ],
+    "volatile_observations": [
+      "pid/tid",
+      "module base addresses",
+      "thread count/state summary",
+      "memory range count/size summary",
+      "managed/native heap counters",
+      "device elapsed time"
+    ],
+    "token_vazio": [
+      "kernel LMKD cause without independent evidence",
+      "SELinux causal attribution without denial evidence",
+      "physical memory pressure without a measured source",
+      "crash causality without reproduction/corroboration"
+    ]
+  },
+  "recognition": {
+    "platform_key": [
+      "Process.arch",
+      "Process.pointerSize",
+      "Process.pageSize",
+      "Process.platform",
+      "Java build/runtime identity"
+    ],
+    "module_surface_key": [
+      "loaded module name+size set"
+    ],
+    "combined_recognition_key": [
+      "platform_key",
+      "module_surface_key"
+    ],
+    "fingerprint_note": "FNV-1a 32-bit values are compact hints only; full structural fields remain authoritative",
+    "excludes": [
+      "ASLR module bases",
+      "pid",
+      "tid",
+      "heap counters",
+      "thread counts"
+    ]
+  },
+  "privacy": {
+    "forbidden": [
+      "device serial",
+      "Android ID",
+      "SIM identifiers",
+      "subscriber identifiers",
+      "clipboard",
+      "UI text",
+      "application payload bytes",
+      "file contents",
+      "network payload",
+      "credentials"
+    ],
+    "module_paths": "not collected",
+    "process_name": "not collected"
+  },
+  "invariants": [
+    "platform identity drift, module-surface drift and volatile runtime drift are reported separately",
+    "module-surface drift may reflect legitimate lazy loading and is not automatically identity drift",
+    "runtime drift is not automatically classified as instability",
+    "absence of a source remains TOKEN_VAZIO",
+    "a dump is evidence, not a causal claim",
+    "the agent never repairs, resumes, patches or mutates the target"
+  ],
+  "file_contract": {
+    "default_directory": "~/.local/state/rafaelia/frida-runtime-stability",
+    "append_only": true,
+    "file_mode": "0600",
+    "fsync": true,
+    "sha256_sidecar": true,
+    "target_selector_persisted": false
+  }
+}

@@ -1,0 +1,308 @@
+'use strict';
+
+/*
+ * Privacy-safe Android runtime stability / recognition dump.
+ *
+ * Goals:
+ * - capture enough structural state to compare runs;
+ * - separate platform identity, module surface and volatile runtime state;
+ * - never read application payload/content;
+ * - never collect device/SIM/subscriber identifiers.
+ */
+
+const SCHEMA = 'rafaelia.android.runtime-stability/v1';
+const CHANNEL = 'rafaelia.android.runtime.stability';
+let captureSequence = 0;
+
+function safe(fn, fallback) {
+  try {
+    return fn();
+  } catch (_) {
+    return fallback;
+  }
+}
+
+function pointerText(value) {
+  if (value === null || value === undefined)
+    return null;
+  return safe(function () { return value.toString(); }, null);
+}
+
+function fnv1a32Text(text) {
+  let hash = 0x811c9dc5;
+  const material = String(text);
+  for (let i = 0; i !== material.length; i++) {
+    hash ^= material.charCodeAt(i) & 0xff;
+    hash = Math.imul(hash, 0x01000193) >>> 0;
+  }
+  return ('00000000' + hash.toString(16)).slice(-8);
+}
+
+function longNumber(value) {
+  if (value === null || value === undefined)
+    return null;
+  return safe(function () {
+    const text = value.toString();
+    const parsed = Number(text);
+    return Number.isFinite(parsed) ? parsed : text;
+  }, null);
+}
+
+function collectModules() {
+  const modules = safe(function () { return Process.enumerateModules(); }, []);
+  const rows = modules.map(function (module) {
+    return {
+      name: module.name,
+      base: pointerText(module.base),
+      size: Number(module.size)
+    };
+  });
+
+  rows.sort(function (a, b) {
+    if (a.name < b.name) return -1;
+    if (a.name > b.name) return 1;
+    return a.size - b.size;
+  });
+
+  const stableMaterial = rows.map(function (row) {
+    return row.name + ':' + row.size;
+  }).join('|');
+
+  return {
+    count: rows.length,
+    stable_set_fingerprint: fnv1a32Text(stableMaterial),
+    modules: rows
+  };
+}
+
+function collectThreads() {
+  const threads = safe(function () { return Process.enumerateThreads(); }, []);
+  const byState = Object.create(null);
+
+  threads.forEach(function (thread) {
+    const state = thread.state || 'unknown';
+    byState[state] = (byState[state] || 0) + 1;
+  });
+
+  return {
+    count: threads.length,
+    states: byState
+  };
+}
+
+function collectRanges() {
+  const protections = ['r--', 'rw-', 'r-x', 'rwx'];
+  const summary = Object.create(null);
+
+  protections.forEach(function (protection) {
+    const ranges = safe(function () {
+      return Process.enumerateRanges(protection);
+    }, []);
+
+    let bytes = 0;
+    ranges.forEach(function (range) {
+      bytes += Number(range.size) || 0;
+    });
+
+    summary[protection] = {
+      count: ranges.length,
+      bytes: bytes
+    };
+  });
+
+  return summary;
+}
+
+function collectJavaRuntime() {
+  if (!Java.available) {
+    return Promise.resolve({
+      available: false,
+      token_vazio: ['JAVA_RUNTIME_UNAVAILABLE']
+    });
+  }
+
+  return new Promise(function (resolve) {
+    Java.perform(function () {
+      const out = {
+        available: true,
+        token_vazio: []
+      };
+
+      try {
+        const Build = Java.use('android.os.Build');
+        const Version = Java.use('android.os.Build$VERSION');
+        const Runtime = Java.use('java.lang.Runtime');
+        const Debug = Java.use('android.os.Debug');
+        const SystemClock = Java.use('android.os.SystemClock');
+        const System = Java.use('java.lang.System');
+        const runtime = Runtime.getRuntime();
+
+        const abis = [];
+        try {
+          const supported = Build.SUPPORTED_ABIS.value;
+          for (let i = 0; i !== supported.length; i++)
+            abis.push(supported[i].toString());
+        } catch (_) {
+          out.token_vazio.push('SUPPORTED_ABIS_UNAVAILABLE');
+        }
+
+        out.identity = {
+          sdk: Number(Version.SDK_INT.value),
+          release: String(Version.RELEASE.value),
+          security_patch: String(Version.SECURITY_PATCH.value || ''),
+          model: String(Build.MODEL.value || ''),
+          product: String(Build.PRODUCT.value || ''),
+          hardware: String(Build.HARDWARE.value || ''),
+          supported_abis: abis,
+          build_fingerprint: String(Build.FINGERPRINT.value || ''),
+          java_vm_name: safe(function () {
+            const value = System.getProperty('java.vm.name');
+            return value === null ? null : value.toString();
+          }, null),
+          java_vm_version: safe(function () {
+            const value = System.getProperty('java.vm.version');
+            return value === null ? null : value.toString();
+          }, null)
+        };
+
+        out.runtime = {
+          device_elapsed_ms: longNumber(SystemClock.elapsedRealtime()),
+          java_heap_total_bytes: longNumber(runtime.totalMemory()),
+          java_heap_free_bytes: longNumber(runtime.freeMemory()),
+          java_heap_max_bytes: longNumber(runtime.maxMemory()),
+          native_heap_allocated_bytes: longNumber(Debug.getNativeHeapAllocatedSize())
+        };
+      } catch (error) {
+        out.token_vazio.push('JAVA_RUNTIME_PARTIAL');
+        out.error_class = error === null || error === undefined ?
+            'unknown' : error.constructor.name;
+      }
+
+      resolve(out);
+    });
+  });
+}
+
+async function collectSnapshot(reason) {
+  const sequence = ++captureSequence;
+  const modules = collectModules();
+  const threads = collectThreads();
+  const ranges = collectRanges();
+  const java = await collectJavaRuntime();
+
+  const stableIdentity = {
+    arch: Process.arch,
+    pointer_size: Process.pointerSize,
+    page_size: Process.pageSize,
+    platform: Process.platform,
+    java_identity: java.identity || 'TOKEN_VAZIO'
+  };
+
+  const platformKey = fnv1a32Text(JSON.stringify(stableIdentity));
+  const moduleSurfaceKey = modules.stable_set_fingerprint;
+  const recognitionKey = fnv1a32Text(
+      platformKey + '|' + moduleSurfaceKey);
+
+  return {
+    schema: SCHEMA,
+    capture_seq: sequence,
+    reason: reason || 'MANUAL',
+    captured_epoch_ms: Date.now(),
+    claim_allowed: false,
+
+    semantics: {
+      stable_identity: [
+        'arch',
+        'pointer_size',
+        'page_size',
+        'platform',
+        'java_identity'
+      ],
+      recognition_surface: [
+        'loaded_module_name_size_set'
+      ],
+      volatile_observations: [
+        'pid',
+        'current_tid',
+        'module_base',
+        'thread_count',
+        'thread_states',
+        'memory_range_summary',
+        'heap_counters',
+        'device_elapsed_ms'
+      ],
+      invariant:
+          'platform drift, module-surface drift and volatile runtime drift are distinct evidence classes'
+    },
+
+    stable_identity: stableIdentity,
+    platform_key: platformKey,
+    module_surface_key: moduleSurfaceKey,
+    recognition_key: recognitionKey,
+
+    runtime_state: {
+      pid: Process.id,
+      current_tid: Process.getCurrentThreadId(),
+      debugger_attached: safe(function () {
+        return Process.isDebuggerAttached();
+      }, 'TOKEN_VAZIO'),
+      code_signing_policy: safe(function () {
+        return Process.codeSigningPolicy;
+      }, 'TOKEN_VAZIO'),
+      modules: modules,
+      threads: threads,
+      memory_ranges: ranges,
+      java_runtime: java.runtime || 'TOKEN_VAZIO'
+    },
+
+    gaps: {
+      java: java.token_vazio || [],
+      kernel_lmk_reason: 'TOKEN_VAZIO',
+      selinux_denial_causality: 'TOKEN_VAZIO',
+      physical_memory_pressure: 'TOKEN_VAZIO',
+      crash_causality: 'TOKEN_VAZIO'
+    },
+
+    privacy: {
+      device_serial: 'FORBIDDEN',
+      android_id: 'FORBIDDEN',
+      sim_identifiers: 'FORBIDDEN',
+      subscriber_identifiers: 'FORBIDDEN',
+      payload_bytes: 'FORBIDDEN',
+      ui_text: 'FORBIDDEN',
+      clipboard: 'FORBIDDEN',
+      file_contents: 'FORBIDDEN'
+    }
+  };
+}
+
+async function emitSnapshot(reason) {
+  const dump = await collectSnapshot(reason);
+  send({
+    schema: SCHEMA,
+    channel: CHANNEL,
+    kind: 'RUNTIME_STABILITY_DUMP',
+    dump: dump
+  });
+  return dump;
+}
+
+rpc.exports = {
+  snapshot: function (reason) {
+    return emitSnapshot(reason || 'RPC');
+  }
+};
+
+setImmediate(function () {
+  emitSnapshot('AGENT_LOAD').catch(function (error) {
+    send({
+      schema: SCHEMA,
+      channel: CHANNEL,
+      kind: 'TOKEN_VAZIO',
+      gap: 'INITIAL_RUNTIME_DUMP_FAILED',
+      error_class: error === null || error === undefined ?
+          'unknown' : error.constructor.name,
+      claim_allowed: false
+    });
+  });
+});
