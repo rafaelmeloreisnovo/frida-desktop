@@ -115,6 +115,7 @@ cat > "$BUILD_DIR/baseline.json" <<'JSON'
     "threads": "PASS",
     "memory_ranges": "PASS",
     "java_runtime": "PASS",
+    "system_properties": "PASS",
     "android_clock_start": "PASS",
     "android_clock_end": "PASS"
   },
@@ -185,6 +186,7 @@ put('platform-contract.json', lambda d: d['stable_identity']['platform_contract'
 put('service.json', lambda d: d['runtime_state']['android_services'].__setitem__('init.svc.lmkd', 'stopped'))
 put('instrumentation.json', lambda d: d['instrumentation_identity'].__setitem__('frida_version', '17.1.0'))
 put('visibility.json', lambda d: d['visibility'].__setitem__('memory_ranges', 'TOKEN_VAZIO'))
+put('property-visibility.json', lambda d: d['visibility'].__setitem__('system_properties', 'TOKEN_VAZIO'))
 put('aslr.json', lambda d: d['runtime_state']['modules']['modules'][0].__setitem__('base', '0x9000'))
 put('clock.json', lambda d: d['timing'].update({'wall_start_epoch_ms': 9000, 'wall_end_epoch_ms': 9025, 'wall_duration_ms': 25, 'monotonic_duration_ms': 24}))
 put('pid.json', lambda d: d['runtime_state'].update({'pid': 999, 'current_tid': 1000}))
@@ -208,6 +210,7 @@ run_diff platform-contract.json platform-contract.out.json
 run_diff service.json service.out.json
 run_diff instrumentation.json instrumentation.out.json
 run_diff visibility.json visibility.out.json
+run_diff property-visibility.json property-visibility.out.json
 run_diff aslr.json aslr.out.json
 run_diff clock.json clock.out.json
 run_diff pid.json pid.out.json
@@ -235,6 +238,7 @@ assert c('platform-contract.out.json')['classification'] == 'IDENTITY_DRIFT'
 assert c('service.out.json')['classification'] == 'RUNTIME_DRIFT'
 assert c('instrumentation.out.json')['classification'] == 'INSTRUMENTATION_DRIFT'
 assert c('visibility.out.json')['classification'] == 'VISIBILITY_DRIFT'
+assert c('property-visibility.out.json')['classification'] == 'VISIBILITY_DRIFT'
 assert c('aslr.out.json')['classification'] == 'NO_OBSERVED_DRIFT'
 assert c('clock.out.json')['classification'] == 'NO_OBSERVED_DRIFT'
 assert c('pid.out.json')['classification'] == 'NO_OBSERVED_DRIFT'
