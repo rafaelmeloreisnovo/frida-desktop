@@ -52,8 +52,11 @@ REQUIRED_PATHS = [
     "capture_provenance.agent_sha256",
     "capture_provenance.controller_sha256",
     "capture_provenance.frida_python_version",
+    "runtime_state.modules.state",
     "runtime_state.modules.modules",
+    "runtime_state.threads.state",
     "runtime_state.threads.count",
+    "runtime_state.memory_ranges._meta.state",
     "runtime_state.memory_ranges",
 ]
 
@@ -190,6 +193,8 @@ def render_incomparable(
         "reason": reason,
         "baseline_missing_required": baseline_missing,
         "candidate_missing_required": candidate_missing,
+        "baseline_observation_gaps": baseline_missing,
+        "candidate_observation_gaps": candidate_missing,
         "platform_identity_match": TOKEN_VAZIO,
         "observer_match": TOKEN_VAZIO,
         "module_surface_match": TOKEN_VAZIO,
@@ -224,7 +229,7 @@ def compare(baseline: dict[str, Any], candidate: dict[str, Any]) -> dict[str, An
     candidate_missing = missing_required(candidate)
     if baseline_missing or candidate_missing:
         return render_incomparable(
-            "INSUFFICIENT_EVIDENCE",
+            "INSUFFICIENT_OBSERVATION",
             baseline,
             candidate,
             baseline_missing=baseline_missing,
