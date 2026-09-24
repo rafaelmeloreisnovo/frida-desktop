@@ -59,6 +59,23 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
+def resolve_device(args: argparse.Namespace):
+    if args.usb:
+        return frida.get_usb_device(timeout=int(args.timeout_seconds * 1000))
+    manager = frida.get_device_manager()
+    return manager.add_remote_device(args.endpoint)
+
+
+def resolve_pid(device: Any, args: argparse.Namespace) -> int:
+    if args.pid is not None:
+        return args.pid
+
+    for process in device.enumerate_processes():
+        if process.name == args.process:
+            return process.pid
+    raise RuntimeError("authorized target process was not found")
+
+
 def main() -> int:
     args = parse_args()
     source = args.agent.read_text(encoding="utf-8")
