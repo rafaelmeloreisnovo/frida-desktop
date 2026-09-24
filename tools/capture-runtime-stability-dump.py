@@ -56,6 +56,48 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
+def canonical_sha256(value: Any) -> str:
+    encoded = json.dumps(
+        value,
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
+        allow_nan=False,
+    ).encode("utf-8")
+    return hashlib.sha256(encoded).hexdigest()
+
+
+def strong_fingerprints(dump: dict[str, Any]) -> dict[str, str]:
+    identity = dump.get("stable_identity", "TOKEN_VAZIO")
+    rows = (
+        dump.get("runtime_state", {})
+        .get("modules", {})
+        .get("modules", [])
+    )
+    module_surface = []
+    if isinstance(rows, list):
+        for row in rows:
+            if not isinstance(row, dict):
+                continue
+            name = row.get("name")
+            size = row.get("size")
+            if isinstance(name, str) and isinstance(size, int):
+                module_surface.append({"name": name, "size": size})
+    module_surface.sort(key=lambda row: (row["name"], row["size"]))
+
+    identity_sha = canonical_sha256(identity)
+    module_sha = canonical_sha256(module_surface)
+    recognition_sha = hashlib.sha256(
+        f"{identity_sha}|{module_sha}".encode("ascii")
+    ).hexdigest()
+    return {
+        "stable_identity_sha256": identity_sha,
+        "module_surface_sha256": module_sha,
+        "recognition_sha256": recognition_sha,
+        "role": "DERIVED_SHORTCUT_STRUCTURE_REMAINS_AUTHORITATIVE",
+    }
+
+
 def resolve_device(args: argparse.Namespace):
     if args.usb:
         return frida.get_usb_device(timeout=int(args.timeout_seconds * 1000))
@@ -236,6 +278,7 @@ def main() -> int:
         if not isinstance(dump, dict):
             raise RuntimeError("agent returned no stability dump")
 
+        dump["strong_fingerprints"] = strong_fingerprints(dump)
         dump["capture_provenance"] = {
             "agent_sha256": agent_sha256,
             "controller_sha256": controller_sha256,
