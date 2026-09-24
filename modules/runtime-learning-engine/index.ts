@@ -512,3 +512,6 @@ export { RuntimeSafetyMesh } from './runtime-safety-mesh';
 export { AlertRulesEngine } from './alert-rules-3-2';
 export { HyperMemoryRuntime } from './hypermemory-runtime';
 export type { HyperMemoryRuntimeOptions, HyperMemoryStats, HyperMemoryRecordView } from './hypermemory-runtime';
+
+export { RuntimeStabilityHyperMemoryBridge } from './runtime-stability-hypermemory-bridge';
+export type { RuntimeStabilityBridgeOptions } from './runtime-stability-hypermemory-bridge';
