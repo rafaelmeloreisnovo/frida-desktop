@@ -1,0 +1,77 @@
+{
+  "schema": "rafaelia.frida.hypermemory.platform-contract/v2",
+  "captured_on": "2026-09-24",
+  "source_origin": "USER_SUPPLIED_GETPROP_FULL_DUMP",
+  "execution_by_assistant": false,
+  "privacy": {
+    "device_serial_persisted": false,
+    "sim_identifiers_persisted": false,
+    "subscriber_identifiers_persisted": false,
+    "carrier_sensitive_fields_persisted": false
+  },
+  "platform": {
+    "android_release": "10",
+    "sdk": 29,
+    "first_api_level": 29,
+    "build_type": "user",
+    "debuggable": false,
+    "secure": true,
+    "zygote": "zygote32",
+    "abi_list_32": ["armeabi-v7a", "armeabi"],
+    "abi_list_64": [],
+    "dalvik_arm_variant": "cortex-a53",
+    "dalvik_arm_features": "default",
+    "board": "malta",
+    "boot_hardware": "mt6762",
+    "board_platform": "mt6765",
+    "vendor_mediatek_platform": "MT6765",
+    "vndk_version": 29
+  },
+  "memory_runtime": {
+    "ashmemd": "running",
+    "hidl_memory": "running",
+    "sys_use_memfd": false,
+    "lmkd": "running",
+    "per_app_memcg": false,
+    "lmk_downgrade_pressure": 60,
+    "heap_growth_limit": "256m",
+    "heap_size": "512m",
+    "dex2oat_xmx": "512m",
+    "dalvik_jit": true,
+    "dalvik_jit_profiles": true,
+    "isolated_storage": true
+  },
+  "boot_security": {
+    "bootloader_locked": true,
+    "verified_boot_state": "green",
+    "verity_mode": "enforcing",
+    "secure_fuse": true,
+    "adb_secure": true,
+    "ro_debuggable": false,
+    "avb_version": "1.1",
+    "dynamic_partitions": true,
+    "ab_update": true,
+    "active_slot": "b",
+    "crypto_state": "encrypted",
+    "crypto_type": "file"
+  },
+  "hypervisor_runtime_decisions": {
+    "shared_memory_api": "ASharedMemory/android.os.SharedMemory",
+    "shared_memory_expected_backend": "ASHMEM_PATH_ON_THIS_FIRMWARE",
+    "memfd_assumption": "FORBIDDEN",
+    "64bit_runtime_assumption": "FORBIDDEN",
+    "direct_dev_ashmem_app_access": "DO_NOT_USE",
+    "cross_process_fd_handoff": "REQUIRED_NEXT_GATE",
+    "anti_kill_claim": false,
+    "force_stop_bypass": "NOT_CLAIMED"
+  },
+  "observations": {
+    "mt6762_mt6765_split": "OBSERVED_ALIAS_OR_PLATFORM_FAMILY_SPLIT_NOT_PROVEN_BUG",
+    "neon_runtime_access": "TOKEN_VAZIO_REQUIRES_HWCAP_OR_EXECUTION_RECEIPT",
+    "psi_lmkd_mode": "TOKEN_VAZIO_PROPERTY_NOT_PRESENT_IN_DUMP",
+    "physical_sharedmemory_handoff": "TOKEN_VAZIO_NOT_EXECUTED",
+    "physical_process_restart_survival": "TOKEN_VAZIO_NOT_EXECUTED",
+    "physical_frida_reattach": "TOKEN_VAZIO_NOT_EXECUTED"
+  },
+  "claim_allowed": false
+}
