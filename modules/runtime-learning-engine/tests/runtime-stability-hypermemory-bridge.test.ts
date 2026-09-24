@@ -119,6 +119,29 @@ describe('RuntimeStabilityHyperMemoryBridge', () => {
     expect(payload.payload.causality).toBe('NOT_INFERRED');
   });
 
+  test('marks predecessor unknown after HyperMemory eviction instead of inventing GENESIS', () => {
+    bridge.appendDiff({
+      schema: 'rafaelia.android.runtime-stability-diff/v1',
+      classification: 'RUNTIME_DRIFT'
+    });
+
+    for (let i = 0; i < 24; i++) {
+      memory.append('noise', 'x'.repeat(900));
+    }
+
+    bridge.appendOutcome({
+      timestamp: 333,
+      layer: 'PROCESS',
+      event_type: 'RESTARTED',
+      source: 'lifecycle-receipt'
+    });
+
+    const payload = JSON.parse(memory.readRecords(1)[0].payload.toString('utf8'));
+    expect(payload.previous_payload_sha256).toBe(
+      'TOKEN_VAZIO_EVICTED_PREDECESSOR'
+    );
+  });
+
   test('fails closed on unsupported schemas and malformed outcomes', () => {
     expect(() => bridge.appendDump({ schema: 'unknown' })).toThrow(/unsupported/);
     expect(() => bridge.appendDiff({ schema: 'unknown' })).toThrow(/unsupported/);
