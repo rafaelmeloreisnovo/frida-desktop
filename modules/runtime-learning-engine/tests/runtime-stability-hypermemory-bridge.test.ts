@@ -97,6 +97,32 @@ describe('RuntimeStabilityHyperMemoryBridge', () => {
     expect(secondPayload.payload.causal_role).toBe('OBSERVATION_ONLY');
   });
 
+  test('accepts fail-closed diff v2 and preserves only gap keys', () => {
+    bridge.appendDiff({
+      schema: 'rafaelia.android.runtime-stability-diff/v2',
+      classification: 'INSUFFICIENT_OBSERVATION',
+      comparison_status: 'FAIL_CLOSED',
+      platform_identity_match: 'TOKEN_VAZIO',
+      module_surface_match: 'TOKEN_VAZIO',
+      recognition_match: 'TOKEN_VAZIO',
+      baseline_observation_gaps: ['stable_identity.java_identity'],
+      candidate_observation_gaps: ['runtime_state.modules.state']
+    });
+
+    const payload = JSON.parse(memory.readRecords(1)[0].payload.toString('utf8'));
+    expect(payload.payload.diff_schema).toBe(
+      'rafaelia.android.runtime-stability-diff/v2'
+    );
+    expect(payload.payload.comparison_status).toBe('FAIL_CLOSED');
+    expect(payload.payload.baseline_observation_gaps).toEqual([
+      'stable_identity.java_identity'
+    ]);
+    expect(payload.payload.candidate_observation_gaps).toEqual([
+      'runtime_state.modules.state'
+    ]);
+    expect(payload.claim_allowed).toBe(false);
+  });
+
   test('stores change paths but not before/after values from a diff', () => {
     bridge.appendDiff({
       schema: 'rafaelia.android.runtime-stability-diff/v1',
