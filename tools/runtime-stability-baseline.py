@@ -181,7 +181,7 @@ def build_baseline(paths: list[Path]) -> dict[str, Any]:
     identity_consistent = all(item == identity_reference for item in identities[1:])
 
     platform_keys = [get_path(d, "platform_key") for d in dumps]
-    platform_key_consistent = all(key == platform_keys[0] for key in platform_keys[1:])
+    platform_key_hint_consistent = all(key == platform_keys[0] for key in platform_keys[1:])
 
     surfaces = [module_surface(d) for d in dumps]
     union = set().union(*surfaces)
@@ -212,7 +212,6 @@ def build_baseline(paths: list[Path]) -> dict[str, Any]:
 
     valid = (
         identity_consistent
-        and platform_key_consistent
         and min_quality == 1.0
     )
 
@@ -225,9 +224,10 @@ def build_baseline(paths: list[Path]) -> dict[str, Any]:
         "baseline_valid": valid,
         "baseline_gate": "PASS" if valid else "FAIL",
         "stable_identity_consistent": identity_consistent,
-        "platform_key_consistent": platform_key_consistent,
+        "platform_key_hint_consistent": platform_key_hint_consistent,
         "stable_identity": identity_reference if identity_consistent else TOKEN_VAZIO,
-        "platform_key": platform_keys[0] if platform_key_consistent else TOKEN_VAZIO,
+        "platform_key_hint": platform_keys[0] if platform_key_hint_consistent else TOKEN_VAZIO,
+        "compact_fingerprints_authoritative": False,
         "quality": {
             "minimum_completeness_ratio": min_quality,
             "snapshots": quality,
@@ -245,7 +245,7 @@ def build_baseline(paths: list[Path]) -> dict[str, Any]:
         },
         "falsifiers": [
             "stable identity differs across baseline snapshots",
-            "platform_key differs across baseline snapshots",
+            "compact platform hints may differ without invalidating the baseline; full stable identity is authoritative",
             "any required observation is missing",
             "fewer than 3 independent snapshots",
         ],
@@ -263,7 +263,7 @@ def assess_candidate(baseline: dict[str, Any], candidate: dict[str, Any]) -> dic
 
     candidate_quality = completeness(candidate)
     identity_match = stable_identity_projection(candidate) == baseline["stable_identity"]
-    platform_key_match = get_path(candidate, "platform_key") == baseline["platform_key"]
+    platform_key_hint_match = get_path(candidate, "platform_key") == baseline["platform_key_hint"]
 
     baseline_modules = baseline.get("module_prevalence", [])
     core = {
@@ -324,7 +324,7 @@ def assess_candidate(baseline: dict[str, Any], candidate: dict[str, Any]) -> dic
             "baseline": summary,
         })
 
-    if not identity_match or not platform_key_match:
+    if not identity_match:
         classification = "IDENTITY_DRIFT"
     elif missing_core or novel:
         classification = "MODULE_SURFACE_OUTSIDE_BASELINE"
@@ -339,7 +339,8 @@ def assess_candidate(baseline: dict[str, Any], candidate: dict[str, Any]) -> dic
         "schema": ASSESSMENT_SCHEMA,
         "classification": classification,
         "stable_identity_match": identity_match,
-        "platform_key_match": platform_key_match,
+        "platform_key_hint_match": platform_key_hint_match,
+        "compact_fingerprints_authoritative": False,
         "candidate_quality": candidate_quality,
         "modules": {
             "missing_core": [
