@@ -17,7 +17,6 @@ from pathlib import Path
 from typing import Any
 
 
-DUMP_SCHEMA = "rafaelia.android.runtime-stability/v1"
 CORE_OBSERVATION_PATHS = [
     "runtime_state.modules.state",
     "runtime_state.modules.modules",
@@ -49,6 +48,7 @@ REQUIRED_PATHS = [
     "observer.instrumentation_present",
     "observer.introspection_visibility",
     "observer.memory_range_semantics",
+    "consistency.module_surface_stable_during_capture",
     "capture_provenance.agent_sha256",
     "capture_provenance.controller_sha256",
     "capture_provenance.frida_python_version",
@@ -187,8 +187,6 @@ def render_incomparable(
     return {
         "schema": RESULT_SCHEMA,
         "classification": classification,
-        "baseline_observation_gaps": baseline_observation_gaps,
-        "candidate_observation_gaps": candidate_observation_gaps,
         "comparison_status": "FAIL_CLOSED",
         "reason": reason,
         "baseline_missing_required": baseline_missing,
