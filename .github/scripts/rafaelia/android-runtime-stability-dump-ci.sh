@@ -243,7 +243,7 @@ assert c('visibility.out.json')['classification'] == 'VISIBILITY_DRIFT'
 assert c('property-visibility.out.json')['classification'] == 'VISIBILITY_DRIFT'
 assert c('aslr.out.json')['classification'] == 'NO_OBSERVED_DRIFT'
 assert c('clock.out.json')['classification'] == 'NO_OBSERVED_DRIFT'
-assert c('pid.out.json')['classification'] == 'NO_OBSERVED_DRIFT'
+assert c('pid.out.json')['classification'] == 'PROCESS_INSTANCE_DRIFT'
 assert c('pid.out.json')['process_instance_changes']
 assert c('hints.out.json')['classification'] == 'NO_OBSERVED_DRIFT'
 assert c('hints.out.json')['compact_hint_changes']
