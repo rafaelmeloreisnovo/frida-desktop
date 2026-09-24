@@ -35,8 +35,10 @@ export interface RuntimeStabilityDiffLike {
   module_surface_match?: boolean;
   recognition_match?: boolean;
   identity_changes?: Array<{ path?: string }>;
+  observer_changes?: Array<{ path?: string }>;
   module_surface_changes?: Array<{ path?: string }>;
   runtime_changes?: Array<{ path?: string }>;
+  hint_changes?: Array<{ path?: string }>;
 }
 
 export interface RuntimeOutcomeEvent {
@@ -139,8 +141,10 @@ export class RuntimeStabilityHyperMemoryBridge {
       module_surface_match: diff.module_surface_match ?? 'TOKEN_VAZIO',
       recognition_match: diff.recognition_match ?? 'TOKEN_VAZIO',
       identity_change_paths: pathsOnly(diff.identity_changes),
+      observer_change_paths: pathsOnly(diff.observer_changes),
       module_surface_change_paths: pathsOnly(diff.module_surface_changes),
       runtime_change_paths: pathsOnly(diff.runtime_changes),
+      hint_change_paths: pathsOnly(diff.hint_changes),
       causality: 'NOT_INFERRED',
       stability_claim: 'NOT_PROMOTED'
     };
