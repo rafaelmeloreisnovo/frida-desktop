@@ -17,6 +17,22 @@ from pathlib import Path
 from typing import Any
 
 
+DUMP_SCHEMA = "rafaelia.android.runtime-stability/v1"
+CORE_OBSERVATION_PATHS = [
+    "runtime_state.modules.state",
+    "runtime_state.modules.modules",
+    "runtime_state.threads.state",
+    "runtime_state.memory_ranges.---.state",
+    "runtime_state.memory_ranges.--x.state",
+    "runtime_state.memory_ranges.-w-.state",
+    "runtime_state.memory_ranges.-wx.state",
+    "runtime_state.memory_ranges.r--.state",
+    "runtime_state.memory_ranges.r-x.state",
+    "runtime_state.memory_ranges.rw-.state",
+    "runtime_state.memory_ranges.rwx.state",
+]
+
+
 TOKEN_VAZIO = "TOKEN_VAZIO"
 DUMP_SCHEMA = "rafaelia.android.runtime-stability/v1"
 RESULT_SCHEMA = "rafaelia.android.runtime-stability-diff/v2"
@@ -79,6 +95,20 @@ def missing_required(data: dict[str, Any]) -> list[str]:
         if is_missing(value):
             missing.append(path)
     return missing
+
+
+def is_token_vazio(value: Any) -> bool:
+    return value is None or (
+        isinstance(value, str) and value.startswith("TOKEN_VAZIO")
+    )
+
+
+def observation_gaps(data: dict[str, Any]) -> list[str]:
+    gaps: list[str] = []
+    for path in CORE_OBSERVATION_PATHS:
+        if is_token_vazio(get_path(data, path)):
+            gaps.append(path)
+    return gaps
 
 
 def compare_paths(
@@ -154,6 +184,8 @@ def render_incomparable(
     return {
         "schema": RESULT_SCHEMA,
         "classification": classification,
+        "baseline_observation_gaps": baseline_observation_gaps,
+        "candidate_observation_gaps": candidate_observation_gaps,
         "comparison_status": "FAIL_CLOSED",
         "reason": reason,
         "baseline_missing_required": baseline_missing,
@@ -241,6 +273,9 @@ def compare(baseline: dict[str, Any], candidate: dict[str, Any]) -> dict[str, An
         "runtime_state.modules.stable_set_fingerprint",
     ]
 
+    baseline_observation_gaps = observation_gaps(baseline)
+    candidate_observation_gaps = observation_gaps(candidate)
+
     identity_changes = compare_paths(baseline, candidate, identity_paths)
     observer_changes = compare_paths(baseline, candidate, observer_paths)
     runtime_changes = compare_paths(baseline, candidate, runtime_paths)
@@ -266,7 +301,9 @@ def compare(baseline: dict[str, Any], candidate: dict[str, Any]) -> dict[str, An
 
     hint_changes = compare_paths(baseline, candidate, hint_paths)
 
-    if identity_changes:
+    if baseline_observation_gaps or candidate_observation_gaps:
+        classification = "INSUFFICIENT_OBSERVATION"
+    elif identity_changes:
         classification = "IDENTITY_DRIFT"
     elif observer_changes:
         classification = "OBSERVER_DRIFT"
