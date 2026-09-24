@@ -109,6 +109,36 @@
         "universal behavior outside tested population/conditions"
       ],
       "intrusion": "EXPERIMENTAL"
+    },
+    {
+      "id": "S09_APPLICATION_EXIT_INFO",
+      "source": "Android ApplicationExitInfo",
+      "scale": "historical process exit",
+      "availability": "API30_PLUS_UNAVAILABLE_ON_CURRENT_API29_TARGET",
+      "proves": [
+        "system-recorded historical exit reason and selected metrics when available on supported Android versions"
+      ],
+      "cannot_prove": [
+        "exact pre-death memory state",
+        "root cause beyond the system reason code",
+        "anything on current API29 target"
+      ],
+      "intrusion": "LOW"
+    },
+    {
+      "id": "S10_REGISTER_OR_CONTROL_FLOW_PROBE",
+      "source": "Targeted Frida thread context/Stalker/breakpoint probe",
+      "scale": "instruction/control-flow",
+      "availability": "OPT_IN_HYPOTHESIS_SPECIFIC",
+      "proves": [
+        "observed register/control-flow facts within the configured window"
+      ],
+      "cannot_prove": [
+        "unobserved history",
+        "zero observer effect",
+        "general stability"
+      ],
+      "intrusion": "MEDIUM_TO_HIGH_MEASURED"
     }
   ],
   "join_rule": "Cross-source causal claims require time/identity bridges and must not be promoted from one source family alone."
