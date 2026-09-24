@@ -42,7 +42,7 @@ REQUIRED_PATHS = [
     "stable_identity.pointer_size",
     "stable_identity.page_size",
     "stable_identity.platform",
-    "stable_identity.java_identity",
+    "stable_identity.java_available",
     "observer.agent_schema",
     "observer.frida_version",
     "observer.instrumentation_present",
@@ -97,7 +97,15 @@ def missing_required(data: dict[str, Any]) -> list[str]:
         value = get_path(data, path)
         if is_missing(value):
             missing.append(path)
-    return missing
+
+    java_available = get_path(data, "stable_identity.java_available")
+    if java_available is True and is_missing(
+        get_path(data, "stable_identity.java_identity")
+    ):
+        missing.append("stable_identity.java_identity")
+    elif java_available not in (True, False):
+        missing.append("stable_identity.java_available")
+    return sorted(set(missing))
 
 
 def is_token_vazio(value: Any) -> bool:
@@ -250,6 +258,7 @@ def compare(baseline: dict[str, Any], candidate: dict[str, Any]) -> dict[str, An
         "stable_identity.pointer_size",
         "stable_identity.page_size",
         "stable_identity.platform",
+        "stable_identity.java_available",
         "stable_identity.java_identity",
     ]
     observer_paths = [
