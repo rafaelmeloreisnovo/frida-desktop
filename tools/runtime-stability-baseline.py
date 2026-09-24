@@ -58,7 +58,12 @@ REQUIRED_PATHS = [
     "stable_identity.pointer_size",
     "stable_identity.page_size",
     "stable_identity.platform",
-    "platform_key",
+    "observer.agent_schema",
+    "observer.frida_version",
+    "observer.instrumentation_present",
+    "capture_provenance.agent_sha256",
+    "capture_provenance.controller_sha256",
+    "capture_provenance.frida_python_version",
     "runtime_state.modules.modules",
     "runtime_state.threads.count",
     "runtime_state.memory_ranges",
@@ -160,6 +165,23 @@ def stable_identity_projection(dump: dict[str, Any]) -> dict[str, Any]:
     return identity
 
 
+def observer_projection(dump: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "agent_schema": get_path(dump, "observer.agent_schema"),
+        "frida_version": get_path(dump, "observer.frida_version"),
+        "instrumentation_present": get_path(
+            dump, "observer.instrumentation_present"
+        ),
+        "agent_sha256": get_path(dump, "capture_provenance.agent_sha256"),
+        "controller_sha256": get_path(
+            dump, "capture_provenance.controller_sha256"
+        ),
+        "frida_python_version": get_path(
+            dump, "capture_provenance.frida_python_version"
+        ),
+    }
+
+
 def build_baseline(paths: list[Path]) -> dict[str, Any]:
     if len(paths) < 3:
         raise ValueError("baseline requires at least 3 independent snapshots")
@@ -180,6 +202,10 @@ def build_baseline(paths: list[Path]) -> dict[str, Any]:
     identities = [stable_identity_projection(d) for d in dumps]
     identity_reference = identities[0]
     identity_consistent = all(item == identity_reference for item in identities[1:])
+
+    observers = [observer_projection(d) for d in dumps]
+    observer_reference = observers[0]
+    observer_consistent = all(item == observer_reference for item in observers[1:])
 
     platform_keys = [get_path(d, "platform_key") for d in dumps]
     platform_key_hint_consistent = all(key == platform_keys[0] for key in platform_keys[1:])
@@ -216,6 +242,7 @@ def build_baseline(paths: list[Path]) -> dict[str, Any]:
 
     valid = (
         identity_consistent
+        and observer_consistent
         and min_quality == 1.0
     )
 
@@ -228,6 +255,8 @@ def build_baseline(paths: list[Path]) -> dict[str, Any]:
         "baseline_valid": valid,
         "baseline_gate": "PASS" if valid else "FAIL",
         "stable_identity_consistent": identity_consistent,
+        "observer_consistent": observer_consistent,
+        "observer_identity": observer_reference if observer_consistent else TOKEN_VAZIO,
         "platform_key_hint_consistent": platform_key_hint_consistent,
         "stable_identity": identity_reference if identity_consistent else TOKEN_VAZIO,
         "platform_key_hint": platform_keys[0] if platform_key_hint_consistent else TOKEN_VAZIO,
@@ -249,6 +278,7 @@ def build_baseline(paths: list[Path]) -> dict[str, Any]:
         },
         "falsifiers": [
             "stable identity differs across baseline snapshots",
+            "observer identity/source binding differs across baseline snapshots",
             "compact platform hints may differ without invalidating the baseline; full stable identity is authoritative",
             "any required observation is missing",
             "fewer than 3 independent snapshots",
@@ -267,6 +297,7 @@ def assess_candidate(baseline: dict[str, Any], candidate: dict[str, Any]) -> dic
 
     candidate_quality = completeness(candidate)
     identity_match = stable_identity_projection(candidate) == baseline["stable_identity"]
+    observer_match = observer_projection(candidate) == baseline["observer_identity"]
     platform_key_hint_match = get_path(candidate, "platform_key") == baseline["platform_key_hint"]
 
     baseline_modules = baseline.get("module_prevalence", [])
@@ -342,6 +373,8 @@ def assess_candidate(baseline: dict[str, Any], candidate: dict[str, Any]) -> dic
 
     if not identity_match:
         classification = "IDENTITY_DRIFT"
+    elif not observer_match:
+        classification = "OBSERVER_DRIFT"
     elif missing_core or novel or multiplicity_outside_baseline:
         classification = "MODULE_SURFACE_OUTSIDE_BASELINE"
     elif outlier_count:
@@ -355,6 +388,7 @@ def assess_candidate(baseline: dict[str, Any], candidate: dict[str, Any]) -> dic
         "schema": ASSESSMENT_SCHEMA,
         "classification": classification,
         "stable_identity_match": identity_match,
+        "observer_match": observer_match,
         "platform_key_hint_match": platform_key_hint_match,
         "compact_fingerprints_authoritative": False,
         "candidate_quality": candidate_quality,
