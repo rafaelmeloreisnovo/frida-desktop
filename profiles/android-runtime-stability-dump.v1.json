@@ -40,12 +40,22 @@
       "capture start/finish wall clock",
       "capture duration",
       "instrumentation presence",
-      "observer-effect declaration"
+      "observer-effect declaration",
+      "Frida Cloak-aware introspection visibility",
+      "memory-range counting semantics",
+      "non-atomic capture consistency fence"
     ],
     "clock_context": [
       "wall epoch",
       "device elapsed time when Java is available",
       "approximate boot epoch = wall - elapsed"
+    ],
+    "external_platform_context": [
+      "allowlisted local-Android getprop values when the controller itself runs on Android",
+      "selected /proc/meminfo counters",
+      "memory PSI when available",
+      "kernel release/machine",
+      "context is external to the target and cannot by itself establish causality"
     ]
   },
   "recognition": {
@@ -70,7 +80,8 @@
       "tid",
       "heap counters",
       "thread counts"
-    ]
+    ],
+    "module_surface_ambiguity": "duplicate module basenames are reported; full paths remain intentionally uncollected"
   },
   "privacy": {
     "forbidden": [
@@ -86,7 +97,11 @@
       "credentials"
     ],
     "module_paths": "not collected",
-    "process_name": "not collected"
+    "process_name": "not collected",
+    "allowlisted_controller_file_reads": [
+      "/proc/meminfo selected counters only",
+      "/proc/pressure/memory parsed numeric pressure counters only"
+    ]
   },
   "invariants": [
     "platform identity drift, module-surface drift and volatile runtime drift are reported separately",
@@ -96,7 +111,13 @@
     "a dump is evidence, not a causal claim",
     "the agent never repairs, resumes, patches or mutates the target",
     "observer state and capture duration are evidence dimensions, not invisible implementation details",
-    "estimated boot epoch is approximate context, not a trusted clock authority"
+    "estimated boot epoch is approximate context, not a trusted clock authority",
+    "missing evidence is not equality",
+    "a non-atomic capture with module churn is incomparable for module-surface recognition",
+    "Frida Cloak-aware introspection may omit instrumentation-owned resources",
+    "memory ranges are enumerated once and aggregated by exact returned protection; overlapping permission filters are forbidden",
+    "device elapsed time is clock context and does not by itself constitute runtime drift",
+    "local platform context is CONTEXT_ONLY and is not target-process identity"
   ],
   "file_contract": {
     "default_directory": "~/.local/state/rafaelia/frida-runtime-stability",
@@ -110,6 +131,9 @@
     "default_max_dumps": 256,
     "default_max_dir_bytes": 67108864,
     "default_min_free_bytes": 16777216,
-    "automatic_deletion": false
+    "automatic_deletion": false,
+    "previous_dump_sha256": true,
+    "chain_semantics": "local append-order integrity only; never causal proof",
+    "non_loopback_endpoint": "requires explicit --allow-remote-endpoint"
   }
 }
