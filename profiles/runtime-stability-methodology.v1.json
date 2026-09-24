@@ -66,7 +66,8 @@
     "TOKEN_VAZIO != FAIL",
     "hosted evidence != physical-device evidence",
     "same app identity != same process generation",
-    "compact fingerprint != authoritative structure"
+    "compact fingerprint != authoritative structure",
+    "compact fingerprint drift != structural identity drift"
   ],
   "evidence_independence": {
     "rule": "independent evidence requires distinct independence_group values, not merely distinct labels/source_type strings",
@@ -83,5 +84,20 @@
     "default_max_dumps": 256,
     "default_max_dir_bytes": 67108864,
     "default_min_free_bytes": 16777216
+  },
+  "observer_drift": {
+    "priority": "before module/runtime drift classification",
+    "authoritative_fields": [
+      "observer.agent_schema",
+      "observer.frida_version",
+      "observer.instrumentation_present",
+      "capture_provenance.agent_sha256",
+      "capture_provenance.controller_sha256",
+      "capture_provenance.frida_python_version"
+    ],
+    "excluded_from_drift_authority": [
+      "capture duration",
+      "compact FNV hints"
+    ]
   }
 }
