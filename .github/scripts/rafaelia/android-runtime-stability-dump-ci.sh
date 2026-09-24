@@ -17,7 +17,7 @@ rafaelia_need_cmd node
 rafaelia_need_cmd python3
 
 node --check agents/android-runtime-stability-dump.js
-python3 -m py_compile tools/runtime-stability-diff.py tools/capture-runtime-stability-dump.py
+python3 -m py_compile tools/runtime-stability-diff.py tools/capture-runtime-stability-dump.py tools/runtime-stability-baseline.py tools/runtime-stability-evidence-gate.py
 
 python3 - <<'PY'
 import json
@@ -33,6 +33,12 @@ assert 'ASLR module bases' in profile['recognition']['excludes']
 assert profile['privacy']['module_paths'] == 'not collected'
 assert profile['privacy']['process_name'] == 'not collected'
 assert 'recognition_surface' in profile['semantic_layers']
+method = json.loads(Path('profiles/runtime-stability-methodology.v1.json').read_text())
+assert method['claim_allowed'] is False
+assert method['baseline']['minimum_independent_snapshots'] == 3
+assert method['baseline']['numeric_center'] == 'median'
+assert method['baseline']['numeric_dispersion'] == 'median_absolute_deviation'
+assert 'drift != instability' in method['falsifiability_invariants']
 PY
 
 if grep -En 'Build\.SERIAL|ANDROID_ID|TelephonyManager|SubscriberId|SimSerial|ClipboardManager|getText\(|readUtf8String|readByteArray|Memory\.read|enumerateClasses|module\.path'     agents/android-runtime-stability-dump.js; then
@@ -41,6 +47,7 @@ fi
 
 cat > "$BUILD_DIR/baseline.json" <<'JSON'
 {
+  "schema": "rafaelia.android.runtime-stability/v1",
   "stable_identity": {
     "arch": "arm",
     "pointer_size": 4,
@@ -118,15 +125,118 @@ import json
 from pathlib import Path
 
 root = Path('build/android-runtime-stability-dump')
+base = json.loads((root/'baseline.json').read_text())
+
+for index, threads in enumerate((4, 5, 6), start=1):
+    row = json.loads(json.dumps(base))
+    row['capture_seq'] = index
+    row['runtime_state']['threads']['count'] = threads
+    row['runtime_state']['java_runtime']['java_heap_total_bytes'] = 100 + (index - 1) * 5
+    (root/f'robust-{index}.json').write_text(json.dumps(row))
+
+candidate = json.loads(json.dumps(base))
+candidate['capture_seq'] = 10
+candidate['runtime_state']['threads']['count'] = 40
+candidate['runtime_state']['java_runtime']['java_heap_total_bytes'] = 500
+(root/'robust-candidate.json').write_text(json.dumps(candidate))
+PY
+
+python3 tools/runtime-stability-baseline.py build   "$BUILD_DIR/robust-1.json" "$BUILD_DIR/robust-2.json" "$BUILD_DIR/robust-3.json"   --out "$BUILD_DIR/robust-baseline.json"
+python3 tools/runtime-stability-baseline.py assess   "$BUILD_DIR/robust-baseline.json" "$BUILD_DIR/robust-candidate.json"   --out "$BUILD_DIR/robust-assessment.json"
+
+cat > "$BUILD_DIR/repeated-packet.json" <<'JSON'
+{
+  "schema": "rafaelia.runtime-stability.falsifiability-packet/v1",
+  "hypothesis_id": "H-RUNTIME-THREAD-DRIFT",
+  "hypothesis": "thread-count deviation repeats under comparable conditions",
+  "requested_level": "REPEATED",
+  "falsifiers": ["repeat under same stable identity and fail if deviation disappears"],
+  "observations": [{"id":1},{"id":2},{"id":3}],
+  "evidence": [{"source_type":"frida_runtime_dump","ref":"dump://1"}],
+  "falsifier_attempted": true,
+  "temporal_precedence": false,
+  "intervention_or_reversal": false,
+  "alternative_explanations_checked": false,
+  "contradictory_evidence": []
+}
+JSON
+
+cat > "$BUILD_DIR/causal-pass-packet.json" <<'JSON'
+{
+  "schema": "rafaelia.runtime-stability.falsifiability-packet/v1",
+  "hypothesis_id": "H-NATIVE-FAULT-CAUSE",
+  "hypothesis": "a controlled native fault causes the observed outcome",
+  "requested_level": "CAUSAL_SUPPORTED",
+  "falsifiers": ["remove the controlled fault and require the outcome to disappear"],
+  "observations": [{"id":1},{"id":2},{"id":3}],
+  "evidence": [
+    {"source_type":"frida_runtime_dump","ref":"dump://a"},
+    {"source_type":"tombstone","ref":"tombstone://a"}
+  ],
+  "falsifier_attempted": true,
+  "temporal_precedence": true,
+  "intervention_or_reversal": true,
+  "alternative_explanations_checked": true,
+  "contradictory_evidence": []
+}
+JSON
+
+cat > "$BUILD_DIR/causal-fail-packet.json" <<'JSON'
+{
+  "schema": "rafaelia.runtime-stability.falsifiability-packet/v1",
+  "hypothesis_id": "H-UNSUPPORTED-CAUSE",
+  "hypothesis": "one drift observation caused the crash",
+  "requested_level": "CAUSAL_SUPPORTED",
+  "falsifiers": ["repeat without the drift"],
+  "observations": [{"id":1}],
+  "evidence": [{"source_type":"frida_runtime_dump","ref":"dump://only"}],
+  "falsifier_attempted": false,
+  "temporal_precedence": false,
+  "intervention_or_reversal": false,
+  "alternative_explanations_checked": false,
+  "contradictory_evidence": []
+}
+JSON
+
+python3 tools/runtime-stability-evidence-gate.py   "$BUILD_DIR/repeated-packet.json" --out "$BUILD_DIR/repeated-result.json"
+python3 tools/runtime-stability-evidence-gate.py   "$BUILD_DIR/causal-pass-packet.json" --out "$BUILD_DIR/causal-pass-result.json"
+
+set +e
+python3 tools/runtime-stability-evidence-gate.py   "$BUILD_DIR/causal-fail-packet.json" --out "$BUILD_DIR/causal-fail-result.json"
+CAUSAL_FAIL_RC=$?
+set -e
+[[ "$CAUSAL_FAIL_RC" -eq 2 ]] || rafaelia_die "unsupported causal packet did not fail closed"
+
+python3 - <<'PY'
+import json
+from pathlib import Path
+
+root = Path('build/android-runtime-stability-dump')
 assert json.loads((root/'no-drift.json').read_text())['classification'] == 'NO_OBSERVED_DRIFT'
 assert json.loads((root/'runtime-drift.json').read_text())['classification'] == 'RUNTIME_DRIFT'
 assert json.loads((root/'module-drift.json').read_text())['classification'] == 'MODULE_SURFACE_DRIFT'
 assert json.loads((root/'identity-drift.json').read_text())['classification'] == 'IDENTITY_DRIFT'
 assert json.loads((root/'hash-collision-drift.json').read_text())['classification'] == 'MODULE_SURFACE_DRIFT'
 assert json.loads((root/'aslr-only.json.out').read_text())['classification'] == 'NO_OBSERVED_DRIFT'
+robust = json.loads((root/'robust-baseline.json').read_text())
+assert robust['baseline_gate'] == 'PASS'
+assert robust['sample_count'] == 3
+assessment = json.loads((root/'robust-assessment.json').read_text())
+assert assessment['classification'] == 'RUNTIME_OUTLIER_OBSERVED'
+assert assessment['causality'] == 'NOT_INFERRED'
+repeated = json.loads((root/'repeated-result.json').read_text())
+assert repeated['gate'] == 'PASS'
+assert repeated['highest_supported_level'] == 'REPEATED'
+causal_pass = json.loads((root/'causal-pass-result.json').read_text())
+assert causal_pass['gate'] == 'PASS'
+assert causal_pass['highest_supported_level'] == 'CAUSAL_SUPPORTED'
+assert causal_pass['causal_claim_allowed'] is True
+causal_fail = json.loads((root/'causal-fail-result.json').read_text())
+assert causal_fail['gate'] == 'FAIL'
+assert causal_fail['causal_claim_allowed'] is False
 PY
 
-rafaelia_write_sha256_manifest "$EVIDENCE_DIR/SOURCE_SHA256SUMS.txt"   agents/android-runtime-stability-dump.js   profiles/android-runtime-stability-dump.v1.json   tools/runtime-stability-diff.py   tools/capture-runtime-stability-dump.py   docs/android-runtime-stability-dump.md
+rafaelia_write_sha256_manifest "$EVIDENCE_DIR/SOURCE_SHA256SUMS.txt"   agents/android-runtime-stability-dump.js   profiles/android-runtime-stability-dump.v1.json   profiles/runtime-stability-methodology.v1.json   tools/runtime-stability-diff.py   tools/capture-runtime-stability-dump.py   tools/runtime-stability-baseline.py   tools/runtime-stability-evidence-gate.py   docs/android-runtime-stability-dump.md   docs/runtime-stability-falsifiability.md
 
 GITHUB_REPOSITORY="${GITHUB_REPOSITORY:-LOCAL}" GITHUB_RUN_ID="${GITHUB_RUN_ID:-0}" GITHUB_SHA="${GITHUB_SHA:-LOCAL}" python3 - <<'PY'
 import json
@@ -148,6 +258,11 @@ receipt = {
     'diff_hash_collision_resistance_by_full_surface': 'PASS',
     'diff_aslr_base_exclusion': 'PASS',
     'append_only_controller_syntax': 'PASS',
+    'robust_baseline_median_mad': 'PASS',
+    'candidate_outlier_without_causal_promotion': 'PASS',
+    'falsifiability_repeated_gate': 'PASS',
+    'falsifiability_causal_supported_gate': 'PASS',
+    'unsupported_causal_claim_fail_closed': 'PASS',
     'frida_device_execution': 'TOKEN_VAZIO',
     'physical_stability': 'TOKEN_VAZIO',
     'causal_attribution': 'TOKEN_VAZIO',
