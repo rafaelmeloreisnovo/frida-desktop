@@ -12,6 +12,9 @@ export interface RuntimeStabilityDumpLike {
   capture_seq?: number;
   reason?: string;
   captured_epoch_ms?: number;
+  capture_provenance?: {
+    condition_id?: string;
+  };
   platform_key?: string;
   module_surface_key?: string;
   recognition_key?: string;
@@ -27,6 +30,11 @@ export interface RuntimeStabilityDumpLike {
     debugger_attached?: boolean | string;
     modules?: { count?: number };
     threads?: { count?: number };
+    java_runtime?: {
+      process_start_elapsed_ms?: number | string;
+      process_age_ms?: number | string;
+      pss_kb?: number | string;
+    };
   };
   gaps?: Record<string, unknown>;
 }
@@ -35,6 +43,11 @@ export interface RuntimeStabilityDiffLike {
   schema: string;
   classification?: string;
   comparison_status?: string;
+  condition_id?: string;
+  condition_match?: boolean;
+  condition_control?: string;
+  boot_session_match?: boolean | string;
+  process_instance_match?: boolean | string;
   platform_identity_match?: boolean | string;
   module_surface_match?: boolean | string;
   recognition_match?: boolean | string;
@@ -104,6 +117,7 @@ export class RuntimeStabilityHyperMemoryBridge {
       capture_seq: dump.capture_seq ?? 'TOKEN_VAZIO',
       reason: safeText(dump.reason),
       captured_epoch_ms: dump.captured_epoch_ms ?? 'TOKEN_VAZIO',
+      condition_id: safeText(dump.capture_provenance?.condition_id),
       platform_key_hint: safeText(dump.platform_key),
       module_surface_key_hint: safeText(dump.module_surface_key),
       recognition_key_hint: safeText(dump.recognition_key),
@@ -120,7 +134,14 @@ export class RuntimeStabilityHyperMemoryBridge {
         debugger_attached:
           dump.runtime_state?.debugger_attached ?? 'TOKEN_VAZIO',
         module_count: dump.runtime_state?.modules?.count ?? 'TOKEN_VAZIO',
-        thread_count: dump.runtime_state?.threads?.count ?? 'TOKEN_VAZIO'
+        thread_count: dump.runtime_state?.threads?.count ?? 'TOKEN_VAZIO',
+        process_start_elapsed_ms:
+          dump.runtime_state?.java_runtime?.process_start_elapsed_ms ??
+          'TOKEN_VAZIO',
+        process_age_ms:
+          dump.runtime_state?.java_runtime?.process_age_ms ?? 'TOKEN_VAZIO',
+        pss_kb:
+          dump.runtime_state?.java_runtime?.pss_kb ?? 'TOKEN_VAZIO'
       },
       unresolved_gap_keys: dump.gaps
         ? Object.entries(dump.gaps)
@@ -144,6 +165,12 @@ export class RuntimeStabilityHyperMemoryBridge {
       diff_schema: diff.schema,
       classification: safeText(diff.classification),
       comparison_status: safeText(diff.comparison_status),
+      condition_id: safeText(diff.condition_id),
+      condition_match: diff.condition_match ?? 'TOKEN_VAZIO',
+      condition_control: safeText(diff.condition_control),
+      boot_session_match: diff.boot_session_match ?? 'TOKEN_VAZIO',
+      process_instance_match:
+        diff.process_instance_match ?? 'TOKEN_VAZIO',
       platform_identity_match:
         diff.platform_identity_match ?? 'TOKEN_VAZIO',
       module_surface_match: diff.module_surface_match ?? 'TOKEN_VAZIO',
