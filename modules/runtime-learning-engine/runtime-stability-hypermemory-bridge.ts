@@ -96,9 +96,10 @@ export class RuntimeStabilityHyperMemoryBridge {
       capture_seq: dump.capture_seq ?? 'TOKEN_VAZIO',
       reason: safeText(dump.reason),
       captured_epoch_ms: dump.captured_epoch_ms ?? 'TOKEN_VAZIO',
-      platform_key: safeText(dump.platform_key),
-      module_surface_key: safeText(dump.module_surface_key),
-      recognition_key: safeText(dump.recognition_key),
+      platform_key_hint: safeText(dump.platform_key),
+      module_surface_key_hint: safeText(dump.module_surface_key),
+      recognition_key_hint: safeText(dump.recognition_key),
+      compact_fingerprint_role: 'HINT_ONLY',
       stable_identity: {
         arch: dump.stable_identity?.arch ?? 'TOKEN_VAZIO',
         pointer_size: dump.stable_identity?.pointer_size ?? 'TOKEN_VAZIO',
