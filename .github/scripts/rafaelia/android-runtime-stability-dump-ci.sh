@@ -202,6 +202,7 @@ cat > "$BUILD_DIR/baseline.json" <<'JSON'
     "pointer_size": 4,
     "page_size": 4096,
     "platform": "linux",
+    "java_available": true,
     "java_identity": {"sdk": 29}
   },
   "platform_key": "plat1111",
