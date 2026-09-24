@@ -66,6 +66,7 @@ REQUIRED_PATHS = [
     "stable_identity.pointer_size",
     "stable_identity.page_size",
     "stable_identity.platform",
+    "stable_identity.java_available",
     "observer.agent_schema",
     "observer.frida_version",
     "observer.instrumentation_present",
@@ -162,20 +163,31 @@ def robust_summary(values: list[float]) -> dict[str, Any]:
 
 
 def completeness(dump: dict[str, Any]) -> dict[str, Any]:
+    required = list(REQUIRED_PATHS)
+    if get_path(dump, "stable_identity.java_available") is True:
+        required.append("stable_identity.java_identity")
+
     present = []
     missing = []
-    for path in REQUIRED_PATHS:
+    for path in required:
         value = get_path(dump, path)
         if value == TOKEN_VAZIO or value is None:
             missing.append(path)
         else:
             present.append(path)
-    ratio = len(present) / len(REQUIRED_PATHS)
+    ratio = len(present) / len(required)
     return {
-        "required_count": len(REQUIRED_PATHS),
+        "required_count": len(required),
         "present_count": len(present),
         "ratio": ratio,
         "missing": missing,
+        "java_scope": (
+            "JAVA_AWARE"
+            if get_path(dump, "stable_identity.java_available") is True
+            else "NATIVE_ONLY"
+            if get_path(dump, "stable_identity.java_available") is False
+            else TOKEN_VAZIO
+        ),
     }
 
 
