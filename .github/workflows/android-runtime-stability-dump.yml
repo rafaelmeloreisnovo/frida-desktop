@@ -17,6 +17,7 @@ on:
       - 'agents/android-runtime-stability-dump.js'
       - 'profiles/android-runtime-stability-dump.v1.json'
       - 'tools/runtime-stability-diff.py'
+      - 'tools/capture-runtime-stability-dump.py'
       - 'docs/android-runtime-stability-dump.md'
       - '.github/scripts/rafaelia/android-runtime-stability-dump-ci.sh'
       - '.github/workflows/android-runtime-stability-dump.yml'
