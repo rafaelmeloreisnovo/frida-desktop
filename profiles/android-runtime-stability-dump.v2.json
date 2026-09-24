@@ -1,0 +1,173 @@
+{
+  "schema": "rafaelia.android.runtime-stability-dump/profile-v2",
+  "profile": "android-runtime-stability-dump",
+  "intent": "Capture privacy-safe structural runtime evidence for recognition, drift, stability-context and falsifiable comparison across authorized Frida sessions.",
+  "claim_allowed": false,
+  "evidence_law": [
+    "SOURCE != ARTIFACT != EXECUTION != EVIDENCE != CLAIM",
+    "TOKEN_VAZIO != 0",
+    "observed drift != defect",
+    "correlation != causality",
+    "visibility loss != target change",
+    "instrumentation drift != target drift"
+  ],
+  "capture_mode": {
+    "on_agent_load": true,
+    "rpc_snapshot": true,
+    "periodic_polling": false,
+    "active_mutation": false,
+    "optional_event_observers": true,
+    "event_observers_default": false,
+    "append_only_file_controller": true
+  },
+  "consistency": {
+    "model": "BEST_EFFORT_NON_ATOMIC",
+    "sequential_collectors": true,
+    "wall_clock_recorded": true,
+    "monotonic_clock_recorded_when_java_available": true,
+    "observer_duration_recorded": true,
+    "observer_effect": "MEASURED_NOT_ASSUMED_ZERO"
+  },
+  "semantic_layers": {
+    "stable_identity": [
+      "architecture",
+      "pointer size",
+      "page size",
+      "platform",
+      "Android/ART build identity when Java is available"
+    ],
+    "instrumentation_identity": [
+      "Frida version",
+      "Frida JavaScript runtime"
+    ],
+    "recognition_surface": [
+      "full loaded module name+size projection"
+    ],
+    "volatile_runtime": [
+      "thread count/state summary",
+      "exact-protection memory range summary",
+      "managed/native heap counters",
+      "debugger/code-signing state"
+    ],
+    "process_instance": [
+      "pid",
+      "current tid"
+    ],
+    "observer_effect": [
+      "Frida heap size",
+      "capture duration",
+      "Kernel API visibility"
+    ],
+    "timing": [
+      "wall start/end",
+      "monotonic elapsed/uptime when available"
+    ]
+  },
+  "comparator": {
+    "classifications": [
+      "INCOMPARABLE",
+      "VISIBILITY_DRIFT",
+      "INSTRUMENTATION_DRIFT",
+      "IDENTITY_DRIFT",
+      "MODULE_SURFACE_DRIFT",
+      "RUNTIME_DRIFT",
+      "NO_OBSERVED_DRIFT"
+    ],
+    "priority": [
+      "schema/required-field incomparability",
+      "visibility drift",
+      "instrumentation drift",
+      "platform identity drift",
+      "module surface drift",
+      "runtime drift",
+      "no observed drift"
+    ],
+    "excluded_from_classification": [
+      "wall/monotonic clock position",
+      "capture sequence",
+      "capture reason",
+      "ASLR module bases",
+      "pid/tid process instance",
+      "observer capture duration",
+      "compact hash hints"
+    ]
+  },
+  "recognition": {
+    "authoritative_platform_identity": "full stable_identity structure",
+    "authoritative_module_surface": "full module name+size projection",
+    "compact_fingerprint_role": "HINT_ONLY",
+    "module_binary_identity": "TOKEN_VAZIO_NAME_AND_SIZE_DO_NOT_PROVE_BINARY_IDENTITY",
+    "excludes": [
+      "ASLR module bases",
+      "pid",
+      "tid",
+      "heap counters",
+      "thread counts",
+      "capture clocks"
+    ]
+  },
+  "privacy": {
+    "forbidden": [
+      "device serial",
+      "Android ID",
+      "SIM identifiers",
+      "subscriber identifiers",
+      "process name",
+      "module paths",
+      "clipboard",
+      "UI text",
+      "application payload bytes",
+      "file contents",
+      "network payload",
+      "credentials",
+      "unknown caller reason text"
+    ],
+    "caller_reason": "allowlist-or-CALLER_DEFINED",
+    "target_selector_persisted": false
+  },
+  "file_contract": {
+    "default_directory": "~/.local/state/rafaelia/frida-runtime-stability",
+    "append_only": true,
+    "file_mode": "0600",
+    "directory_mode_attempt": "0700",
+    "fsync": true,
+    "sha256_sidecar": true,
+    "hash_chain_ledger": "ledger.jsonl",
+    "default_max_bytes": 8388608,
+    "remote_endpoint_default": "REFUSED_UNLESS_EXPLICIT_ALLOW_REMOTE"
+  },
+  "alternative_modes": {
+    "snapshot_on_demand": {
+      "status": "IMPLEMENTED_DEFAULT",
+      "rationale": "bounded passive evidence with explicit collection duration"
+    },
+    "event_driven_module_thread_observers": {
+      "status": "IMPLEMENTED_OPT_IN",
+      "rationale": "captures transitions without periodic polling; initial surface can be suppressed"
+    },
+    "periodic_polling": {
+      "status": "REJECTED_AS_DEFAULT",
+      "rationale": "creates unnecessary observer load and temporal self-interference"
+    },
+    "full_memory_or_payload_dump": {
+      "status": "REJECTED",
+      "rationale": "privacy, volume and causal ambiguity"
+    },
+    "kernel_lmk_selinux_tombstone_corroboration": {
+      "status": "EXTERNAL_EVIDENCE_REQUIRED",
+      "rationale": "must remain independent source evidence before causal attribution"
+    },
+    "hypermemory_causal_tail": {
+      "status": "SUCCESSOR_BRIDGE_REQUIRED",
+      "rationale": "runtime dumps are context packets, not causal tails by themselves"
+    }
+  },
+  "token_vazio": [
+    "LMKD cause without independent evidence",
+    "SELinux causal attribution without denial evidence",
+    "physical memory pressure without measured source",
+    "crash root cause without corroboration",
+    "module binary identity without independent artifact identity",
+    "atomic snapshot guarantee"
+  ]
+}
