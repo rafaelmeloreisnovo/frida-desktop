@@ -59,31 +59,38 @@ def main() -> int:
     baseline = load_json(args.baseline)
     candidate = load_json(args.candidate)
 
-    stable_paths = [
+    identity_paths = [
         "stable_identity.arch",
         "stable_identity.pointer_size",
         "stable_identity.page_size",
         "stable_identity.platform",
-        "stable_identity.module_set_fingerprint",
         "stable_identity.java_identity",
-        "recognition_key",
+        "platform_key",
+    ]
+
+    module_paths = [
+        "module_surface_key",
+        "runtime_state.modules.count",
+        "runtime_state.modules.stable_set_fingerprint",
     ]
 
     runtime_paths = [
         "runtime_state.debugger_attached",
         "runtime_state.code_signing_policy",
-        "runtime_state.modules.count",
         "runtime_state.threads.count",
         "runtime_state.threads.states",
         "runtime_state.memory_ranges",
         "runtime_state.java_runtime",
     ]
 
-    identity_changes = compare_paths(baseline, candidate, stable_paths)
+    identity_changes = compare_paths(baseline, candidate, identity_paths)
+    module_changes = compare_paths(baseline, candidate, module_paths)
     runtime_changes = compare_paths(baseline, candidate, runtime_paths)
 
     if identity_changes:
         classification = "IDENTITY_DRIFT"
+    elif module_changes:
+        classification = "MODULE_SURFACE_DRIFT"
     elif runtime_changes:
         classification = "RUNTIME_DRIFT"
     else:
@@ -92,13 +99,16 @@ def main() -> int:
     result = {
         "schema": "rafaelia.android.runtime-stability-diff/v1",
         "classification": classification,
-        "recognition_match": not identity_changes,
+        "platform_identity_match": not identity_changes,
+        "module_surface_match": not module_changes,
+        "recognition_match": not identity_changes and not module_changes,
         "identity_changes": identity_changes,
+        "module_surface_changes": module_changes,
         "runtime_changes": runtime_changes,
         "causality": "NOT_INFERRED",
         "claim_allowed": False,
         "invariant":
-            "runtime drift is evidence of state change, not automatic instability",
+            "platform drift, module-surface drift and runtime drift are distinct evidence classes",
     }
 
     rendered = json.dumps(result, indent=2, sort_keys=True) + "\n"
