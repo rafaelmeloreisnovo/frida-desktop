@@ -135,17 +135,7 @@ function collectJavaRuntime() {
         const Debug = Java.use('android.os.Debug');
         const SystemClock = Java.use('android.os.SystemClock');
         const System = Java.use('java.lang.System');
-        const Application = Java.use('android.app.Application');
-
         const runtime = Runtime.getRuntime();
-        let processNameTag = 'TOKEN_VAZIO';
-        try {
-          const processName = Application.getProcessName();
-          if (processName !== null)
-            processNameTag = fnv1a32Text(processName.toString());
-        } catch (_) {
-          out.token_vazio.push('PROCESS_NAME_UNAVAILABLE');
-        }
 
         const abis = [];
         try {
@@ -176,7 +166,6 @@ function collectJavaRuntime() {
         };
 
         out.runtime = {
-          process_name_tag: processNameTag,
           device_elapsed_ms: longNumber(SystemClock.elapsedRealtime()),
           java_heap_total_bytes: longNumber(runtime.totalMemory()),
           java_heap_free_bytes: longNumber(runtime.freeMemory()),
