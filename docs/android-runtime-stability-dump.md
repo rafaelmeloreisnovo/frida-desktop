@@ -244,3 +244,31 @@ PHYSICAL_STABILITY     = TOKEN_VAZIO
 CAUSAL_ATTRIBUTION     = TOKEN_VAZIO
 claim_allowed          = false
 ```
+
+
+## Observation scopes
+
+A snapshot is explicitly one of two Java scopes:
+
+- `JAVA_AWARE`: Java/ART is available and Java build/runtime identity is part
+  of the stable identity.
+- `NATIVE_ONLY`: Java is unavailable and that absence is recorded as the
+  observation scope rather than treated as a collector failure.
+
+The controller also accepts `--condition-id <label>` (bounded to
+`[A-Za-z0-9_.-]`) so baselines and pairwise comparisons can reject
+cross-condition comparisons. `UNSPECIFIED` remains descriptive-only.
+
+For Java-aware Android processes the dump also records
+`Process.getStartElapsedRealtime()`, process age, elapsed CPU time, PSS and
+native-heap size/allocated/free counters. Process-start time is a
+process-generation marker, not application identity. PSS is useful context but
+is not treated as a causal metric.
+
+## Recognition boundary
+
+Module recognition deliberately uses the basename+size **multiset**, with
+module paths withheld for privacy. It reports duplicate basenames and never
+claims exact file identity. Compact FNV values remain hints; the full
+privacy-bounded structural projection is authoritative for this recognition
+scope.
