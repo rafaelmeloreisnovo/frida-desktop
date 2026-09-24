@@ -80,6 +80,8 @@ def endpoint_is_loopback(endpoint: str) -> bool:
 
 
 def resolve_device(args: argparse.Namespace):
+    import frida
+
     if args.usb:
         return frida.get_usb_device(timeout=int(args.timeout_seconds * 1000))
 
