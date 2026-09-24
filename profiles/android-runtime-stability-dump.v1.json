@@ -7,7 +7,8 @@
     "on_agent_load": true,
     "rpc_snapshot": true,
     "periodic_polling": false,
-    "active_mutation": false
+    "active_mutation": false,
+    "append_only_file_controller": true
   },
   "semantic_layers": {
     "stable_identity": [
@@ -82,5 +83,13 @@
     "absence of a source remains TOKEN_VAZIO",
     "a dump is evidence, not a causal claim",
     "the agent never repairs, resumes, patches or mutates the target"
-  ]
+  ],
+  "file_contract": {
+    "default_directory": "~/.local/state/rafaelia/frida-runtime-stability",
+    "append_only": true,
+    "file_mode": "0600",
+    "fsync": true,
+    "sha256_sidecar": true,
+    "target_selector_persisted": false
+  }
 }
