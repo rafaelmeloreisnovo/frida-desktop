@@ -103,6 +103,9 @@ def write_append_only(out_dir: Path, dump: dict[str, Any]) -> tuple[Path, str]:
 def main() -> int:
     args = parse_args()
     source = args.agent.read_text(encoding="utf-8")
+    agent_sha256 = hashlib.sha256(source.encode("utf-8")).hexdigest()
+    controller_path = Path(__file__).resolve()
+    controller_sha256 = hashlib.sha256(controller_path.read_bytes()).hexdigest()
 
     device = resolve_device(args)
     pid = resolve_pid(device, args)
@@ -149,6 +152,15 @@ def main() -> int:
         if not isinstance(dump, dict):
             raise RuntimeError("agent returned no stability dump")
 
+        dump["capture_provenance"] = {
+            "agent_sha256": agent_sha256,
+            "controller_sha256": controller_sha256,
+            "frida_python_version": getattr(frida, "__version__", "TOKEN_VAZIO"),
+            "transport_selector_persisted": False,
+            "target_selector_persisted": False,
+            "source_binding": "LOCAL_FILE_SHA256",
+        }
+
         path, digest = write_append_only(args.out_dir, dump)
         print("RAFAELIA_RUNTIME_STABILITY_DUMP_PASS")
         print(f"receipt={path}")
@@ -156,6 +168,8 @@ def main() -> int:
         print("target_name_persisted=NO")
         print("endpoint_persisted=NO")
         print("pid_in_dump=YES_VOLATILE_RUNTIME_STATE")
+        print(f"agent_sha256={agent_sha256}")
+        print(f"controller_sha256={controller_sha256}")
         print("claim_allowed=false")
         return 0
     finally:
