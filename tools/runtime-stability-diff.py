@@ -78,6 +78,10 @@ def java_runtime_surface(data: dict[str, Any]) -> Any:
         "java_heap_free_bytes",
         "java_heap_max_bytes",
         "native_heap_allocated_bytes",
+        "native_heap_size_bytes",
+        "native_heap_free_bytes",
+        "process_pss_kb",
+        "loaded_class_count",
     )
     return {key: runtime.get(key, "TOKEN_VAZIO") for key in allowed}
 
@@ -94,6 +98,7 @@ def validate_dump(data: dict[str, Any]) -> list[str]:
         "runtime_state.modules",
         "runtime_state.threads",
         "runtime_state.memory_ranges",
+        "runtime_state.android_services",
     ):
         if get_path(data, path) == "TOKEN_VAZIO":
             errors.append(f"missing:{path}")
@@ -151,6 +156,7 @@ def main() -> int:
         "stable_identity.page_size",
         "stable_identity.platform",
         "stable_identity.java_identity",
+        "stable_identity.platform_contract",
     ]
     module_hint_paths = [
         "platform_key_hint",
