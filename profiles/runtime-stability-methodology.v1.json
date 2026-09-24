@@ -39,7 +39,9 @@
     "minimum_distinct_captures": 3,
     "minimum_independent_snapshots_semantics": "legacy field name; distinct captures are repeated measures, not proof of statistical/source independence",
     "capture_independence_claim": false,
-    "sample_depth_labels": "MINIMAL/ROBUST/STRONG describe count depth only, not evidentiary strength"
+    "sample_depth_labels": "MINIMAL/ROBUST/STRONG describe count depth only, not evidentiary strength or statistical power",
+    "outlier_threshold_semantics": "ENGINEERING_SCREENING_THRESHOLD_NOT_A_UNIVERSAL_SIGNIFICANCE_TEST",
+    "robust_sigma_scale_semantics": "NORMAL-CONSISTENCY SCALING FOR MAD; DESCRIPTIVE SCREENING DOES NOT CREATE A P-VALUE"
   },
   "observation_quality": {
     "dimensions": [
