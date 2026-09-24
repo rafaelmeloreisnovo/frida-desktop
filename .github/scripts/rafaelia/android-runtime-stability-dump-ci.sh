@@ -322,6 +322,18 @@ capture_race['consistency']['recognition_surface_authoritative'] = False
 elapsed_only = json.loads(json.dumps(base))
 elapsed_only['runtime_state']['java_runtime']['device_elapsed_ms'] = 2000
 (root/'elapsed-only.json').write_text(json.dumps(elapsed_only))
+
+native_a = json.loads(json.dumps(base))
+native_b = json.loads(json.dumps(base))
+for row in (native_a, native_b):
+    row['stable_identity']['java_available'] = False
+    row['stable_identity']['java_identity'] = 'TOKEN_VAZIO'
+    row['runtime_state']['java_runtime'] = 'TOKEN_VAZIO'
+(root/'native-a.json').write_text(json.dumps(native_a))
+(root/'native-b.json').write_text(json.dumps(native_b))
+
+java_vs_native = json.loads(json.dumps(native_a))
+(root/'java-vs-native.json').write_text(json.dumps(java_vs_native))
 PY
 
 python3 tools/runtime-stability-diff.py   "$BUILD_DIR/baseline.json" "$BUILD_DIR/runtime.json"   --out "$BUILD_DIR/runtime-drift.json"
@@ -335,6 +347,8 @@ python3 tools/runtime-stability-diff.py   "$BUILD_DIR/baseline.json" "$BUILD_DIR
 python3 tools/runtime-stability-diff.py   "$BUILD_DIR/both-missing-a.json" "$BUILD_DIR/both-missing-b.json"   --out "$BUILD_DIR/both-missing.out.json"
 python3 tools/runtime-stability-diff.py   "$BUILD_DIR/baseline.json" "$BUILD_DIR/capture-race.json"   --out "$BUILD_DIR/capture-race.out.json"
 python3 tools/runtime-stability-diff.py   "$BUILD_DIR/baseline.json" "$BUILD_DIR/elapsed-only.json"   --out "$BUILD_DIR/elapsed-only.out.json"
+python3 tools/runtime-stability-diff.py   "$BUILD_DIR/native-a.json" "$BUILD_DIR/native-b.json"   --out "$BUILD_DIR/native-only.out.json"
+python3 tools/runtime-stability-diff.py   "$BUILD_DIR/baseline.json" "$BUILD_DIR/java-vs-native.json"   --out "$BUILD_DIR/java-vs-native.out.json"
 
 python3 - <<'PY'
 import json
@@ -393,7 +407,7 @@ cat > "$BUILD_DIR/repeated-packet.json" <<'JSON'
   "hypothesis": "thread-count deviation repeats under comparable conditions",
   "requested_level": "REPEATED",
   "falsifiers": ["repeat under same stable identity and fail if deviation disappears"],
-  "observations": [{"id":1},{"id":2},{"id":3}],
+  "observations": [{"id":1,"fingerprint":"obs-a"},{"id":2,"fingerprint":"obs-b"},{"id":3,"fingerprint":"obs-c"}],
   "evidence": [{"source_type":"frida_runtime_dump","independence_group":"frida-agent","ref":"dump://1"}],
   "falsifier_attempted": true,
   "falsifier_results": [
@@ -415,7 +429,7 @@ cat > "$BUILD_DIR/causal-pass-packet.json" <<'JSON'
   "study_mode": "CONFIRMATORY",
   "hypothesis_registered_before_test": true,
   "falsifiers": ["remove the controlled fault and require the outcome to disappear"],
-  "observations": [{"id":1},{"id":2},{"id":3}],
+  "observations": [{"id":1,"fingerprint":"obs-a"},{"id":2,"fingerprint":"obs-b"},{"id":3,"fingerprint":"obs-c"}],
   "evidence": [
     {"source_type":"frida_runtime_dump","independence_group":"frida-agent","ref":"dump://a"},
     {"source_type":"tombstone","independence_group":"android-tombstoned","ref":"tombstone://a"}
@@ -450,15 +464,19 @@ cat > "$BUILD_DIR/contradiction-packet.json" <<'JSON'
   "study_mode": "CONFIRMATORY",
   "hypothesis_registered_before_test": true,
   "falsifiers": ["contradictory independent evidence must block promotion"],
-  "observations": [{"id":1},{"id":2},{"id":3}],
+  "observations": [{"id":1,"fingerprint":"obs-a"},{"id":2,"fingerprint":"obs-b"},{"id":3,"fingerprint":"obs-c"}],
   "evidence": [
     {"source_type":"frida_runtime_dump","independence_group":"frida-agent","ref":"dump://a"},
     {"source_type":"tombstone","independence_group":"android-tombstoned","ref":"tombstone://a"}
   ],
   "falsifier_attempted": true,
+  "falsifier_results": [{"falsifier":"contradictory independent evidence must block promotion","result":"CONTRADICTION_PRESENT"}],
   "temporal_precedence": true,
+  "temporal_order_evidence": [{"source":"cross-source-order","result":"candidate_precedes_outcome"}],
   "intervention_or_reversal": true,
+  "interventions": [{"kind":"controlled_reversal","result":"outcome_changed"}],
   "alternative_explanations_checked": true,
+  "alternative_explanations": [{"name":"observer_effect","status":"BOUNDED_NOT_EXPLANATORY"}],
   "contradictory_evidence": [
     {"ref":"control://negative","resolved":false}
   ]
@@ -474,15 +492,19 @@ cat > "$BUILD_DIR/exploratory-causal-packet.json" <<'JSON'
   "study_mode": "EXPLORATORY",
   "hypothesis_registered_before_test": false,
   "falsifiers": ["remove intervention and require outcome to disappear"],
-  "observations": [{"id":1},{"id":2},{"id":3}],
+  "observations": [{"id":1,"fingerprint":"obs-a"},{"id":2,"fingerprint":"obs-b"},{"id":3,"fingerprint":"obs-c"}],
   "evidence": [
     {"source_type":"frida_runtime_dump","independence_group":"frida-agent","ref":"dump://a"},
     {"source_type":"tombstone","independence_group":"android-tombstoned","ref":"tombstone://a"}
   ],
   "falsifier_attempted": true,
+  "falsifier_results": [{"falsifier":"remove intervention","result":"OUTCOME_CHANGED"}],
   "temporal_precedence": true,
+  "temporal_order_evidence": [{"source":"cross-source-order","result":"candidate_precedes_outcome"}],
   "intervention_or_reversal": true,
+  "interventions": [{"kind":"controlled_reversal","result":"outcome_changed"}],
   "alternative_explanations_checked": true,
+  "alternative_explanations": [{"name":"observer_effect","status":"BOUNDED_NOT_EXPLANATORY"}],
   "contradictory_evidence": []
 }
 JSON
@@ -494,7 +516,7 @@ cat > "$BUILD_DIR/duplicate-observation-packet.json" <<'JSON'
   "hypothesis": "duplicating one observation counts as repetition",
   "requested_level": "REPEATED",
   "falsifiers": ["require unique observation ids"],
-  "observations": [{"id":"same"},{"id":"same"},{"id":"same"}],
+  "observations": [{"id":"same","fingerprint":"same"},{"id":"same","fingerprint":"same"},{"id":"same","fingerprint":"same"}],
   "evidence": [{"source_type":"frida_runtime_dump","independence_group":"frida-agent","ref":"dump://same"}],
   "falsifier_attempted": true,
   "contradictory_evidence": []
@@ -508,7 +530,7 @@ cat > "$BUILD_DIR/false-independence-packet.json" <<'JSON'
   "hypothesis": "two labels from one collection channel count as independent evidence",
   "requested_level": "ASSOCIATED",
   "falsifiers": ["require independent acquisition groups"],
-  "observations": [{"id":1},{"id":2},{"id":3}],
+  "observations": [{"id":1,"fingerprint":"obs-a"},{"id":2,"fingerprint":"obs-b"},{"id":3,"fingerprint":"obs-c"}],
   "evidence": [
     {"source_type":"frida_runtime_dump","independence_group":"same-channel","ref":"dump://a"},
     {"source_type":"tombstone","independence_group":"same-channel","ref":"derived://a"}
@@ -528,7 +550,7 @@ cat > "$BUILD_DIR/boolean-only-causal-packet.json" <<'JSON'
   "hypothesis": "booleans alone prove causality",
   "requested_level": "CAUSAL_SUPPORTED",
   "falsifiers": ["remove condition"],
-  "observations": [{"id":1},{"id":2},{"id":3}],
+  "observations": [{"id":1,"fingerprint":"obs-a"},{"id":2,"fingerprint":"obs-b"},{"id":3,"fingerprint":"obs-c"}],
   "evidence": [
     {"source_type":"frida_runtime_dump","independence_group":"a","ref":"dump://a"},
     {"source_type":"tombstone","independence_group":"b","ref":"tombstone://b"}
@@ -541,6 +563,50 @@ cat > "$BUILD_DIR/boolean-only-causal-packet.json" <<'JSON'
 }
 JSON
 
+cat > "$BUILD_DIR/duplicate-ref-packet.json" <<'JSON'
+{
+  "schema": "rafaelia.runtime-stability.falsifiability-packet/v1",
+  "hypothesis_id": "H-DUP-REF",
+  "hypothesis": "two labels over one evidence reference are independent",
+  "requested_level": "ASSOCIATED",
+  "falsifiers": ["require distinct physical/acquisition references"],
+  "observations": [{"id":1,"fingerprint":"obs-a"},{"id":2,"fingerprint":"obs-b"},{"id":3,"fingerprint":"obs-c"}],
+  "evidence": [
+    {"source_type":"frida_runtime_dump","independence_group":"channel-a","ref":"same://evidence"},
+    {"source_type":"tombstone","independence_group":"channel-b","ref":"same://evidence"}
+  ],
+  "falsifier_attempted": true,
+  "falsifier_results": [{"falsifier":"require distinct physical/acquisition references","result":"DUPLICATE_REF_FOUND"}],
+  "alternative_explanations_checked": true,
+  "alternative_explanations": [{"name":"derived_duplicate","status":"BOUNDED_NOT_EXPLANATORY"}],
+  "contradictory_evidence": []
+}
+JSON
+
+cat > "$BUILD_DIR/empty-structured-packet.json" <<'JSON'
+{
+  "schema": "rafaelia.runtime-stability.falsifiability-packet/v1",
+  "hypothesis_id": "H-EMPTY-STRUCTURE",
+  "hypothesis": "empty dictionaries satisfy causal evidence records",
+  "requested_level": "CAUSAL_SUPPORTED",
+  "falsifiers": ["empty records must fail"],
+  "observations": [{"id":1,"fingerprint":"obs-a"},{"id":2,"fingerprint":"obs-b"},{"id":3,"fingerprint":"obs-c"}],
+  "evidence": [
+    {"source_type":"frida_runtime_dump","independence_group":"a","ref":"dump://a"},
+    {"source_type":"tombstone","independence_group":"b","ref":"tomb://b"}
+  ],
+  "falsifier_attempted": true,
+  "falsifier_results": [{}],
+  "temporal_precedence": true,
+  "temporal_order_evidence": [{}],
+  "intervention_or_reversal": true,
+  "interventions": [{}],
+  "alternative_explanations_checked": true,
+  "alternative_explanations": [{}],
+  "contradictory_evidence": []
+}
+JSON
+
 cat > "$BUILD_DIR/causal-fail-packet.json" <<'JSON'
 {
   "schema": "rafaelia.runtime-stability.falsifiability-packet/v1",
@@ -548,7 +614,7 @@ cat > "$BUILD_DIR/causal-fail-packet.json" <<'JSON'
   "hypothesis": "one drift observation caused the crash",
   "requested_level": "CAUSAL_SUPPORTED",
   "falsifiers": ["repeat without the drift"],
-  "observations": [{"id":1}],
+  "observations": [{"id":1,"fingerprint":"obs-only"}],
   "evidence": [{"source_type":"frida_runtime_dump","independence_group":"frida-agent","ref":"dump://only"}],
   "falsifier_attempted": false,
   "temporal_precedence": false,
@@ -588,6 +654,18 @@ set -e
 [[ "$BOOLEAN_CAUSAL_RC" -eq 2 ]] || rafaelia_die "boolean-only causal packet was accepted"
 
 set +e
+python3 tools/runtime-stability-evidence-gate.py   "$BUILD_DIR/duplicate-ref-packet.json" --out "$BUILD_DIR/duplicate-ref-result.json"
+DUP_REF_RC=$?
+set -e
+[[ "$DUP_REF_RC" -eq 2 ]] || rafaelia_die "duplicate evidence refs were accepted as independent"
+
+set +e
+python3 tools/runtime-stability-evidence-gate.py   "$BUILD_DIR/empty-structured-packet.json" --out "$BUILD_DIR/empty-structured-result.json"
+EMPTY_STRUCTURE_RC=$?
+set -e
+[[ "$EMPTY_STRUCTURE_RC" -eq 2 ]] || rafaelia_die "empty structured causal records were accepted"
+
+set +e
 python3 tools/runtime-stability-evidence-gate.py   "$BUILD_DIR/causal-fail-packet.json" --out "$BUILD_DIR/causal-fail-result.json"
 CAUSAL_FAIL_RC=$?
 set -e
@@ -617,6 +695,8 @@ assert both_missing['classification'] == 'INSUFFICIENT_OBSERVATION'
 assert both_missing['comparison_status'] == 'FAIL_CLOSED'
 assert json.loads((root/'capture-race.out.json').read_text())['classification'] == 'INCOMPARABLE_CAPTURE_RACE'
 assert json.loads((root/'elapsed-only.out.json').read_text())['classification'] == 'NO_OBSERVED_DRIFT'
+assert json.loads((root/'native-only.out.json').read_text())['classification'] == 'NO_OBSERVED_DRIFT'
+assert json.loads((root/'java-vs-native.out.json').read_text())['classification'] == 'IDENTITY_DRIFT'
 robust = json.loads((root/'robust-baseline.json').read_text())
 assert robust['baseline_gate'] == 'PASS'
 assert robust['sample_count'] == 3
@@ -655,6 +735,10 @@ assert false_independence['causal_claim_allowed'] is False
 causal_fail = json.loads((root/'causal-fail-result.json').read_text())
 assert causal_fail['gate'] == 'FAIL'
 assert causal_fail['causal_claim_allowed'] is False
+duplicate_ref = json.loads((root/'duplicate-ref-result.json').read_text())
+assert duplicate_ref['gate'] == 'FAIL'
+empty_structured = json.loads((root/'empty-structured-result.json').read_text())
+assert empty_structured['gate'] == 'FAIL'
 PY
 
 rafaelia_write_sha256_manifest "$EVIDENCE_DIR/SOURCE_SHA256SUMS.txt"   agents/android-runtime-stability-dump.js   profiles/android-runtime-stability-dump.v1.json   profiles/runtime-stability-methodology.v1.json   profiles/runtime-stability-methods-matrix.v1.json   tools/runtime-stability-diff.py   tools/capture-runtime-stability-dump.py   tools/runtime_stability_storage.py   tools/runtime-stability-baseline.py   tools/runtime-stability-evidence-gate.py   docs/android-runtime-stability-dump.md   docs/runtime-stability-falsifiability.md
@@ -705,6 +789,11 @@ receipt = {
     'boolean_only_causal_promotion_rejected': 'PASS',
     'causal_structure_never_auto_allows_claim': 'PASS',
     'local_dump_hash_chain_tested': 'PASS',
+    'native_only_scope_supported': 'PASS',
+    'java_vs_native_scope_separated': 'PASS',
+    'duplicate_evidence_ref_rejected': 'PASS',
+    'empty_structured_causal_records_rejected': 'PASS',
+    'observation_fingerprint_required_for_repetition': 'PASS',
     'atomic_publication_contract_static': 'PASS',
     'storage_atomic_publish_executed': 'PASS',
     'storage_tamper_detection_executed': 'PASS',
