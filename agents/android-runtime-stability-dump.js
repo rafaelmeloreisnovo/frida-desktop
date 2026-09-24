@@ -282,6 +282,7 @@ async function collectSnapshot(reason) {
     pointer_size: Process.pointerSize,
     page_size: Process.pageSize,
     platform: Process.platform,
+    java_available: java.available === true,
     java_identity: java.identity || 'TOKEN_VAZIO'
   };
 
@@ -324,6 +325,8 @@ async function collectSnapshot(reason) {
     consistency: {
       snapshot_atomic: false,
       capture_model: 'NON_ATOMIC_SEQUENTIAL_OBSERVATION',
+      module_churn_detection:
+          'ENDPOINT_FENCE_ONLY_TRANSIENT_CHURN_BETWEEN_FENCES_MAY_ESCAPE',
       module_surface_stable_during_capture: moduleSurfaceStableDuringCapture,
       module_surface_start_hint: modulesAtStart.stable_set_fingerprint,
       module_surface_end_hint: modules.stable_set_fingerprint,
@@ -339,7 +342,8 @@ async function collectSnapshot(reason) {
         'pointer_size',
         'page_size',
         'platform',
-        'java_identity'
+        'java_available',
+        'java_identity_when_available'
       ],
       recognition_surface: [
         'loaded_module_name_size_multiset',
