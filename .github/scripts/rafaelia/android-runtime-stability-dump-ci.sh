@@ -58,6 +58,8 @@ cat > "$BUILD_DIR/baseline.json" <<'JSON'
   "platform_key": "plat1111",
   "module_surface_key": "mod11111",
   "recognition_key": "rec11111",
+  "observer": {"agent_schema":"rafaelia.android.runtime-stability/v1","frida_version":"17.0.0","instrumentation_present":true,"capture_wall_duration_ms":2},
+  "capture_provenance": {"agent_sha256":"agent-a","controller_sha256":"controller-a","frida_python_version":"17.0.0"},
   "runtime_state": {
     "debugger_attached": true,
     "code_signing_policy": "optional",
@@ -112,6 +114,17 @@ identity = json.loads(json.dumps(base))
 identity['platform_key'] = 'plat2222'
 identity['stable_identity']['arch'] = 'arm64'
 (root/'identity.json').write_text(json.dumps(identity))
+
+hint_only = json.loads(json.dumps(base))
+hint_only['platform_key'] = 'different-hint'
+hint_only['module_surface_key'] = 'different-module-hint'
+hint_only['recognition_key'] = 'different-recognition-hint'
+hint_only['runtime_state']['modules']['stable_set_fingerprint'] = 'different-fnv'
+(root/'hint-only.json').write_text(json.dumps(hint_only))
+
+observer = json.loads(json.dumps(base))
+observer['observer']['frida_version'] = '18.0.0'
+(root/'observer.json').write_text(json.dumps(observer))
 PY
 
 python3 tools/runtime-stability-diff.py   "$BUILD_DIR/baseline.json" "$BUILD_DIR/runtime.json"   --out "$BUILD_DIR/runtime-drift.json"
@@ -119,6 +132,8 @@ python3 tools/runtime-stability-diff.py   "$BUILD_DIR/baseline.json" "$BUILD_DIR
 python3 tools/runtime-stability-diff.py   "$BUILD_DIR/baseline.json" "$BUILD_DIR/identity.json"   --out "$BUILD_DIR/identity-drift.json"
 python3 tools/runtime-stability-diff.py   "$BUILD_DIR/baseline.json" "$BUILD_DIR/hash-collision.json"   --out "$BUILD_DIR/hash-collision-drift.json"
 python3 tools/runtime-stability-diff.py   "$BUILD_DIR/baseline.json" "$BUILD_DIR/aslr-only.json"   --out "$BUILD_DIR/aslr-only.json.out"
+python3 tools/runtime-stability-diff.py   "$BUILD_DIR/baseline.json" "$BUILD_DIR/hint-only.json"   --out "$BUILD_DIR/hint-only.out.json"
+python3 tools/runtime-stability-diff.py   "$BUILD_DIR/baseline.json" "$BUILD_DIR/observer.json"   --out "$BUILD_DIR/observer-drift.json"
 
 python3 - <<'PY'
 import json
@@ -205,6 +220,20 @@ cat > "$BUILD_DIR/causal-pass-packet.json" <<'JSON'
 }
 JSON
 
+cat > "$BUILD_DIR/duplicate-observation-packet.json" <<'JSON'
+{
+  "schema": "rafaelia.runtime-stability.falsifiability-packet/v1",
+  "hypothesis_id": "H-DUP-OBS",
+  "hypothesis": "duplicating one observation counts as repetition",
+  "requested_level": "REPEATED",
+  "falsifiers": ["require unique observation ids"],
+  "observations": [{"id":"same"},{"id":"same"},{"id":"same"}],
+  "evidence": [{"source_type":"frida_runtime_dump","independence_group":"frida-agent","ref":"dump://same"}],
+  "falsifier_attempted": true,
+  "contradictory_evidence": []
+}
+JSON
+
 cat > "$BUILD_DIR/false-independence-packet.json" <<'JSON'
 {
   "schema": "rafaelia.runtime-stability.falsifiability-packet/v1",
@@ -246,6 +275,12 @@ python3 tools/runtime-stability-evidence-gate.py   "$BUILD_DIR/repeated-packet.j
 python3 tools/runtime-stability-evidence-gate.py   "$BUILD_DIR/causal-pass-packet.json" --out "$BUILD_DIR/causal-pass-result.json"
 
 set +e
+python3 tools/runtime-stability-evidence-gate.py   "$BUILD_DIR/duplicate-observation-packet.json" --out "$BUILD_DIR/duplicate-observation-result.json"
+DUP_OBS_RC=$?
+set -e
+[[ "$DUP_OBS_RC" -eq 2 ]] || rafaelia_die "duplicate observations were accepted as repetition"
+
+set +e
 python3 tools/runtime-stability-evidence-gate.py   "$BUILD_DIR/false-independence-packet.json" --out "$BUILD_DIR/false-independence-result.json"
 FALSE_INDEPENDENCE_RC=$?
 set -e
@@ -268,6 +303,11 @@ assert json.loads((root/'module-drift.json').read_text())['classification'] == '
 assert json.loads((root/'identity-drift.json').read_text())['classification'] == 'IDENTITY_DRIFT'
 assert json.loads((root/'hash-collision-drift.json').read_text())['classification'] == 'MODULE_SURFACE_DRIFT'
 assert json.loads((root/'aslr-only.json.out').read_text())['classification'] == 'NO_OBSERVED_DRIFT'
+hint = json.loads((root/'hint-only.out.json').read_text())
+assert hint['classification'] == 'NO_OBSERVED_DRIFT'
+assert len(hint['hint_changes']) >= 1
+assert hint['compact_fingerprints_authoritative'] is False
+assert json.loads((root/'observer-drift.json').read_text())['classification'] == 'OBSERVER_DRIFT'
 robust = json.loads((root/'robust-baseline.json').read_text())
 assert robust['baseline_gate'] == 'PASS'
 assert robust['sample_count'] == 3
@@ -282,6 +322,8 @@ causal_pass = json.loads((root/'causal-pass-result.json').read_text())
 assert causal_pass['gate'] == 'PASS'
 assert causal_pass['highest_supported_level'] == 'CAUSAL_SUPPORTED'
 assert causal_pass['causal_claim_allowed'] is True
+duplicate_observation = json.loads((root/'duplicate-observation-result.json').read_text())
+assert duplicate_observation['gate'] == 'FAIL'
 false_independence = json.loads((root/'false-independence-result.json').read_text())
 assert false_independence['gate'] == 'FAIL'
 assert false_independence['causal_claim_allowed'] is False
@@ -320,6 +362,9 @@ receipt = {
     'duplicate_baseline_rejected': 'PASS',
     'identity_inconsistent_baseline_rejected': 'PASS',
     'false_independence_rejected': 'PASS',
+    'duplicate_observation_rejected': 'PASS',
+    'compact_hint_non_authority': 'PASS',
+    'observer_drift_separated': 'PASS',
     'atomic_publication_contract_static': 'PASS',
     'frida_device_execution': 'TOKEN_VAZIO',
     'physical_stability': 'TOKEN_VAZIO',
