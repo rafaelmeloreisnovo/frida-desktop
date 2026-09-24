@@ -56,6 +56,10 @@
       "memory PSI when available",
       "kernel release/machine",
       "context is external to the target and cannot by itself establish causality"
+    ],
+    "runtime_scope": [
+      "JAVA_AWARE when Java.available=true and Java/ART identity is observed",
+      "NATIVE_ONLY when Java.available=false; Java absence is an observation scope, not a failure"
     ]
   },
   "recognition": {
@@ -67,7 +71,8 @@
       "Java build/runtime identity"
     ],
     "module_surface_key": [
-      "loaded module name+size set"
+      "loaded module basename+size multiset",
+      "privacy-bounded recognition surface; not exact file identity"
     ],
     "combined_recognition_key": [
       "platform_key",
@@ -81,7 +86,8 @@
       "heap counters",
       "thread counts"
     ],
-    "module_surface_ambiguity": "duplicate module basenames are reported; full paths remain intentionally uncollected"
+    "module_surface_ambiguity": "duplicate module basenames are reported; full paths remain intentionally uncollected",
+    "java_scope_rule": "java_available is part of stable identity; java_identity is required only when java_available=true"
   },
   "privacy": {
     "forbidden": [
@@ -117,7 +123,9 @@
     "Frida Cloak-aware introspection may omit instrumentation-owned resources",
     "memory ranges are enumerated once and aggregated by exact returned protection; overlapping permission filters are forbidden",
     "device elapsed time is clock context and does not by itself constitute runtime drift",
-    "local platform context is CONTEXT_ONLY and is not target-process identity"
+    "local platform context is CONTEXT_ONLY and is not target-process identity",
+    "Java unavailable != collector failure when java_available=false",
+    "JAVA_AWARE and NATIVE_ONLY observations are different stable identity scopes"
   ],
   "file_contract": {
     "default_directory": "~/.local/state/rafaelia/frida-runtime-stability",
