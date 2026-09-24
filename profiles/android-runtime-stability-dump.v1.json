@@ -34,6 +34,18 @@
       "SELinux causal attribution without denial evidence",
       "physical memory pressure without a measured source",
       "crash causality without reproduction/corroboration"
+    ],
+    "observer_context": [
+      "agent schema and Frida version",
+      "capture start/finish wall clock",
+      "capture duration",
+      "instrumentation presence",
+      "observer-effect declaration"
+    ],
+    "clock_context": [
+      "wall epoch",
+      "device elapsed time when Java is available",
+      "approximate boot epoch = wall - elapsed"
     ]
   },
   "recognition": {
@@ -82,7 +94,9 @@
     "runtime drift is not automatically classified as instability",
     "absence of a source remains TOKEN_VAZIO",
     "a dump is evidence, not a causal claim",
-    "the agent never repairs, resumes, patches or mutates the target"
+    "the agent never repairs, resumes, patches or mutates the target",
+    "observer state and capture duration are evidence dimensions, not invisible implementation details",
+    "estimated boot epoch is approximate context, not a trusted clock authority"
   ],
   "file_contract": {
     "default_directory": "~/.local/state/rafaelia/frida-runtime-stability",
