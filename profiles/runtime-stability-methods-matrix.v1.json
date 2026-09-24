@@ -163,6 +163,32 @@
       "status": "IMPLEMENTED_HOSTED",
       "artifact": "tools/runtime-stability-evidence-gate.py",
       "boundary": "CAUSAL_SUPPORTED structural completeness never auto-sets causal_claim_allowed or claim_allowed"
+    },
+    {
+      "method": "experimental_condition_control",
+      "status": "IMPLEMENTED_HOSTED",
+      "mechanism": "condition_id must match for comparable pairwise/baseline analysis; UNSPECIFIED remains descriptive-only"
+    },
+    {
+      "method": "process_generation_disambiguation",
+      "status": "IMPLEMENTED_JAVA_AWARE_PHYSICAL_TOKEN_VAZIO",
+      "mechanism": "PID plus Android Process.getStartElapsedRealtime distinguishes process instance from application/platform identity"
+    },
+    {
+      "method": "boot_session_disambiguation",
+      "status": "IMPLEMENTED_CONTROLLER_PHYSICAL_TOKEN_VAZIO",
+      "mechanism": "same-device controller hashes per-boot kernel boot_id; cross-boot observations remain a separate dimension"
+    },
+    {
+      "method": "memory_covariate_capture",
+      "status": "IMPLEMENTED_JAVA_AWARE_AND_CONTROLLER_PHYSICAL_TOKEN_VAZIO",
+      "mechanism": "PSS/native heap plus bounded system meminfo/PSI are covariates, not causal claims"
+    },
+    {
+      "method": "concurrent_writer_serialization",
+      "status": "IMPLEMENTED_HOSTED",
+      "artifact": "tools/runtime_stability_storage.py",
+      "falsifier": "stale predecessor must be rejected before append publication"
     }
   ]
 }
