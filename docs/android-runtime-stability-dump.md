@@ -1,4 +1,4 @@
-# Android runtime stability dump
+# Android runtime stability dump — V2 falsifiable contract
 
 ## Purpose
 
@@ -154,12 +154,18 @@ Save two emitted dump objects as JSON and run:
 python3 tools/runtime-stability-diff.py baseline.json candidate.json
 ```
 
-Possible classifications:
+V2 classifications, in fail-closed priority order:
 
-- `NO_OBSERVED_DRIFT`
-- `RUNTIME_DRIFT`
-- `MODULE_SURFACE_DRIFT`
-- `IDENTITY_DRIFT`
+- `INCOMPARABLE` — unsupported/incomplete schema;
+- `VISIBILITY_DRIFT` — the observer can no longer see the same evidence surface;
+- `INSTRUMENTATION_DRIFT` — Frida version or JS runtime changed;
+- `IDENTITY_DRIFT` — target platform/build identity changed;
+- `MODULE_SURFACE_DRIFT` — full module `name+size` projection changed;
+- `RUNTIME_DRIFT` — comparable volatile runtime state changed;
+- `NO_OBSERVED_DRIFT`.
+
+Clock position, capture duration, PID/TID, ASLR bases and compact hash hints
+are reported but excluded from the stability classification.
 
 None of these establishes root cause.
 
@@ -191,3 +197,125 @@ PHYSICAL_STABILITY     = TOKEN_VAZIO
 CAUSAL_ATTRIBUTION     = TOKEN_VAZIO
 claim_allowed          = false
 ```
+
+
+## V2 omission audit
+
+V2 exists because several apparently small details can invalidate a stability
+conclusion if they are left implicit.
+
+### Exact memory-range accounting
+
+Frida protection filters are minimum-permission filters. For example, `rw-`
+means "at least readable and writable", not an exclusive class. V1 queried
+multiple filters independently, which could overlap. V2 enumerates the range
+surface once with the all-range filter and buckets each returned range by its
+**exact** `range.protection`.
+
+This invariant is now falsified in CI if the old overlapping-query pattern
+returns.
+
+### Clock and process-instance separation
+
+A later snapshot naturally has a different clock. A restarted process naturally
+has a different PID. Neither fact is itself instability.
+
+V2 therefore reports:
+- wall and monotonic clock coordinates;
+- capture duration;
+- PID/TID process-instance changes;
+
+but excludes them from the stability classification.
+
+### Instrument versus target
+
+`Frida.version` and `Script.runtime` are recorded as
+`instrumentation_identity`. A changed instrument is classified separately
+from a changed target.
+
+Frida's own heap footprint and capture duration are also recorded so observer
+cost is measured instead of assumed to be zero.
+
+### Visibility is evidence
+
+If modules, threads, Java runtime or memory ranges stop being observable, the
+result is `VISIBILITY_DRIFT`. V2 does not reinterpret missing evidence as a
+target change.
+
+### Non-atomic snapshot
+
+The sensor reads several subsystems sequentially. It does not stop all target
+threads and therefore cannot honestly claim an atomic world-state.
+
+```text
+consistency_model = BEST_EFFORT_NON_ATOMIC
+```
+
+Start/end clock coordinates and collection duration bound the observation
+window.
+
+### Controlled reason vocabulary
+
+The RPC reason is allowlisted. Unknown caller text becomes
+`CALLER_DEFINED`; arbitrary text is not persisted into the dump.
+
+### Optional event-driven dynamics
+
+V2 keeps snapshots as the default and adds opt-in module/thread observers:
+
+```text
+startobservers(false)
+stopobservers()
+```
+
+They are event-driven rather than periodic. Existing modules/threads are
+suppressed by default; callers may explicitly request the initial surface.
+Thread names and previous names are never emitted.
+
+### Append-only evidence chain
+
+The controller now creates:
+
+```text
+runtime-stability-<UTC>.json
+runtime-stability-<UTC>.json.sha256
+ledger.jsonl
+```
+
+Each ledger record points to the preceding dump SHA-256. Writes remain
+exclusive-create + `fsync`; non-loopback Frida endpoints are refused unless
+the caller explicitly opts in with `--allow-remote`; dump size is bounded
+(default 8 MiB).
+
+## Falsification methodology
+
+The machine-readable matrix lives at:
+
+```text
+profiles/runtime-stability-falsification-matrix.v1.json
+```
+
+Each hypothesis contains a claim, positive control, falsifier and evidence
+gate. Hosted CI attempts to break invariants such as ASLR invariance,
+hash-hint non-authority, clock/PID exclusion, schema fail-closed behavior,
+visibility/instrument separation and append-only hash chaining.
+
+A physical stability claim is not promoted by hosted tests. The current
+promotion contract requires independent device runs and the relevant physical
+context. LMKD cause, SELinux causality, memory-pressure cause and crash root
+cause stay `TOKEN_VAZIO` until an independent source supplies that evidence.
+
+## Alternatives retained or rejected
+
+| Alternative | State | Reason |
+| --- | --- | --- |
+| on-demand structural snapshot | IMPLEMENTED DEFAULT | bounded, neutral evidence |
+| module/thread event observers | IMPLEMENTED OPT-IN | dynamic evidence without polling |
+| periodic polling | REJECTED AS DEFAULT | observer load and self-interference |
+| full memory/payload dump | REJECTED | privacy, size and causal ambiguity |
+| LMKD/SELinux/tombstone correlation | EXTERNAL EVIDENCE REQUIRED | must remain an independent source |
+| HyperMemory causal tail | SUCCESSOR BRIDGE REQUIRED | dump provides context, not root cause |
+
+This is intentional: rigor means implementing useful alternatives **and**
+recording why alternatives that weaken falsifiability or operational integrity
+are not promoted.
