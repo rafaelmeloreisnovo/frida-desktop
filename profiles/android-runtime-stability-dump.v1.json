@@ -8,7 +8,12 @@
     "rpc_snapshot": true,
     "periodic_polling": false,
     "active_mutation": false,
-    "append_only_file_controller": true
+    "append_only_file_controller": true,
+    "condition_id": {
+      "default": "UNSPECIFIED",
+      "syntax": "[A-Za-z0-9_.-]{1,64}",
+      "semantics": "comparability label, not a causal variable"
+    }
   },
   "semantic_layers": {
     "stable_identity": [
@@ -60,6 +65,19 @@
     "runtime_scope": [
       "JAVA_AWARE when Java.available=true and Java/ART identity is observed",
       "NATIVE_ONLY when Java.available=false; Java absence is an observation scope, not a failure"
+    ],
+    "process_instance_context": [
+      "pid",
+      "Process.getStartElapsedRealtime when Java-aware",
+      "process age",
+      "per-process elapsed CPU time",
+      "process instance drift is distinct from platform identity drift"
+    ],
+    "memory_context": [
+      "Java heap total/free/max",
+      "native heap size/allocated/free",
+      "PSS when Java-aware",
+      "selected same-device system memory/PSI context when available"
     ]
   },
   "recognition": {
@@ -125,7 +143,11 @@
     "device elapsed time is clock context and does not by itself constitute runtime drift",
     "local platform context is CONTEXT_ONLY and is not target-process identity",
     "Java unavailable != collector failure when java_available=false",
-    "JAVA_AWARE and NATIVE_ONLY observations are different stable identity scopes"
+    "JAVA_AWARE and NATIVE_ONLY observations are different stable identity scopes",
+    "condition mismatch is incomparable rather than drift",
+    "process restart/generation drift != platform identity drift",
+    "boot-session drift != runtime bug",
+    "PSS is contextual and may vary with shared-memory attribution"
   ],
   "file_contract": {
     "default_directory": "~/.local/state/rafaelia/frida-runtime-stability",
