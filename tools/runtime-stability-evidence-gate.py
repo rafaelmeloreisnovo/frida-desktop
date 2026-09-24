@@ -11,6 +11,7 @@ from __future__ import annotations
 import argparse
 import json
 from pathlib import Path
+import re
 from typing import Any
 
 
@@ -131,8 +132,11 @@ def observation_identity(
             ids.append(str(identifier))
 
         fingerprint = item.get("fingerprint")
-        if nonempty_text(fingerprint):
-            fingerprints.append(str(fingerprint).strip())
+        if (
+            nonempty_text(fingerprint)
+            and re.fullmatch(r"[0-9a-fA-F]{64}", str(fingerprint).strip())
+        ):
+            fingerprints.append(str(fingerprint).strip().lower())
 
     ids_unique = complete and len(ids) == len(values) and len(set(ids)) == len(ids)
     fingerprints_complete = (
@@ -298,16 +302,16 @@ def gate(packet: dict[str, Any]) -> dict[str, Any]:
         add(field, (observed is True) if required else True, observed, required)
 
     falsifier_results, falsifier_valid = structured_records(
-        packet, "falsifier_results", ("falsifier", "result")
+        packet, "falsifier_results", ("falsifier", "result", "evidence_ref")
     )
     temporal_records, temporal_valid = structured_records(
-        packet, "temporal_order_evidence", ("source", "result")
+        packet, "temporal_order_evidence", ("source", "result", "evidence_ref")
     )
     interventions, interventions_valid = structured_records(
-        packet, "interventions", ("kind", "result")
+        packet, "interventions", ("kind", "result", "evidence_ref")
     )
     alternatives, alternatives_valid = structured_records(
-        packet, "alternative_explanations", ("name", "status")
+        packet, "alternative_explanations", ("name", "status", "evidence_ref")
     )
 
     if req["requires_falsifier_attempt"]:
@@ -318,7 +322,7 @@ def gate(packet: dict[str, Any]) -> dict[str, Any]:
                 "count": len(falsifier_results),
                 "structurally_valid": falsifier_valid,
             },
-            ">=1 non-empty structured falsifier result",
+            ">=1 non-empty falsifier/result/evidence_ref record",
         )
     if req["requires_temporal_precedence"]:
         add(
@@ -328,7 +332,7 @@ def gate(packet: dict[str, Any]) -> dict[str, Any]:
                 "count": len(temporal_records),
                 "structurally_valid": temporal_valid,
             },
-            ">=1 non-empty structured temporal-order evidence item",
+            ">=1 non-empty source/result/evidence_ref temporal item",
         )
     if req["requires_intervention_or_reversal"]:
         add(
@@ -338,7 +342,7 @@ def gate(packet: dict[str, Any]) -> dict[str, Any]:
                 "count": len(interventions),
                 "structurally_valid": interventions_valid,
             },
-            ">=1 non-empty controlled intervention/reversal record",
+            ">=1 non-empty kind/result/evidence_ref intervention record",
         )
     if req["requires_alternative_explanation_check"]:
         add(
@@ -348,7 +352,7 @@ def gate(packet: dict[str, Any]) -> dict[str, Any]:
                 "count": len(alternatives),
                 "structurally_valid": alternatives_valid,
             },
-            ">=1 non-empty structured alternative-explanation review",
+            ">=1 non-empty name/status/evidence_ref alternative review",
         )
         if requested == "CAUSAL_SUPPORTED":
             unresolved_alternatives = [
