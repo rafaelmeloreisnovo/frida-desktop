@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
-"""Fail-closed epistemic gate for runtime-stability claims.
+"""Fail-closed structural methodology gate for runtime-stability evidence.
 
-The gate validates evidence structure; it does not decide scientific truth.
-Promotion is monotonic and requires increasingly strong, independently sourced
-evidence. Missing prerequisites remain TOKEN_VAZIO.
+This validates whether an evidence packet has the declared methodological
+structure. It never decides scientific truth and never authorizes a causal
+claim.
 """
 
 from __future__ import annotations
@@ -15,7 +15,7 @@ from typing import Any
 
 
 SCHEMA = "rafaelia.runtime-stability.falsifiability-packet/v1"
-RESULT_SCHEMA = "rafaelia.runtime-stability.falsifiability-result/v1"
+RESULT_SCHEMA = "rafaelia.runtime-stability.falsifiability-result/v2"
 
 LEVELS = [
     "OBSERVED",
@@ -29,6 +29,7 @@ REQUIREMENTS = {
     "OBSERVED": {
         "minimum_observations": 1,
         "minimum_independent_source_types": 1,
+        "requires_repeated_fingerprints": False,
         "requires_temporal_precedence": False,
         "requires_falsifier_attempt": False,
         "requires_intervention_or_reversal": False,
@@ -37,6 +38,7 @@ REQUIREMENTS = {
     "REPEATED": {
         "minimum_observations": 3,
         "minimum_independent_source_types": 1,
+        "requires_repeated_fingerprints": True,
         "requires_temporal_precedence": False,
         "requires_falsifier_attempt": True,
         "requires_intervention_or_reversal": False,
@@ -45,6 +47,7 @@ REQUIREMENTS = {
     "ASSOCIATED": {
         "minimum_observations": 3,
         "minimum_independent_source_types": 2,
+        "requires_repeated_fingerprints": True,
         "requires_temporal_precedence": False,
         "requires_falsifier_attempt": True,
         "requires_intervention_or_reversal": False,
@@ -53,6 +56,7 @@ REQUIREMENTS = {
     "CAUSAL_CANDIDATE": {
         "minimum_observations": 3,
         "minimum_independent_source_types": 2,
+        "requires_repeated_fingerprints": True,
         "requires_temporal_precedence": True,
         "requires_falsifier_attempt": True,
         "requires_intervention_or_reversal": False,
@@ -61,11 +65,17 @@ REQUIREMENTS = {
     "CAUSAL_SUPPORTED": {
         "minimum_observations": 3,
         "minimum_independent_source_types": 2,
+        "requires_repeated_fingerprints": True,
         "requires_temporal_precedence": True,
         "requires_falsifier_attempt": True,
         "requires_intervention_or_reversal": True,
         "requires_alternative_explanation_check": True,
     },
+}
+
+ALTERNATIVE_RESOLVED_STATES = {
+    "REJECTED_BY_EVIDENCE",
+    "BOUNDED_NOT_EXPLANATORY",
 }
 
 
@@ -76,41 +86,86 @@ def load(path: Path) -> dict[str, Any]:
     return value
 
 
-def source_types(packet: dict[str, Any]) -> set[str]:
-    out: set[str] = set()
-    for evidence in packet.get("evidence", []):
-        if not isinstance(evidence, dict):
-            continue
-        source_type = evidence.get("source_type")
-        if isinstance(source_type, str) and source_type:
-            out.add(source_type)
-    return out
+def nonempty_text(value: Any) -> bool:
+    return isinstance(value, str) and bool(value.strip())
 
 
-def independence_groups(packet: dict[str, Any]) -> set[str]:
-    out: set[str] = set()
-    for evidence in packet.get("evidence", []):
-        if not isinstance(evidence, dict):
-            continue
-        group = evidence.get("independence_group")
-        if isinstance(group, str) and group:
-            out.add(group)
-    return out
-
-
-def unique_observations(packet: dict[str, Any]) -> tuple[int, bool]:
-    values = packet.get("observations")
+def valid_evidence(packet: dict[str, Any]) -> list[dict[str, str]]:
+    values = packet.get("evidence")
     if not isinstance(values, list):
-        return 0, False
-    ids: list[str] = []
+        return []
+    out: list[dict[str, str]] = []
     for item in values:
         if not isinstance(item, dict):
-            return 0, False
-        value = item.get("id")
-        if value is None:
-            return 0, False
-        ids.append(str(value))
-    return len(set(ids)), len(set(ids)) == len(ids)
+            continue
+        source_type = item.get("source_type")
+        group = item.get("independence_group")
+        ref = item.get("ref")
+        if all(nonempty_text(value) for value in (source_type, group, ref)):
+            out.append({
+                "source_type": str(source_type).strip(),
+                "independence_group": str(group).strip(),
+                "ref": str(ref).strip(),
+            })
+    return out
+
+
+def observation_identity(
+    packet: dict[str, Any],
+) -> tuple[int, bool, int, bool, bool]:
+    values = packet.get("observations")
+    if not isinstance(values, list):
+        return 0, False, 0, False, False
+
+    ids: list[str] = []
+    fingerprints: list[str] = []
+    complete = True
+    for item in values:
+        if not isinstance(item, dict):
+            complete = False
+            continue
+        identifier = item.get("id")
+        if identifier is None:
+            complete = False
+        else:
+            ids.append(str(identifier))
+
+        fingerprint = item.get("fingerprint")
+        if nonempty_text(fingerprint):
+            fingerprints.append(str(fingerprint).strip())
+
+    ids_unique = complete and len(ids) == len(values) and len(set(ids)) == len(ids)
+    fingerprints_complete = (
+        len(fingerprints) == len(values)
+        and len(values) > 0
+    )
+    fingerprints_unique = (
+        fingerprints_complete
+        and len(set(fingerprints)) == len(fingerprints)
+    )
+    return (
+        len(set(ids)),
+        ids_unique,
+        len(set(fingerprints)),
+        fingerprints_complete,
+        fingerprints_unique,
+    )
+
+
+def structured_records(
+    packet: dict[str, Any],
+    field: str,
+    required_text_fields: tuple[str, ...],
+) -> tuple[list[dict[str, Any]], bool]:
+    values = packet.get(field, [])
+    if not isinstance(values, list):
+        return [], False
+    records = [item for item in values if isinstance(item, dict)]
+    valid = len(records) == len(values)
+    for item in records:
+        if not all(nonempty_text(item.get(key)) for key in required_text_fields):
+            valid = False
+    return records, valid
 
 
 def gate(packet: dict[str, Any]) -> dict[str, Any]:
@@ -123,18 +178,42 @@ def gate(packet: dict[str, Any]) -> dict[str, Any]:
 
     hypothesis = packet.get("hypothesis")
     falsifiers = packet.get("falsifiers")
-    if not isinstance(hypothesis, str) or not hypothesis.strip():
+    if not nonempty_text(hypothesis):
         raise ValueError("hypothesis is required")
-    if not isinstance(falsifiers, list) or not falsifiers:
-        raise ValueError("at least one explicit falsifier is required")
+    if (
+        not isinstance(falsifiers, list)
+        or not falsifiers
+        or not all(nonempty_text(item) for item in falsifiers)
+    ):
+        raise ValueError("at least one non-empty explicit falsifier is required")
 
+    req = REQUIREMENTS[requested]
     observations = packet.get("observations")
     if not isinstance(observations, list):
         observations = []
 
-    unique_observation_count, observations_unique = unique_observations(packet)
-    types = source_types(packet)
-    groups = independence_groups(packet)
+    (
+        unique_observation_count,
+        observations_unique,
+        unique_fingerprint_count,
+        fingerprints_complete,
+        fingerprints_unique,
+    ) = observation_identity(packet)
+
+    evidence = valid_evidence(packet)
+    declared_evidence = packet.get("evidence")
+    declared_evidence_count = (
+        len(declared_evidence) if isinstance(declared_evidence, list) else 0
+    )
+    evidence_structurally_valid = (
+        declared_evidence_count > 0
+        and len(evidence) == declared_evidence_count
+    )
+    types = {item["source_type"] for item in evidence}
+    groups = {item["independence_group"] for item in evidence}
+    refs = [item["ref"] for item in evidence]
+    unique_refs = set(refs)
+
     checks: list[dict[str, Any]] = []
 
     def add(name: str, passed: bool, observed: Any, required: Any) -> None:
@@ -145,12 +224,40 @@ def gate(packet: dict[str, Any]) -> dict[str, Any]:
             "required": required,
         })
 
-    req = REQUIREMENTS[requested]
     add(
         "minimum_observations",
-        unique_observation_count >= req["minimum_observations"] and observations_unique,
-        {"declared": len(observations), "unique": unique_observation_count, "all_unique": observations_unique},
+        unique_observation_count >= req["minimum_observations"]
+        and observations_unique,
+        {
+            "declared": len(observations),
+            "unique_ids": unique_observation_count,
+            "all_ids_unique": observations_unique,
+        },
         req["minimum_observations"],
+    )
+
+    if req["requires_repeated_fingerprints"]:
+        add(
+            "distinct_observation_fingerprints",
+            fingerprints_complete
+            and fingerprints_unique
+            and unique_fingerprint_count >= req["minimum_observations"],
+            {
+                "unique_fingerprints": unique_fingerprint_count,
+                "complete": fingerprints_complete,
+                "all_unique": fingerprints_unique,
+            },
+            req["minimum_observations"],
+        )
+
+    add(
+        "evidence_records_structurally_valid",
+        evidence_structurally_valid,
+        {
+            "declared": declared_evidence_count,
+            "valid": len(evidence),
+        },
+        "all evidence records require source_type, independence_group and ref",
     )
     add(
         "independent_source_types",
@@ -164,91 +271,122 @@ def gate(packet: dict[str, Any]) -> dict[str, Any]:
         sorted(groups),
         req["minimum_independent_source_types"],
     )
+    if req["minimum_independent_source_types"] >= 2:
+        add(
+            "distinct_evidence_refs",
+            len(unique_refs) >= req["minimum_independent_source_types"]
+            and len(unique_refs) == len(refs),
+            sorted(unique_refs),
+            (
+                f">={req['minimum_independent_source_types']} distinct refs "
+                "with no duplicated evidence ref"
+            ),
+        )
 
     booleans = [
         ("temporal_precedence", "requires_temporal_precedence"),
         ("falsifier_attempted", "requires_falsifier_attempt"),
         ("intervention_or_reversal", "requires_intervention_or_reversal"),
-        ("alternative_explanations_checked", "requires_alternative_explanation_check"),
+        (
+            "alternative_explanations_checked",
+            "requires_alternative_explanation_check",
+        ),
     ]
     for field, requirement_name in booleans:
         required = bool(req[requirement_name])
         observed = packet.get(field, False)
-        passed = (observed is True) if required else True
-        add(field, passed, observed, required)
+        add(field, (observed is True) if required else True, observed, required)
 
-    falsifier_results = [
-        item for item in packet.get("falsifier_results", [])
-        if isinstance(item, dict)
-    ]
-    temporal_order_evidence = [
-        item for item in packet.get("temporal_order_evidence", [])
-        if isinstance(item, dict)
-    ]
-    interventions = [
-        item for item in packet.get("interventions", [])
-        if isinstance(item, dict)
-    ]
-    alternative_explanations = [
-        item for item in packet.get("alternative_explanations", [])
-        if isinstance(item, dict)
-    ]
+    falsifier_results, falsifier_valid = structured_records(
+        packet, "falsifier_results", ("falsifier", "result")
+    )
+    temporal_records, temporal_valid = structured_records(
+        packet, "temporal_order_evidence", ("source", "result")
+    )
+    interventions, interventions_valid = structured_records(
+        packet, "interventions", ("kind", "result")
+    )
+    alternatives, alternatives_valid = structured_records(
+        packet, "alternative_explanations", ("name", "status")
+    )
 
     if req["requires_falsifier_attempt"]:
         add(
             "falsifier_result_recorded",
-            len(falsifier_results) >= 1,
-            len(falsifier_results),
-            ">=1 structured falsifier result",
+            falsifier_valid and len(falsifier_results) >= 1,
+            {
+                "count": len(falsifier_results),
+                "structurally_valid": falsifier_valid,
+            },
+            ">=1 non-empty structured falsifier result",
         )
     if req["requires_temporal_precedence"]:
         add(
             "temporal_order_evidence_recorded",
-            len(temporal_order_evidence) >= 1,
-            len(temporal_order_evidence),
-            ">=1 structured temporal-order evidence item",
+            temporal_valid and len(temporal_records) >= 1,
+            {
+                "count": len(temporal_records),
+                "structurally_valid": temporal_valid,
+            },
+            ">=1 non-empty structured temporal-order evidence item",
         )
     if req["requires_intervention_or_reversal"]:
         add(
             "intervention_recorded",
-            len(interventions) >= 1,
-            len(interventions),
-            ">=1 controlled intervention/reversal record",
+            interventions_valid and len(interventions) >= 1,
+            {
+                "count": len(interventions),
+                "structurally_valid": interventions_valid,
+            },
+            ">=1 non-empty controlled intervention/reversal record",
         )
     if req["requires_alternative_explanation_check"]:
         add(
             "alternative_explanations_recorded",
-            len(alternative_explanations) >= 1,
-            len(alternative_explanations),
-            ">=1 structured alternative-explanation review",
+            alternatives_valid and len(alternatives) >= 1,
+            {
+                "count": len(alternatives),
+                "structurally_valid": alternatives_valid,
+            },
+            ">=1 non-empty structured alternative-explanation review",
         )
         if requested == "CAUSAL_SUPPORTED":
             unresolved_alternatives = [
-                item for item in alternative_explanations
-                if item.get("status") not in (
-                    "REJECTED_BY_EVIDENCE",
-                    "BOUNDED_NOT_EXPLANATORY",
-                )
+                item for item in alternatives
+                if item.get("status") not in ALTERNATIVE_RESOLVED_STATES
             ]
             add(
                 "alternative_explanations_resolved_for_causal_support",
-                not unresolved_alternatives,
+                alternatives_valid
+                and bool(alternatives)
+                and not unresolved_alternatives,
                 len(unresolved_alternatives),
                 0,
             )
 
-    contradictions = [
-        item for item in packet.get("contradictory_evidence", [])
-        if isinstance(item, dict)
-    ]
-    unresolved_contradiction = any(
-        item.get("resolved") is not True for item in contradictions
+    contradiction_values = packet.get("contradictory_evidence", [])
+    contradictions = (
+        [item for item in contradiction_values if isinstance(item, dict)]
+        if isinstance(contradiction_values, list)
+        else []
+    )
+    contradictions_valid = (
+        isinstance(contradiction_values, list)
+        and len(contradictions) == len(contradiction_values)
+        and all(nonempty_text(item.get("ref")) for item in contradictions)
+    )
+    unresolved_contradiction = (
+        not contradictions_valid
+        or any(item.get("resolved") is not True for item in contradictions)
     )
     add(
         "contradictory_evidence_resolved",
         not unresolved_contradiction,
-        len(contradictions),
-        "all contradictions resolved or explicitly superseded",
+        {
+            "count": len(contradictions),
+            "structurally_valid": contradictions_valid,
+        },
+        "all contradiction records valid and resolved/superseded",
     )
 
     passed = all(item["state"] == "PASS" for item in checks)
@@ -269,11 +407,13 @@ def gate(packet: dict[str, Any]) -> dict[str, Any]:
         gate_state = "FAIL"
 
     study_mode = packet.get("study_mode", "EXPLORATORY")
+    study_mode_valid = study_mode in ("EXPLORATORY", "CONFIRMATORY")
     hypothesis_registered_before_test = (
         packet.get("hypothesis_registered_before_test") is True
     )
-    confirmatory_ready = (
+    confirmatory_structure_ready = (
         passed
+        and study_mode_valid
         and study_mode == "CONFIRMATORY"
         and hypothesis_registered_before_test
     )
@@ -287,19 +427,21 @@ def gate(packet: dict[str, Any]) -> dict[str, Any]:
         "checks": checks,
         "source_types": sorted(types),
         "independence_groups": sorted(groups),
+        "evidence_refs": sorted(unique_refs),
         "contradictory_evidence_count": len(contradictions),
         "methodology_structure_complete": promoted_level != "TOKEN_VAZIO",
         "causal_support_structure_complete": promoted_level == "CAUSAL_SUPPORTED",
         "causal_claim_allowed": False,
-        "study_mode": study_mode,
+        "study_mode": study_mode if study_mode_valid else "TOKEN_VAZIO",
         "hypothesis_registered_before_test": hypothesis_registered_before_test,
-        "confirmatory_structure_ready": confirmatory_ready,
+        "confirmatory_structure_ready": confirmatory_structure_ready,
         "confirmatory_ready": False,
         "publication_grade_causal_support": False,
         "scientific_claim_review_required": True,
         "claim_allowed": False,
         "invariant": (
-            "observation != repetition != association != causal candidate != causal support; "
+            "observation != repetition != association != causal candidate "
+            "!= causal support; distinct id != distinct observation; "
             "methodology structure != scientific truth != claim permission"
         ),
     }
