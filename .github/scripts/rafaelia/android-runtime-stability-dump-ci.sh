@@ -32,7 +32,7 @@ assert profile['capture_mode']['periodic_polling'] is False
 assert profile['capture_mode']['event_observers_default'] is False
 assert profile['recognition']['compact_fingerprint_role'] == 'HINT_ONLY'
 assert profile['privacy']['target_selector_persisted'] is False
-assert len(matrix['hypotheses']) >= 15
+assert len(matrix['hypotheses']) >= 16
 assert all(row.get('falsifier') for row in matrix['hypotheses'])
 assert matrix['physical_promotion_rule']['minimum_independent_runs'] >= 3
 PY
@@ -50,6 +50,15 @@ grep -Fq "Script.runtime" agents/android-runtime-stability-dump.js
 grep -Fq "Process.attachModuleObserver" agents/android-runtime-stability-dump.js
 grep -Fq "Process.attachThreadObserver" agents/android-runtime-stability-dump.js
 grep -Fq "names_collected: false" agents/android-runtime-stability-dump.js
+grep -Fq "SAFE_SYSTEM_PROPERTIES" agents/android-runtime-stability-dump.js
+grep -Fq "Debug.getPss()" agents/android-runtime-stability-dump.js
+grep -Fq "runtime-stability-hypermemory-event/v1" modules/runtime-learning-engine/runtime-stability-hypermemory-bridge.ts
+grep -Fq "causality: 'NOT_INFERRED'" modules/runtime-learning-engine/runtime-stability-hypermemory-bridge.ts
+grep -Fq "full_module_list_embedded: false" modules/runtime-learning-engine/runtime-stability-hypermemory-bridge.ts
+
+if grep -En "ro\.boot\.psn|vendor\.gsm\.serial|gsm\.|ril\.|iccid|imsi|operator\.numeric|subscriber" agents/android-runtime-stability-dump.js; then
+  rafaelia_die 'forbidden telephony/device-identity property surfaced in stability agent'
+fi
 
 cat > "$BUILD_DIR/baseline.json" <<'JSON'
 {
@@ -72,7 +81,12 @@ cat > "$BUILD_DIR/baseline.json" <<'JSON'
     "pointer_size": 4,
     "page_size": 4096,
     "platform": "linux",
-    "java_identity": {"sdk": 29, "build_fingerprint": "test"}
+    "java_identity": {"sdk": 29, "build_fingerprint": "test"},
+    "platform_contract": {
+      "ro.zygote": "zygote32",
+      "sys.use_memfd": "false",
+      "ro.vndk.version": "29"
+    }
   },
   "platform_key_hint": "plat1111",
   "module_surface_key_hint": "mod11111",
@@ -117,7 +131,15 @@ cat > "$BUILD_DIR/baseline.json" <<'JSON'
       "java_heap_total_bytes": 100,
       "java_heap_free_bytes": 50,
       "java_heap_max_bytes": 200,
-      "native_heap_allocated_bytes": 25
+      "native_heap_allocated_bytes": 25,
+      "native_heap_size_bytes": 40,
+      "native_heap_free_bytes": 15,
+      "process_pss_kb": 12000,
+      "loaded_class_count": 5000
+    },
+    "android_services": {
+      "init.svc.lmkd": "running",
+      "init.svc.ashmemd": "running"
     }
   }
 }
@@ -140,6 +162,8 @@ put('same.json', lambda d: None)
 put('runtime.json', lambda d: d['runtime_state']['threads'].__setitem__('count', 5))
 put('module.json', lambda d: d['runtime_state']['modules']['modules'][1].__setitem__('size', 12288))
 put('identity.json', lambda d: d['stable_identity'].__setitem__('arch', 'arm64'))
+put('platform-contract.json', lambda d: d['stable_identity']['platform_contract'].__setitem__('sys.use_memfd', 'true'))
+put('service.json', lambda d: d['runtime_state']['android_services'].__setitem__('init.svc.lmkd', 'stopped'))
 put('instrumentation.json', lambda d: d['instrumentation_identity'].__setitem__('frida_version', '17.1.0'))
 put('visibility.json', lambda d: d['visibility'].__setitem__('memory_ranges', 'TOKEN_VAZIO'))
 put('aslr.json', lambda d: d['runtime_state']['modules']['modules'][0].__setitem__('base', '0x9000'))
@@ -161,6 +185,8 @@ run_diff same.json same.out.json
 run_diff runtime.json runtime.out.json
 run_diff module.json module.out.json
 run_diff identity.json identity.out.json
+run_diff platform-contract.json platform-contract.out.json
+run_diff service.json service.out.json
 run_diff instrumentation.json instrumentation.out.json
 run_diff visibility.json visibility.out.json
 run_diff aslr.json aslr.out.json
@@ -186,6 +212,8 @@ assert c('same.out.json')['classification'] == 'NO_OBSERVED_DRIFT'
 assert c('runtime.out.json')['classification'] == 'RUNTIME_DRIFT'
 assert c('module.out.json')['classification'] == 'MODULE_SURFACE_DRIFT'
 assert c('identity.out.json')['classification'] == 'IDENTITY_DRIFT'
+assert c('platform-contract.out.json')['classification'] == 'IDENTITY_DRIFT'
+assert c('service.out.json')['classification'] == 'RUNTIME_DRIFT'
 assert c('instrumentation.out.json')['classification'] == 'INSTRUMENTATION_DRIFT'
 assert c('visibility.out.json')['classification'] == 'VISIBILITY_DRIFT'
 assert c('aslr.out.json')['classification'] == 'NO_OBSERVED_DRIFT'
@@ -259,6 +287,8 @@ rafaelia_write_sha256_manifest "$EVIDENCE_DIR/SOURCE_SHA256SUMS.txt" \
   profiles/runtime-stability-falsification-matrix.v1.json \
   tools/runtime-stability-diff.py \
   tools/capture-runtime-stability-dump.py \
+  modules/runtime-learning-engine/runtime-stability-hypermemory-bridge.ts \
+  modules/runtime-learning-engine/tests/runtime-stability-hypermemory-bridge.test.ts \
   docs/android-runtime-stability-dump.md
 
 GITHUB_REPOSITORY="${GITHUB_REPOSITORY:-LOCAL}" GITHUB_RUN_ID="${GITHUB_RUN_ID:-0}" GITHUB_SHA="${GITHUB_SHA:-LOCAL}" python3 - <<'PY'
@@ -289,6 +319,9 @@ receipt = {
     'diff_compact_hint_non_authority': 'PASS',
     'append_only_hash_chain': 'PASS',
     'remote_endpoint_default_fail_closed': 'PASS',
+    'safe_system_property_allowlist': 'PASS',
+    'process_pss_surface': 'PASS',
+    'hypermemory_bridge_static_contract': 'PASS',
     'frida_device_execution': 'TOKEN_VAZIO',
     'physical_stability': 'TOKEN_VAZIO',
     'causal_attribution': 'TOKEN_VAZIO',
