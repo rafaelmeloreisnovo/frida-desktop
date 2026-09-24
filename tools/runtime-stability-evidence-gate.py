@@ -87,6 +87,32 @@ def source_types(packet: dict[str, Any]) -> set[str]:
     return out
 
 
+def independence_groups(packet: dict[str, Any]) -> set[str]:
+    out: set[str] = set()
+    for evidence in packet.get("evidence", []):
+        if not isinstance(evidence, dict):
+            continue
+        group = evidence.get("independence_group")
+        if isinstance(group, str) and group:
+            out.add(group)
+    return out
+
+
+def unique_observations(packet: dict[str, Any]) -> tuple[int, bool]:
+    values = packet.get("observations")
+    if not isinstance(values, list):
+        return 0, False
+    ids: list[str] = []
+    for item in values:
+        if not isinstance(item, dict):
+            return 0, False
+        value = item.get("id")
+        if value is None:
+            return 0, False
+        ids.append(str(value))
+    return len(set(ids)), len(set(ids)) == len(ids)
+
+
 def gate(packet: dict[str, Any]) -> dict[str, Any]:
     if packet.get("schema") != SCHEMA:
         raise ValueError("unsupported falsifiability packet schema")
@@ -106,7 +132,9 @@ def gate(packet: dict[str, Any]) -> dict[str, Any]:
     if not isinstance(observations, list):
         observations = []
 
+    unique_observation_count, observations_unique = unique_observations(packet)
     types = source_types(packet)
+    groups = independence_groups(packet)
     checks: list[dict[str, Any]] = []
 
     def add(name: str, passed: bool, observed: Any, required: Any) -> None:
@@ -120,14 +148,20 @@ def gate(packet: dict[str, Any]) -> dict[str, Any]:
     req = REQUIREMENTS[requested]
     add(
         "minimum_observations",
-        len(observations) >= req["minimum_observations"],
-        len(observations),
+        unique_observation_count >= req["minimum_observations"] and observations_unique,
+        {"declared": len(observations), "unique": unique_observation_count, "all_unique": observations_unique},
         req["minimum_observations"],
     )
     add(
         "independent_source_types",
         len(types) >= req["minimum_independent_source_types"],
         sorted(types),
+        req["minimum_independent_source_types"],
+    )
+    add(
+        "independence_groups",
+        len(groups) >= req["minimum_independent_source_types"],
+        sorted(groups),
         req["minimum_independent_source_types"],
     )
 
@@ -182,6 +216,7 @@ def gate(packet: dict[str, Any]) -> dict[str, Any]:
         "highest_supported_level": promoted_level,
         "checks": checks,
         "source_types": sorted(types),
+        "independence_groups": sorted(groups),
         "contradictory_evidence_count": len(contradictions),
         "causal_claim_allowed": promoted_level == "CAUSAL_SUPPORTED",
         "claim_allowed": promoted_level != "TOKEN_VAZIO",
