@@ -64,6 +64,7 @@ export class BugCaptureImpl implements BugCapture {
           exception_type: this.getClass().getSimpleName().toString(),
           stack_hash: generateHash(this.toString()),
           severity: 'critical' as Severity,
+          actionability: 'OBSERVATION_ONLY',
           status: 'new',
           thread_id: Java.use('java.lang.Thread').currentThread().getId().toNumber(),
           process_id: Java.use('android.os.Process').myPid()
@@ -100,6 +101,7 @@ export class BugCaptureImpl implements BugCapture {
             exception_type: 'ANRException',
             stack_hash: generateHash(runnable.toString()),
             severity: 'high' as Severity,
+            actionability: 'OBSERVATION_ONLY',
             status: 'new',
             thread_id: Java.use('java.lang.Thread').currentThread().getId().toNumber(),
             process_id: Java.use('android.os.Process').myPid()
@@ -139,9 +141,10 @@ export class BugCaptureImpl implements BugCapture {
             bug_type: 'memory_leak' as BugType,
             class: 'java.lang.Runtime',
             method: 'gc',
-            exception_type: 'MemoryPressure',
+            exception_type: 'MemoryPressureObserved',
             stack_hash: generateHash(pressure.toString()),
             severity: pressure > 0.95 ? 'critical' as Severity : 'high' as Severity,
+            actionability: 'OBSERVATION_ONLY',
             status: 'new',
             thread_id: Java.use('java.lang.Thread').currentThread().getId().toNumber(),
             process_id: Java.use('android.os.Process').myPid()
@@ -178,9 +181,10 @@ export class BugCaptureImpl implements BugCapture {
             bug_type: 'deadlock' as BugType,
             class: currentThread.getClass().getName().toString(),
             method: 'run',
-            exception_type: 'DeadlockDetected',
+            exception_type: 'DeadlockCandidate',
             stack_hash: generateHash(currentThread.getName().toString()),
             severity: 'critical' as Severity,
+            actionability: 'OBSERVATION_ONLY',
             status: 'new',
             thread_id: currentThread.getId().toNumber(),
             process_id: Java.use('android.os.Process').myPid()
