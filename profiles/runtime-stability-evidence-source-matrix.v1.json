@@ -1,0 +1,145 @@
+{
+  "schema": "rafaelia.android.runtime-stability-evidence-source-matrix/v1",
+  "claim_allowed": false,
+  "sources": [
+    {
+      "id": "S01_FRIDA_STRUCTURAL_DUMP",
+      "source": "Frida agent V2",
+      "scale": "process/runtime",
+      "proves": [
+        "observed modules/threads/ranges",
+        "ART/build identity",
+        "process memory counters",
+        "instrument identity"
+      ],
+      "cannot_prove": [
+        "LMKD kill cause",
+        "SELinux cause",
+        "crash root cause",
+        "binary identity from module name+size"
+      ],
+      "intrusion": "LOW_BUT_NONZERO_MEASURED"
+    },
+    {
+      "id": "S02_HYPERMEMORY",
+      "source": "HyperMemory bounded tail/checkpoint",
+      "scale": "process/history",
+      "proves": [
+        "ordered retained events",
+        "checkpoint integrity",
+        "restored retained context"
+      ],
+      "cannot_prove": [
+        "process immortality",
+        "kernel kill cause",
+        "truth of upstream event semantics"
+      ],
+      "intrusion": "BOUNDED_CONFIGURABLE"
+    },
+    {
+      "id": "S03_TOMBSTONE",
+      "source": "Android tombstone",
+      "scale": "native crash",
+      "proves": [
+        "native crash-time signal/register/stack evidence when available"
+      ],
+      "cannot_prove": [
+        "complete pre-crash causal history",
+        "Java-only cause without bridge"
+      ],
+      "intrusion": "POST_FAILURE"
+    },
+    {
+      "id": "S04_LMKD_KERNEL",
+      "source": "lmkd/kernel memory evidence",
+      "scale": "system memory/lifecycle",
+      "proves": [
+        "memory-pressure/kill evidence when timestamped and attributable"
+      ],
+      "cannot_prove": [
+        "application semantic defect"
+      ],
+      "intrusion": "OBSERVATIONAL"
+    },
+    {
+      "id": "S05_SELINUX_AVC",
+      "source": "SELinux AVC/policy evidence",
+      "scale": "kernel security decision",
+      "proves": [
+        "specific denied subject/object/class/permission decision"
+      ],
+      "cannot_prove": [
+        "general runtime instability"
+      ],
+      "intrusion": "OBSERVATIONAL"
+    },
+    {
+      "id": "S06_PERFETTO_TRACE",
+      "source": "Perfetto/atrace",
+      "scale": "temporal cross-layer",
+      "proves": [
+        "timestamped scheduling/trace events in enabled categories"
+      ],
+      "cannot_prove": [
+        "untraced semantic state"
+      ],
+      "intrusion": "CONFIGURATION_DEPENDENT"
+    },
+    {
+      "id": "S07_GETPROP_ALLOWLIST",
+      "source": "safe Android property allowlist",
+      "scale": "firmware/configuration",
+      "proves": [
+        "reported configuration/state at capture time"
+      ],
+      "cannot_prove": [
+        "implementation behavior not exercised",
+        "causality"
+      ],
+      "intrusion": "LOW"
+    },
+    {
+      "id": "S08_PHYSICAL_REPETITION",
+      "source": "independent repeated device runs",
+      "scale": "experimental",
+      "proves": [
+        "repeatability under recorded conditions"
+      ],
+      "cannot_prove": [
+        "universal behavior outside tested population/conditions"
+      ],
+      "intrusion": "EXPERIMENTAL"
+    },
+    {
+      "id": "S09_APPLICATION_EXIT_INFO",
+      "source": "Android ApplicationExitInfo",
+      "scale": "historical process exit",
+      "availability": "API30_PLUS_UNAVAILABLE_ON_CURRENT_API29_TARGET",
+      "proves": [
+        "system-recorded historical exit reason and selected metrics when available on supported Android versions"
+      ],
+      "cannot_prove": [
+        "exact pre-death memory state",
+        "root cause beyond the system reason code",
+        "anything on current API29 target"
+      ],
+      "intrusion": "LOW"
+    },
+    {
+      "id": "S10_REGISTER_OR_CONTROL_FLOW_PROBE",
+      "source": "Targeted Frida thread context/Stalker/breakpoint probe",
+      "scale": "instruction/control-flow",
+      "availability": "OPT_IN_HYPOTHESIS_SPECIFIC",
+      "proves": [
+        "observed register/control-flow facts within the configured window"
+      ],
+      "cannot_prove": [
+        "unobserved history",
+        "zero observer effect",
+        "general stability"
+      ],
+      "intrusion": "MEDIUM_TO_HIGH_MEASURED"
+    }
+  ],
+  "join_rule": "Cross-source causal claims require time/identity bridges and must not be promoted from one source family alone."
+}

@@ -1,0 +1,153 @@
+{
+  "schema": "rafaelia.android.runtime-stability-falsification/v1",
+  "title": "Runtime Stability Dump Falsification Matrix",
+  "claim_allowed": false,
+  "methodology": [
+    "pre-register hypothesis and falsifier",
+    "use positive and negative controls",
+    "separate instrument, target and visibility drift",
+    "fail closed on unsupported schema",
+    "preserve raw observations and derived classification separately",
+    "repeat device experiments across independent runs before promoting stability claims",
+    "retain TOKEN_VAZIO when the required source is absent"
+  ],
+  "hypotheses": [
+    {
+      "id": "H01_ASLR_INVARIANCE",
+      "claim": "ASLR base movement alone must not change recognition classification",
+      "positive_control": "same module name+size surface with changed bases",
+      "falsifier": "classification other than NO_OBSERVED_DRIFT when only bases change",
+      "gate": "HOSTED_TEST"
+    },
+    {
+      "id": "H02_FULL_MODULE_SURFACE_AUTHORITY",
+      "claim": "A compact hash collision must not hide module-surface change",
+      "positive_control": "same compact hint with changed module size/name surface",
+      "falsifier": "NO_OBSERVED_DRIFT or hash-only equivalence",
+      "gate": "HOSTED_TEST"
+    },
+    {
+      "id": "H03_RANGE_NO_DOUBLE_COUNT",
+      "claim": "Memory ranges are enumerated once and bucketed by exact returned protection",
+      "positive_control": "single all-range enumeration plus exact protection bucket",
+      "falsifier": "independent overlapping r--/rw-/r-x/rwx enumeration reappears",
+      "gate": "STATIC_CONTRACT+PHYSICAL_RECEIPT"
+    },
+    {
+      "id": "H04_CLOCK_NOT_STABILITY_DRIFT",
+      "claim": "Clock progression alone must not classify runtime drift",
+      "positive_control": "same state with different wall/monotonic clocks",
+      "falsifier": "RUNTIME_DRIFT caused only by timing fields",
+      "gate": "HOSTED_TEST"
+    },
+    {
+      "id": "H05_REASON_PRIVACY",
+      "claim": "Unknown caller reason text is not persisted verbatim",
+      "positive_control": "arbitrary secret-like reason maps to CALLER_DEFINED",
+      "falsifier": "raw unknown reason appears in dump",
+      "gate": "STATIC_CONTRACT+PHYSICAL_RECEIPT"
+    },
+    {
+      "id": "H06_SCHEMA_FAIL_CLOSED",
+      "claim": "Unsupported or incomplete schema is incomparable, not silently comparable",
+      "positive_control": "v1-or-malformed fixture against v2",
+      "falsifier": "normal drift classification instead of INCOMPARABLE",
+      "gate": "HOSTED_TEST"
+    },
+    {
+      "id": "H07_VISIBILITY_SEPARATION",
+      "claim": "Collector visibility loss is classified separately from target drift",
+      "positive_control": "memory-range collector PASS -> TOKEN_VAZIO with target identity unchanged",
+      "falsifier": "IDENTITY_DRIFT or RUNTIME_DRIFT instead of VISIBILITY_DRIFT",
+      "gate": "HOSTED_TEST"
+    },
+    {
+      "id": "H08_INSTRUMENTATION_SEPARATION",
+      "claim": "Frida version/runtime change is not target identity drift",
+      "positive_control": "same target identity with changed Frida version",
+      "falsifier": "IDENTITY_DRIFT",
+      "gate": "HOSTED_TEST"
+    },
+    {
+      "id": "H09_PROCESS_INSTANCE_SEPARATION",
+      "claim": "PID/TID changes are reported but excluded from stability classification",
+      "positive_control": "only PID/TID differ",
+      "falsifier": "RUNTIME_DRIFT caused only by PID/TID",
+      "gate": "HOSTED_TEST"
+    },
+    {
+      "id": "H10_OBSERVER_EFFECT_VISIBLE",
+      "claim": "Capture duration and Frida heap footprint are recorded instead of assumed zero",
+      "positive_control": "dump contains observer timing and heap fields",
+      "falsifier": "observer fields absent while snapshot claim remains",
+      "gate": "STATIC_CONTRACT+PHYSICAL_RECEIPT"
+    },
+    {
+      "id": "H11_APPEND_ONLY_INTEGRITY",
+      "claim": "Each file is exclusive-created, fsynced, SHA-256 sidecar protected and ledger-linked",
+      "positive_control": "two synthetic writes produce two files and second previous hash equals first digest",
+      "falsifier": "overwrite, missing sidecar, missing fsync, or broken chain",
+      "gate": "HOSTED_CONTROLLER_TEST"
+    },
+    {
+      "id": "H12_REMOTE_FAIL_CLOSED",
+      "claim": "Remote Frida endpoint requires explicit opt-in",
+      "positive_control": "non-loopback endpoint without allow flag",
+      "falsifier": "controller connects silently",
+      "gate": "HOSTED_HELPER_TEST"
+    },
+    {
+      "id": "H13_NON_ATOMIC_DECLARATION",
+      "claim": "Sequential snapshot is never described as atomic",
+      "positive_control": "methodology.consistency_model == BEST_EFFORT_NON_ATOMIC",
+      "falsifier": "atomic/consistent snapshot claim without suspension protocol",
+      "gate": "STATIC_CONTRACT"
+    },
+    {
+      "id": "H14_CAUSALITY_BOUNDARY",
+      "claim": "LMKD/SELinux/crash root cause stays TOKEN_VAZIO without independent evidence",
+      "positive_control": "ordinary runtime drift fixture",
+      "falsifier": "causal attribution emitted by comparator",
+      "gate": "HOSTED_TEST"
+    },
+    {
+      "id": "H15_EVENT_OBSERVER_PRIVACY",
+      "claim": "Optional thread observers never persist thread names",
+      "positive_control": "renamed-thread event stores id and names_collected=false only",
+      "falsifier": "new or previous thread name appears in event payload",
+      "gate": "STATIC_CONTRACT+PHYSICAL_RECEIPT"
+    },
+    {
+      "id": "H16_SAFE_PROPERTY_ALLOWLIST",
+      "claim": "Only explicitly allowlisted non-identifying Android properties are collected into the Frida stability dump",
+      "positive_control": "zygote/ABI/memfd/LMKD/AVB/FBE/VNDK/service-state keys are present while serial/SIM/operator/radio-provisioning keys are absent",
+      "falsifier": "agent references or emits a forbidden identity/telephony property",
+      "gate": "STATIC_CONTRACT+PHYSICAL_RECEIPT"
+    },
+    {
+      "id": "H17_FRIDA_CLOAK_ACCOUNTING",
+      "claim": "Frida process introspection is not treated as a complete measure of instrumentation overhead because cloaked Frida resources may be excluded.",
+      "positive_control": "Dump records Frida heap size and collection duration separately and declares Cloak semantics.",
+      "falsifier": "Thread/range census is used to claim zero or complete observer overhead.",
+      "gate": "STATIC_CONTRACT+PHYSICAL_CONTROL_RUN"
+    },
+    {
+      "id": "H18_OPTIONAL_SOURCE_ISOLATION",
+      "claim": "Failure to access optional Android SystemProperties must not invalidate independent Java/ART heap and build observations.",
+      "positive_control": "SystemProperties unavailable is represented by TOKEN_VAZIO while the rest of the Java collector remains typed independently.",
+      "falsifier": "A SystemProperties lookup failure collapses the entire Java runtime collector.",
+      "gate": "STATIC_CONTRACT+PHYSICAL_RECEIPT"
+    }
+  ],
+  "physical_promotion_rule": {
+    "minimum_independent_runs": 3,
+    "required_context": [
+      "same fingerprint/build",
+      "same ABI",
+      "same Frida version/runtime",
+      "observer duration recorded",
+      "thermal/memory pressure context when performance or kill behavior is claimed"
+    ],
+    "promotion": "A physical stability claim may be promoted only when the relevant hypothesis survives its falsifier across the required independent runs and no required source remains TOKEN_VAZIO."
+  }
+}

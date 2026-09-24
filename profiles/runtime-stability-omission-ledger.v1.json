@@ -1,0 +1,524 @@
+{
+  "schema": "rafaelia.android.runtime-stability-omission-ledger/v1",
+  "claim_allowed": false,
+  "rule": "Every observed or plausible surface must have an explicit disposition; absence from active collection is not equivalent to irrelevance.",
+  "dispositions": [
+    "IMPLEMENTED",
+    "DEFERRED_WITH_GATE",
+    "EXTERNAL_EVIDENCE_REQUIRED",
+    "SENSITIVE_EXCLUDED",
+    "REJECTED_WITH_REASON",
+    "UNAVAILABLE_ON_TARGET"
+  ],
+  "entries": [
+    {
+      "id": "O01_ART_JIT_DEXOPT",
+      "surface": [
+        "dalvik.vm.*",
+        "pm.dexopt.*"
+      ],
+      "disposition": "DEFERRED_WITH_GATE",
+      "active_projection": [
+        "java.vm.name",
+        "java.vm.version",
+        "heap counters",
+        "loaded class count"
+      ],
+      "rationale": "Full ART/dex2oat tuning is useful for compilation-state analysis but too broad for the neutral baseline dump.",
+      "falsifier": "A stability incident correlates with JIT/AOT or dexopt state but the required ART property is absent.",
+      "next_gate": "Add a separate ART compilation profile only when the investigation is compiler/runtime specific."
+    },
+    {
+      "id": "O02_LMKD_MEMORY_POLICY",
+      "surface": [
+        "init.svc.lmkd",
+        "ro.lmk.*",
+        "ro.config.per_app_memcg",
+        "/proc/meminfo",
+        "oom_score_adj"
+      ],
+      "disposition": "IMPLEMENTED",
+      "active_projection": [
+        "lmkd service state",
+        "downgrade pressure",
+        "per-app memcg flag",
+        "process PSS"
+      ],
+      "rationale": "Low-memory lifecycle is central to target survival, but kill causality requires independent kernel/lmkd evidence.",
+      "falsifier": "A kill is attributed to LMKD from these properties alone.",
+      "next_gate": "Physical correlation with lmkd/log/kernel evidence and memory-pressure snapshot."
+    },
+    {
+      "id": "O03_ASHMEM_MEMFD",
+      "surface": [
+        "sys.use_memfd",
+        "init.svc.ashmemd",
+        "init.svc.hidl_memory"
+      ],
+      "disposition": "IMPLEMENTED",
+      "active_projection": [
+        "memfd mode",
+        "ashmemd state",
+        "hidl_memory state"
+      ],
+      "rationale": "Directly selects the expected SharedMemory backend contract on this Android 10 firmware.",
+      "falsifier": "Physical SharedMemory receipt demonstrates a different backend/lifetime assumption.",
+      "next_gate": "FD handoff + dual-process mapping + target restart survival."
+    },
+    {
+      "id": "O04_BOOT_AVB_VERITY",
+      "surface": [
+        "ro.boot.verifiedbootstate",
+        "ro.boot.flash.locked",
+        "ro.boot.veritymode",
+        "ro.debuggable",
+        "ro.secure"
+      ],
+      "disposition": "IMPLEMENTED",
+      "active_projection": [
+        "verified boot state",
+        "lock state",
+        "verity",
+        "debuggable",
+        "secure"
+      ],
+      "rationale": "Defines trust/debug boundary and prevents hidden dependence on unlocked/rooted behavior.",
+      "falsifier": "Runtime behavior requires a privilege not available under the recorded boot contract.",
+      "next_gate": "Keep physical tests on locked production state unless a separate explicitly labeled lab state is used."
+    },
+    {
+      "id": "O05_FBE_STORAGE",
+      "surface": [
+        "ro.crypto.state",
+        "ro.crypto.type",
+        "sys.user.*.ce_available"
+      ],
+      "disposition": "DEFERRED_WITH_GATE",
+      "active_projection": [
+        "crypto state",
+        "crypto type"
+      ],
+      "rationale": "FBE is relevant to checkpoint availability across reboot/unlock; per-user CE state is temporal and should be captured only for reboot-recovery studies.",
+      "falsifier": "Checkpoint recovery is claimed pre-unlock without DE/CE evidence.",
+      "next_gate": "Dedicated boot/reboot checkpoint experiment with CE/DE location typed."
+    },
+    {
+      "id": "O06_AB_DYNAMIC_PARTITIONS",
+      "surface": [
+        "ro.build.ab_update",
+        "ro.boot.slot_suffix",
+        "ro.boot.dynamic_partitions",
+        "dev.mnt.blk.*"
+      ],
+      "disposition": "IMPLEMENTED",
+      "active_projection": [
+        "A/B flag",
+        "slot suffix",
+        "dynamic partitions"
+      ],
+      "rationale": "Build/slot topology is relevant to reproducibility, while dm device numbers are transient implementation details.",
+      "falsifier": "Two receipts from different slots/builds are compared as identical platform runs.",
+      "next_gate": "Bind slot/build into OTA regression receipts."
+    },
+    {
+      "id": "O07_TOMBSTONE_AEE_TRACING",
+      "surface": [
+        "init.svc.tombstoned",
+        "init.svc.aee_aed",
+        "init.svc.EEReport",
+        "init.svc.traced",
+        "init.svc.traced_probes",
+        "dalvik.vm.mtk-stack-trace-file"
+      ],
+      "disposition": "EXTERNAL_EVIDENCE_REQUIRED",
+      "active_projection": [
+        "tombstoned/traced/traced_probes service state"
+      ],
+      "rationale": "These are independent crash/trace evidence producers; existence does not prove app access or causality.",
+      "falsifier": "Crash root cause is inferred from service-running state.",
+      "next_gate": "Correlate a reproducible crash with authorized tombstone/AEE/trace artifact hashes and timestamps."
+    },
+    {
+      "id": "O08_SELINUX",
+      "surface": [
+        "SELinux policy",
+        "avc denials",
+        "property contexts"
+      ],
+      "disposition": "EXTERNAL_EVIDENCE_REQUIRED",
+      "active_projection": [],
+      "rationale": "A property dump cannot prove an SELinux denial caused a failure.",
+      "falsifier": "Permission failure is labeled SELinux without an AVC/policy source.",
+      "next_gate": "Ingest sanitized denial metadata only when a denial is observed."
+    },
+    {
+      "id": "O09_LOGGING_TAGS",
+      "surface": [
+        "persist.log.tag.*",
+        "persist.logd.size",
+        "log.tag.*"
+      ],
+      "disposition": "DEFERRED_WITH_GATE",
+      "active_projection": [],
+      "rationale": "Hundreds of tag levels are configuration noise for baseline recognition but useful during subsystem-specific debugging.",
+      "falsifier": "A reproducible issue requires a tag level that was not recorded for the targeted subsystem.",
+      "next_gate": "Generate a narrow log-profile overlay per investigation; never ingest all log content by default."
+    },
+    {
+      "id": "O10_RADIO_SIM_IMS",
+      "surface": [
+        "gsm.*",
+        "ril.*",
+        "vendor.ril.*",
+        "persist.vendor.radio.*",
+        "IMS properties"
+      ],
+      "disposition": "SENSITIVE_EXCLUDED",
+      "active_projection": [],
+      "rationale": "Contains subscriber, operator and provisioning data; unrelated to general runtime stability baseline.",
+      "falsifier": "A radio-specific investigation cannot proceed without a non-identifying radio capability field.",
+      "next_gate": "Create a separate privacy-reviewed radio profile with capability/state only, never subscriber identity."
+    },
+    {
+      "id": "O11_WIFI_BT_CONNSYS",
+      "surface": [
+        "persist.vendor.connsys.*",
+        "wifi.*",
+        "init.svc.connsyslogger"
+      ],
+      "disposition": "DEFERRED_WITH_GATE",
+      "active_projection": [],
+      "rationale": "Useful for connectivity-driver incidents, not baseline app runtime stability.",
+      "falsifier": "Connectivity crash/latency investigation lacks firmware/driver context.",
+      "next_gate": "Subsystem-specific connectivity profile with firmware version and driver readiness only."
+    },
+    {
+      "id": "O12_GPU_MEDIA_CAMERA_AUDIO",
+      "surface": [
+        "init.svc.gpu*",
+        "media.*",
+        "camera.*",
+        "audio*",
+        "ro.opengles.version"
+      ],
+      "disposition": "DEFERRED_WITH_GATE",
+      "active_projection": [],
+      "rationale": "Service presence is not capability/performance evidence; relevant only when workload crosses those pipelines.",
+      "falsifier": "Graphics/media incident is analyzed without identifying the active backend/service surface.",
+      "next_gate": "Dedicated graphics/media profile with capability tests and frame/buffer timing."
+    },
+    {
+      "id": "O13_THERMAL_POWER_SUSPEND",
+      "surface": [
+        "init.svc.thermal*",
+        "power HAL",
+        "system_suspend",
+        "battery services"
+      ],
+      "disposition": "EXTERNAL_EVIDENCE_REQUIRED",
+      "active_projection": [],
+      "rationale": "Thermal/power state can materially change latency and kill behavior but requires measured time-aligned values, not service presence alone.",
+      "falsifier": "Performance stability claim is made without thermal/power context.",
+      "next_gate": "Capture temperature/frequency/power context in physical benchmark/kill experiments."
+    },
+    {
+      "id": "O14_NETWORK_STATE",
+      "surface": [
+        "gsm.network.type",
+        "operator state",
+        "net.*",
+        "interfaces"
+      ],
+      "disposition": "DEFERRED_WITH_GATE",
+      "active_projection": [],
+      "rationale": "Network topology is dynamic and can add noise/privacy to a neutral baseline.",
+      "falsifier": "Network-dependent failure is investigated without transport state.",
+      "next_gate": "Opt-in network profile with interface/type/latency only and no identifiers/payload."
+    },
+    {
+      "id": "O15_DEVICE_SIM_IDENTIFIERS",
+      "surface": [
+        "serial",
+        "PSN",
+        "ICCID",
+        "IMSI",
+        "Android ID",
+        "subscriber identifiers",
+        "volume UUIDs"
+      ],
+      "disposition": "SENSITIVE_EXCLUDED",
+      "active_projection": [],
+      "rationale": "Not required to reproduce the technical platform and creates unnecessary correlation risk.",
+      "falsifier": "A proposed workflow claims these identifiers are technically required for stability classification.",
+      "next_gate": "Use session-scoped non-reversible correlation only if a multi-device experiment truly needs disambiguation."
+    },
+    {
+      "id": "O16_VENDOR_DEBUG_PRIVATE_PAYLOADS",
+      "surface": [
+        "vendor debug blobs",
+        "radio provisioning strings",
+        "unknown vendor payload properties"
+      ],
+      "disposition": "SENSITIVE_EXCLUDED",
+      "active_projection": [],
+      "rationale": "Semantics may be undocumented and contents may be identifying or secret.",
+      "falsifier": "A field is promoted based only on name or apparent encoding.",
+      "next_gate": "Require vendor documentation or controlled experiment before typing meaning."
+    },
+    {
+      "id": "O17_GPU_VULKAN_CAPABILITY",
+      "surface": [
+        "ro.hwui.use_vulkan",
+        "GPU service state"
+      ],
+      "disposition": "REJECTED_WITH_REASON",
+      "active_projection": [],
+      "rationale": "Empty/configured properties and running services do not prove Vulkan/compute capability.",
+      "falsifier": "An independent Vulkan capability/functional test succeeds.",
+      "next_gate": "Promote only after an explicit capability receipt."
+    },
+    {
+      "id": "O18_NEON_SIMD",
+      "surface": [
+        "dalvik.vm.isa.arm.variant",
+        "dalvik.vm.isa.arm.features",
+        "HWCAP",
+        "SIMD selftest"
+      ],
+      "disposition": "DEFERRED_WITH_GATE",
+      "active_projection": [
+        "ARM variant/features"
+      ],
+      "rationale": "CPU model hints do not replace HWCAP or executed SIMD proof.",
+      "falsifier": "HWCAP/selftest contradicts the model-derived expectation.",
+      "next_gate": "Keep capability receipt separate from platform metadata."
+    },
+    {
+      "id": "O19_PROCESS_CONTENT_MEMORY",
+      "surface": [
+        "raw heap bytes",
+        "stack bytes",
+        "strings",
+        "UI/file/network payload"
+      ],
+      "disposition": "REJECTED_WITH_REASON",
+      "active_projection": [],
+      "rationale": "High privacy/volume/observer cost and weak causal value for the neutral stability layer.",
+      "falsifier": "A narrowly scoped authorized crash experiment requires a specific byte range to falsify a memory-corruption hypothesis.",
+      "next_gate": "Use a separate opt-in forensic capture with address/range minimization and explicit retention."
+    },
+    {
+      "id": "O20_PERIODIC_POLLING",
+      "surface": [
+        "fixed-interval full snapshots"
+      ],
+      "disposition": "REJECTED_WITH_REASON",
+      "active_projection": [],
+      "rationale": "Can create self-interference and volume without evidence that cadence is informative.",
+      "falsifier": "A physical experiment shows event-driven/on-demand capture misses a required transient that a bounded cadence catches with acceptable overhead.",
+      "next_gate": "If needed, introduce adaptive bounded polling with measured observer cost, never silent default polling."
+    },
+    {
+      "id": "O21_APPLICATION_EXIT_INFO",
+      "surface": [
+        "android.app.ApplicationExitInfo",
+        "ActivityManager historical exit reasons"
+      ],
+      "disposition": "UNAVAILABLE_ON_TARGET",
+      "active_projection": [],
+      "rationale": "ApplicationExitInfo process-death reason APIs start at Android API 30; the physical target is API 29.",
+      "falsifier": "Target API level is upgraded to >=30 and the API becomes available with usable history.",
+      "next_gate": "On API29 use independent lmkd/kernel/tombstone/log evidence; add ApplicationExitInfo only on a separately typed API30+ target."
+    },
+    {
+      "id": "O22_FRIDA_CLOAK",
+      "surface": [
+        "Frida Cloak",
+        "Process.enumerateThreads",
+        "Process.enumerateRanges"
+      ],
+      "disposition": "IMPLEMENTED",
+      "active_projection": [
+        "Frida heap size",
+        "capture duration",
+        "instrumentation identity"
+      ],
+      "rationale": "Frida-created resources may be cloaked from introspection, so target thread/range census cannot be treated as a complete measurement of observer overhead.",
+      "falsifier": "Instrumentation overhead is claimed zero or fully represented by target census alone.",
+      "next_gate": "Measure external process PSS/duration and compare instrumented vs control runs on device."
+    },
+    {
+      "id": "O23_THREAD_REGISTER_CONTEXT",
+      "surface": [
+        "Thread.context",
+        "PC",
+        "SP",
+        "LR",
+        "ARM registers"
+      ],
+      "disposition": "DEFERRED_WITH_GATE",
+      "active_projection": [],
+      "rationale": "Register snapshots are high-value near a fault but noisy and timing-sensitive for neutral periodic stability capture.",
+      "falsifier": "A reproducible native failure cannot be localized without register state at the causal boundary.",
+      "next_gate": "Add opt-in PRE_CRASH/POST_CRASH register-tail capture with strict event budget and thread selection."
+    },
+    {
+      "id": "O24_STALKER_CONTROL_FLOW",
+      "surface": [
+        "Frida Stalker call/ret/exec tracing"
+      ],
+      "disposition": "DEFERRED_WITH_GATE",
+      "active_projection": [],
+      "rationale": "Instruction/call tracing can reconstruct causal paths but has substantially higher observer cost than the neutral dump.",
+      "falsifier": "Snapshot + event observers fail to distinguish competing control-flow hypotheses.",
+      "next_gate": "Opt-in bounded Stalker window around a pre-registered function/thread with measured overhead and exclusion ranges."
+    },
+    {
+      "id": "O25_BREAKPOINT_WATCHPOINT",
+      "surface": [
+        "hardware/software breakpoint",
+        "watchpoint",
+        "single-step"
+      ],
+      "disposition": "DEFERRED_WITH_GATE",
+      "active_projection": [],
+      "rationale": "Precise for targeted hypotheses but changes timing and is unsuitable as always-on baseline telemetry.",
+      "falsifier": "A specific address/state transition remains ambiguous after passive observation.",
+      "next_gate": "Use targeted authorized lab breakpoint/watchpoint with instrumentation-effect receipt."
+    },
+    {
+      "id": "O26_DEX_ART_METHOD_MAPPING",
+      "surface": [
+        "DEX method/register bytecode",
+        "ART compiled method",
+        "JIT/AOT address"
+      ],
+      "disposition": "DEFERRED_WITH_GATE",
+      "active_projection": [
+        "ART/VM identity"
+      ],
+      "rationale": "Logical-to-native method mapping is required for cross-layer causal debugging but is a separate symbolization/indexing problem.",
+      "falsifier": "A Java-visible failure cannot be reconciled with its native/JIT location.",
+      "next_gate": "Create correlation IDs DEX method -> ART method -> native code range using authorized app symbols/build artifacts."
+    },
+    {
+      "id": "O27_JNI_BOUNDARY",
+      "surface": [
+        "JNI calls",
+        "local/global refs",
+        "native exceptions"
+      ],
+      "disposition": "DEFERRED_WITH_GATE",
+      "active_projection": [],
+      "rationale": "JNI is a key causal bridge but broad hooking would add noise and overhead.",
+      "falsifier": "A failure crosses managed/native boundary and causal order cannot be reconstructed.",
+      "next_gate": "Opt-in JNI boundary profile for pre-registered methods/classes with timestamp/thread correlation."
+    },
+    {
+      "id": "O28_ELF_BUILD_ID_SYMBOL_IDENTITY",
+      "surface": [
+        "ELF build-id",
+        "symbol table",
+        "file hash",
+        "relocations"
+      ],
+      "disposition": "EXTERNAL_EVIDENCE_REQUIRED",
+      "active_projection": [
+        "loaded module name+size only"
+      ],
+      "rationale": "Module name+size recognizes a surface but does not establish binary identity.",
+      "falsifier": "Two distinct ELF binaries share name+size or a module change requires exact artifact provenance.",
+      "next_gate": "Bind module to build-id/SHA-256 from authorized artifact or on-device file metadata where permission allows."
+    },
+    {
+      "id": "O29_JAVA_EXCEPTION_STREAM",
+      "surface": [
+        "Java exceptions",
+        "RuntimeException",
+        "uncaught handler"
+      ],
+      "disposition": "DEFERRED_WITH_GATE",
+      "active_projection": [],
+      "rationale": "Exception streams are valuable causal events but can be extremely high-volume and may contain application text.",
+      "falsifier": "A managed failure cannot be related to runtime state without exception type/timing.",
+      "next_gate": "Capture exception class + thread + sanitized stack hash only for an opt-in causal-tail profile."
+    },
+    {
+      "id": "O30_NATIVE_EXCEPTION_HANDLER",
+      "surface": [
+        "Process.setExceptionHandler",
+        "native signals",
+        "fault address"
+      ],
+      "disposition": "DEFERRED_WITH_GATE",
+      "active_projection": [],
+      "rationale": "A process exception handler may affect fault propagation if misused; neutral stability sensing must not swallow or alter crashes.",
+      "falsifier": "Native crash correlation requires pre-tombstone fault metadata unavailable elsewhere.",
+      "next_gate": "If added, observe-and-forward only; never suppress the original fault; verify tombstone behavior remains unchanged."
+    },
+    {
+      "id": "O31_MEMORY_VALUE_SCANNING",
+      "surface": [
+        "Cheat-Engine-like value scans",
+        "Memory.scan"
+      ],
+      "disposition": "REJECTED_WITH_REASON",
+      "active_projection": [],
+      "rationale": "Broad value scanning is not a general stability signal and increases privacy/observer cost; useful only for a specific authorized hypothesis.",
+      "falsifier": "A pre-registered lab hypothesis is explicitly about locating a known synthetic sentinel/value.",
+      "next_gate": "Use narrow bounded scan in owned lab memory only, outside the default stability collector."
+    },
+    {
+      "id": "O32_BITFLIP_FAULT_INJECTION",
+      "surface": [
+        "controlled bit flip",
+        "register/memory fault injection"
+      ],
+      "disposition": "DEFERRED_WITH_GATE",
+      "active_projection": [],
+      "rationale": "Fault injection is useful to test recovery invariants but is an active perturbation, not observation.",
+      "falsifier": "Recovery behavior cannot be falsified without a controlled corruption stimulus.",
+      "next_gate": "Separate destructive lab mode with known target byte, pre/post hashes, rollback and no production-data target."
+    },
+    {
+      "id": "O33_HEX_PATCH_RUNTIME_PATCH",
+      "surface": [
+        "hex patch",
+        "Memory.patchCode",
+        "ELF patch"
+      ],
+      "disposition": "REJECTED_WITH_REASON",
+      "active_projection": [],
+      "rationale": "Patching changes the system under test and would invalidate neutral stability evidence if mixed into the baseline mode.",
+      "falsifier": "A separately authorized remediation experiment explicitly tests one reversible patch.",
+      "next_gate": "Keep patching in a separate mutation lane with before/after artifact hashes and rollback receipt."
+    },
+    {
+      "id": "O34_NUMA",
+      "surface": [
+        "NUMA topology",
+        "node-local allocation"
+      ],
+      "disposition": "REJECTED_WITH_REASON",
+      "active_projection": [],
+      "rationale": "No evidence in the current Android/MTK target establishes a meaningful NUMA topology for this app-runtime investigation.",
+      "falsifier": "Kernel/device evidence exposes multiple NUMA nodes affecting allocation/latency.",
+      "next_gate": "Do not add NUMA complexity until physical topology evidence exists."
+    },
+    {
+      "id": "O35_FIFO_QUEUE_DYNAMICS",
+      "surface": [
+        "FIFO/ring buffers",
+        "producer-consumer queues",
+        "event backlog"
+      ],
+      "disposition": "DEFERRED_WITH_GATE",
+      "active_projection": [
+        "HyperMemory bounded ring occupancy/evictions"
+      ],
+      "rationale": "Queue saturation can cause latency/loss but generic queue introspection is subsystem-specific.",
+      "falsifier": "A failure correlates with backlog/overflow and the relevant queue has an observable bounded interface.",
+      "next_gate": "Add queue depth/drop counters only to the subsystem-specific profile that owns the queue."
+    }
+  ]
+}
