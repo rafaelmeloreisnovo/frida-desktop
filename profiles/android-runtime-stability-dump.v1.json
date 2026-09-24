@@ -15,8 +15,10 @@
       "pointer size",
       "page size",
       "platform",
-      "loaded module name+size set",
       "Android/ART build identity when Java is available"
+    ],
+    "recognition_surface": [
+      "loaded module name+size set"
     ],
     "volatile_observations": [
       "pid/tid",
@@ -34,13 +36,19 @@
     ]
   },
   "recognition": {
-    "key_material": [
+    "platform_key": [
       "Process.arch",
       "Process.pointerSize",
       "Process.pageSize",
       "Process.platform",
-      "module stable-set fingerprint",
       "Java build/runtime identity"
+    ],
+    "module_surface_key": [
+      "loaded module name+size set"
+    ],
+    "combined_recognition_key": [
+      "platform_key",
+      "module_surface_key"
     ],
     "excludes": [
       "ASLR module bases",
@@ -67,7 +75,8 @@
     "process_name": "non-reversible short tag only"
   },
   "invariants": [
-    "stable identity drift and runtime drift are reported separately",
+    "platform identity drift, module-surface drift and volatile runtime drift are reported separately",
+    "module-surface drift may reflect legitimate lazy loading and is not automatically identity drift",
     "runtime drift is not automatically classified as instability",
     "absence of a source remains TOKEN_VAZIO",
     "a dump is evidence, not a causal claim",
