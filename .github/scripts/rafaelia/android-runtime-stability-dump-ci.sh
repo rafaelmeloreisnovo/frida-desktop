@@ -160,6 +160,7 @@ cat > "$BUILD_DIR/baseline.json" <<'JSON'
     "debugger_attached": true,
     "code_signing_policy": "optional",
     "modules": {
+      "state": "OBSERVED",
       "count": 10,
       "stable_set_fingerprint": "mod11111",
       "modules": [
@@ -167,8 +168,17 @@ cat > "$BUILD_DIR/baseline.json" <<'JSON'
         {"name": "libbeta.so", "base": "0x2000", "size": 8192}
       ]
     },
-    "threads": {"count": 4, "states": {"waiting": 4}},
-    "memory_ranges": {"rw-": {"count": 2, "bytes": 8192}},
+    "threads": {"state": "OBSERVED", "count": 4, "states": {"waiting": 4}},
+    "memory_ranges": {
+      "---": {"state": "OBSERVED", "count": 0, "bytes": 0},
+      "--x": {"state": "OBSERVED", "count": 0, "bytes": 0},
+      "-w-": {"state": "OBSERVED", "count": 0, "bytes": 0},
+      "-wx": {"state": "OBSERVED", "count": 0, "bytes": 0},
+      "r--": {"state": "OBSERVED", "count": 3, "bytes": 12288},
+      "r-x": {"state": "OBSERVED", "count": 2, "bytes": 8192},
+      "rw-": {"state": "OBSERVED", "count": 2, "bytes": 8192},
+      "rwx": {"state": "OBSERVED", "count": 0, "bytes": 0}
+    },
     "java_runtime": {"java_heap_total_bytes": 100}
   }
 }
@@ -221,6 +231,13 @@ hint_only['runtime_state']['modules']['stable_set_fingerprint'] = 'different-fnv
 observer = json.loads(json.dumps(base))
 observer['observer']['frida_version'] = '18.0.0'
 (root/'observer.json').write_text(json.dumps(observer))
+
+collector_fail = json.loads(json.dumps(base))
+collector_fail['runtime_state']['modules']['state'] = 'TOKEN_VAZIO'
+collector_fail['runtime_state']['modules']['count'] = 'TOKEN_VAZIO'
+collector_fail['runtime_state']['modules']['stable_set_fingerprint'] = 'TOKEN_VAZIO'
+collector_fail['runtime_state']['modules']['modules'] = 'TOKEN_VAZIO'
+(root/'collector-fail.json').write_text(json.dumps(collector_fail))
 PY
 
 python3 tools/runtime-stability-diff.py   "$BUILD_DIR/baseline.json" "$BUILD_DIR/runtime.json"   --out "$BUILD_DIR/runtime-drift.json"
@@ -230,6 +247,7 @@ python3 tools/runtime-stability-diff.py   "$BUILD_DIR/baseline.json" "$BUILD_DIR
 python3 tools/runtime-stability-diff.py   "$BUILD_DIR/baseline.json" "$BUILD_DIR/aslr-only.json"   --out "$BUILD_DIR/aslr-only.json.out"
 python3 tools/runtime-stability-diff.py   "$BUILD_DIR/baseline.json" "$BUILD_DIR/hint-only.json"   --out "$BUILD_DIR/hint-only.out.json"
 python3 tools/runtime-stability-diff.py   "$BUILD_DIR/baseline.json" "$BUILD_DIR/observer.json"   --out "$BUILD_DIR/observer-drift.json"
+python3 tools/runtime-stability-diff.py   "$BUILD_DIR/baseline.json" "$BUILD_DIR/collector-fail.json"   --out "$BUILD_DIR/collector-fail.out.json"
 
 python3 - <<'PY'
 import json
@@ -408,6 +426,9 @@ assert hint['classification'] == 'NO_OBSERVED_DRIFT'
 assert len(hint['hint_changes']) >= 1
 assert hint['compact_fingerprints_authoritative'] is False
 assert json.loads((root/'observer-drift.json').read_text())['classification'] == 'OBSERVER_DRIFT'
+collector_fail = json.loads((root/'collector-fail.out.json').read_text())
+assert collector_fail['classification'] == 'INSUFFICIENT_OBSERVATION'
+assert 'runtime_state.modules.state' in collector_fail['candidate_observation_gaps']
 robust = json.loads((root/'robust-baseline.json').read_text())
 assert robust['baseline_gate'] == 'PASS'
 assert robust['sample_count'] == 3
@@ -470,6 +491,7 @@ receipt = {
     'duplicate_observation_rejected': 'PASS',
     'compact_hint_non_authority': 'PASS',
     'observer_drift_separated': 'PASS',
+    'collector_failure_is_token_vazio_not_zero': 'PASS',
     'atomic_publication_contract_static': 'PASS',
     'storage_atomic_publish_executed': 'PASS',
     'storage_tamper_detection_executed': 'PASS',
