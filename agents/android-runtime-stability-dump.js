@@ -80,11 +80,21 @@ function collectModules() {
   const stableMaterial = rows.map(function (row) {
     return row.name + ':' + row.size;
   }).join('|');
+  const nameCounts = Object.create(null);
+  rows.forEach(function (row) {
+    nameCounts[row.name] = (nameCounts[row.name] || 0) + 1;
+  });
+  const duplicateNames = Object.keys(nameCounts)
+      .filter(function (name) { return nameCounts[name] > 1; })
+      .sort();
 
   return {
     state: 'OBSERVED',
     count: rows.length,
     stable_set_fingerprint: fnv1a32Text(stableMaterial),
+    recognition_scope: 'MODULE_BASENAME_SIZE_MULTISET_PATH_WITHHELD',
+    exact_file_identity_claim: false,
+    duplicate_names: duplicateNames,
     modules: rows
   };
 }
@@ -332,7 +342,8 @@ async function collectSnapshot(reason) {
         'java_identity'
       ],
       recognition_surface: [
-        'loaded_module_name_size_set'
+        'loaded_module_name_size_multiset',
+        'privacy_preserving_not_exact_file_identity'
       ],
       volatile_observations: [
         'pid',
