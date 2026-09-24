@@ -5,9 +5,11 @@
 `agents/android-runtime-stability-dump.js` is a passive Frida sensor for
 authorized Android processes. It emits a structural runtime dump suitable for:
 
-- recognizing the runtime/build/module surface;
+- recognizing the platform/build surface;
+- recognizing the loaded-module surface;
 - comparing two executions;
-- detecting identity drift separately from ordinary runtime drift;
+- detecting platform drift separately from module/lazy-load drift and ordinary
+  runtime drift;
 - attaching a neutral context packet to crash, performance or compatibility
   investigations.
 
@@ -32,19 +34,32 @@ a changed value to a bug.
 
 ## Semantic separation
 
-### Stable identity
+### Platform identity
 
-Used to recognize whether two dumps belong to the same technical runtime
+Used to recognize whether two dumps belong to the same technical platform
 surface:
 
 - architecture;
 - pointer size;
 - page size;
 - platform;
-- loaded module **name + size** set fingerprint;
 - Android/ART build identity when Java is available.
 
-ASLR module bases are deliberately excluded from the recognition key.
+This produces `platform_key`.
+
+### Module recognition surface
+
+The loaded module **name + size** set produces `module_surface_key`.
+
+It is deliberately separate from platform identity because legitimate lazy
+loading may add/remove modules without changing firmware, ABI or logical
+application identity.
+
+The combined `recognition_key` is useful for exact surface matching, but a
+module-only mismatch is classified as `MODULE_SURFACE_DRIFT`, not
+`IDENTITY_DRIFT`.
+
+ASLR module bases are never included in recognition hashes.
 
 ### Volatile runtime state
 
@@ -115,6 +130,7 @@ Possible classifications:
 
 - `NO_OBSERVED_DRIFT`
 - `RUNTIME_DRIFT`
+- `MODULE_SURFACE_DRIFT`
 - `IDENTITY_DRIFT`
 
 None of these establishes root cause.
@@ -125,7 +141,7 @@ The dump is intentionally compatible with a later HyperMemory causal tail:
 
 ```text
 runtime dump
-  -> recognition key
+  -> platform key / module-surface key
   -> HyperMemory event
   -> crash/performance event
   -> successor dump
