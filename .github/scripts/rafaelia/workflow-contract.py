@@ -21,6 +21,7 @@ UPSTREAM_RELEASE_WORKFLOW = "ci.yml"
 CUSTOM_WORKFLOWS = {
     "01.yml",
     "android-crash-observability.yml",
+    "android-runtime-stability-dump.yml",
     "android17-apk-elf-dex.yml",
     "android17-rfl-selftest.yml",
     "arm32-neon4096-freestanding.yml",
