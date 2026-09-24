@@ -422,7 +422,8 @@ async function collectSnapshot(reason) {
       passive_default: true,
       periodic_polling: false,
       active_mutation: false,
-      compact_hashes_authoritative: false
+      compact_hashes_authoritative: false,
+      frida_cloak_semantics: 'PROCESS_INTROSPECTION_MAY_EXCLUDE_FRIDA_CLOAKED_RESOURCES'
     },
 
     timing: {
