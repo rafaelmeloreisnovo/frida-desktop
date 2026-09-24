@@ -93,24 +93,44 @@ function collectThreads() {
 function collectRanges() {
   const protections = ['---', '--x', '-w-', '-wx', 'r--', 'r-x', 'rw-', 'rwx'];
   const summary = Object.create(null);
-
   protections.forEach(function (protection) {
-    const ranges = safe(function () {
-      return Process.enumerateRanges(protection);
-    }, []);
-
-    let bytes = 0;
-    ranges.forEach(function (range) {
-      bytes += Number(range.size) || 0;
-    });
-
-    summary[protection] = {
-      count: ranges.length,
-      bytes: bytes
-    };
+    summary[protection] = { count: 0, bytes: 0 };
   });
 
+  // Frida's protection filter means "at least these permissions". Querying
+  // r--, rw-, r-x, ... separately therefore overlaps. Enumerate everything
+  // once and classify by the exact protection reported on each range.
+  const ranges = safe(function () {
+    return Process.enumerateRanges({ protection: '---', coalesce: false });
+  }, []);
+
+  let totalBytes = 0;
+  ranges.forEach(function (range) {
+    const protection = range.protection || 'unknown';
+    if (!summary[protection])
+      summary[protection] = { count: 0, bytes: 0 };
+    summary[protection].count += 1;
+    summary[protection].bytes += Number(range.size) || 0;
+    totalBytes += Number(range.size) || 0;
+  });
+
+  summary._meta = {
+    semantics: 'SINGLE_ENUMERATION_EXACT_RETURNED_PROTECTION',
+    total_count: ranges.length,
+    total_bytes: totalBytes,
+    overlap_by_construction: false
+  };
   return summary;
+}
+
+function moduleSurfaceMaterial(modules) {
+  return modules.modules.map(function (row) {
+    return row.name + ':' + row.size;
+  }).join('|');
+}
+
+function moduleSurfaceEqual(a, b) {
+  return moduleSurfaceMaterial(a) === moduleSurfaceMaterial(b);
 }
 
 function collectJavaRuntime() {
@@ -186,10 +206,13 @@ function collectJavaRuntime() {
 async function collectSnapshot(reason) {
   const captureStartedEpochMs = Date.now();
   const sequence = ++captureSequence;
-  const modules = collectModules();
+  const modulesAtStart = collectModules();
   const threads = collectThreads();
   const ranges = collectRanges();
   const java = await collectJavaRuntime();
+  const modules = collectModules();
+  const moduleSurfaceStableDuringCapture =
+      moduleSurfaceEqual(modulesAtStart, modules);
 
   const stableIdentity = {
     arch: Process.arch,
@@ -229,7 +252,20 @@ async function collectSnapshot(reason) {
       capture_finished_epoch_ms: captureFinishedEpochMs,
       capture_wall_duration_ms: Math.max(0, captureFinishedEpochMs - captureStartedEpochMs),
       instrumentation_present: true,
-      observer_effect: 'POSSIBLE_NOT_QUANTIFIED'
+      observer_effect: 'POSSIBLE_NOT_QUANTIFIED',
+      introspection_visibility: 'FRIDA_CLOAK_AWARE',
+      introspection_note:
+          'Frida-created cloaked resources may be absent from thread/range introspection',
+      memory_range_semantics: 'SINGLE_ENUMERATION_EXACT_RETURNED_PROTECTION'
+    },
+    consistency: {
+      snapshot_atomic: false,
+      capture_model: 'NON_ATOMIC_SEQUENTIAL_OBSERVATION',
+      module_surface_stable_during_capture: moduleSurfaceStableDuringCapture,
+      module_surface_start_hint: modulesAtStart.stable_set_fingerprint,
+      module_surface_end_hint: modules.stable_set_fingerprint,
+      recognition_surface_authoritative:
+          moduleSurfaceStableDuringCapture ? true : false
     },
     claim_allowed: false,
 
@@ -283,7 +319,10 @@ async function collectSnapshot(reason) {
       kernel_lmk_reason: 'TOKEN_VAZIO',
       selinux_denial_causality: 'TOKEN_VAZIO',
       physical_memory_pressure: 'TOKEN_VAZIO',
-      crash_causality: 'TOKEN_VAZIO'
+      crash_causality: 'TOKEN_VAZIO',
+      module_surface_atomicity: moduleSurfaceStableDuringCapture
+          ? 'OBSERVED_STABLE_DURING_CAPTURE'
+          : 'TOKEN_VAZIO_CAPTURE_RACE'
     },
 
     privacy: {
