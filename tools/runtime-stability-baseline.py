@@ -58,6 +58,9 @@ NUMERIC_PATHS = [
     "runtime_state.java_runtime.java_heap_free_bytes",
     "runtime_state.java_runtime.java_heap_max_bytes",
     "runtime_state.java_runtime.native_heap_allocated_bytes",
+    "runtime_state.java_runtime.native_heap_size_bytes",
+    "runtime_state.java_runtime.native_heap_free_bytes",
+    "runtime_state.java_runtime.pss_kb",
 ]
 
 REQUIRED_PATHS = [
@@ -77,6 +80,7 @@ REQUIRED_PATHS = [
     "capture_provenance.controller_sha256",
     "capture_provenance.frida_python_version",
     "capture_provenance.controller_run_id",
+    "capture_provenance.condition_id",
     "runtime_state.modules.state",
     "runtime_state.modules.modules",
     "runtime_state.threads.state",
@@ -253,7 +257,30 @@ def build_baseline(paths: list[Path]) -> dict[str, Any]:
     observer_consistent = all(item == observer_reference for item in observers[1:])
 
     platform_keys = [get_path(d, "platform_key") for d in dumps]
-    platform_key_hint_consistent = all(key == platform_keys[0] for key in platform_keys[1:])
+    platform_key_hint_consistent = all(
+        key == platform_keys[0] for key in platform_keys[1:]
+    )
+
+    condition_ids = [
+        get_path(d, "capture_provenance.condition_id") for d in dumps
+    ]
+    condition_consistent = all(
+        value == condition_ids[0] for value in condition_ids[1:]
+    )
+    condition_id = condition_ids[0] if condition_consistent else TOKEN_VAZIO
+
+    boot_sessions = [
+        get_path(d, "platform_context.boot_session_sha256") for d in dumps
+    ]
+    observed_boot_sessions = sorted({
+        str(value)
+        for value in boot_sessions
+        if value != TOKEN_VAZIO
+        and not (
+            isinstance(value, str)
+            and value.startswith("TOKEN_VAZIO")
+        )
+    })
 
     surfaces = [module_surface(d) for d in dumps]
     union = set().union(*(set(surface.keys()) for surface in surfaces))
@@ -293,6 +320,7 @@ def build_baseline(paths: list[Path]) -> dict[str, Any]:
         identity_consistent
         and observer_consistent
         and capture_consistent
+        and condition_consistent
         and min_quality == 1.0
     )
 
@@ -311,6 +339,18 @@ def build_baseline(paths: list[Path]) -> dict[str, Any]:
         "stable_identity_consistent": identity_consistent,
         "observer_consistent": observer_consistent,
         "capture_consistent": capture_consistent,
+        "condition_consistent": condition_consistent,
+        "condition_id": condition_id,
+        "condition_control": (
+            "EXPLICIT"
+            if condition_consistent and condition_id != "UNSPECIFIED"
+            else "UNSPECIFIED_DESCRIPTIVE_ONLY"
+            if condition_consistent
+            else "INCOMPARABLE"
+        ),
+        "boot_session_count": len(observed_boot_sessions),
+        "boot_sessions_sha256": observed_boot_sessions,
+        "cross_boot_sampling": len(observed_boot_sessions) > 1,
         "observer_identity": observer_reference if observer_consistent else TOKEN_VAZIO,
         "platform_key_hint_consistent": platform_key_hint_consistent,
         "stable_identity": identity_reference if identity_consistent else TOKEN_VAZIO,
@@ -338,6 +378,7 @@ def build_baseline(paths: list[Path]) -> dict[str, Any]:
             "any required observation is missing",
             "fewer than 3 distinct captures",
             "controller_run_id is missing or repeated",
+            "capture condition differs across baseline snapshots",
             "module surface changed during a non-atomic capture",
         ],
         "claim_allowed": False,
@@ -353,6 +394,10 @@ def assess_candidate(baseline: dict[str, Any], candidate: dict[str, Any]) -> dic
         raise ValueError("unsupported candidate dump schema")
 
     candidate_quality = completeness(candidate)
+    candidate_condition = get_path(
+        candidate, "capture_provenance.condition_id"
+    )
+    condition_match = candidate_condition == baseline.get("condition_id")
     candidate_capture_consistent = (
         get_path(candidate, "consistency.module_surface_stable_during_capture")
         is True
@@ -434,6 +479,8 @@ def assess_candidate(baseline: dict[str, Any], candidate: dict[str, Any]) -> dic
 
     if not candidate_capture_consistent:
         classification = "INCOMPARABLE_CAPTURE_RACE"
+    elif not condition_match:
+        classification = "INCOMPARABLE_CONDITION"
     elif candidate_quality["ratio"] < 1.0:
         classification = "INSUFFICIENT_OBSERVATION"
     elif not identity_match:
@@ -455,6 +502,8 @@ def assess_candidate(baseline: dict[str, Any], candidate: dict[str, Any]) -> dic
         "stable_identity_match": identity_match,
         "observer_match": observer_match,
         "capture_consistent": candidate_capture_consistent,
+        "condition_match": condition_match,
+        "candidate_condition_id": candidate_condition,
         "platform_key_hint_match": platform_key_hint_match,
         "compact_fingerprints_authoritative": False,
         "candidate_quality": candidate_quality,
