@@ -10,7 +10,7 @@
  * - never collect device/SIM/subscriber identifiers.
  */
 
-const SCHEMA = 'rafaelia.android.runtime-stability/v1';
+const SCHEMA = 'rafaelia.android.runtime-stability/v2';
 const CHANNEL = 'rafaelia.android.runtime.stability';
 let captureSequence = 0;
 
