@@ -30,7 +30,7 @@ from runtime_stability_storage import (
 )
 
 
-SCHEMA = "rafaelia.android.runtime-stability/v1"
+SCHEMA = "rafaelia.android.runtime-stability/v2"
 CHANNEL = "rafaelia.android.runtime.stability"
 
 
