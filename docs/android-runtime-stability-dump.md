@@ -319,3 +319,56 @@ cause stay `TOKEN_VAZIO` until an independent source supplies that evidence.
 This is intentional: rigor means implementing useful alternatives **and**
 recording why alternatives that weaken falsifiability or operational integrity
 are not promoted.
+
+
+## Safe Android platform contract
+
+The V2 agent reads a strict allowlist of non-identifying Android properties
+through `android.os.SystemProperties`. The intent is to carry the technical
+contract discovered during physical preflight into each Frida observation
+without copying the full `getprop` surface.
+
+Examples include:
+- zygote and ABI lists;
+- ART ARM variant/features;
+- VNDK and first API level;
+- board/hardware/platform family;
+- build type/debuggable/secure flags;
+- Verified Boot / verity / boot lock state;
+- file-based encryption state;
+- A/B and dynamic-partition context;
+- `sys.use_memfd`, per-app memcg and LMKD downgrade tuning;
+- selected service states for `lmkd`, `ashmemd`, `hidl_memory`,
+  `tombstoned`, `traced` and `traced_probes`.
+
+Explicitly excluded are serial/PSN, SIM/ICCID/IMSI/subscriber fields,
+operator/carrier identity and radio provisioning data.
+
+The agent also records process PSS through Android's `Debug.getPss()`, plus
+native heap size/free/allocated and loaded-class count. These are runtime
+observations, not proof of memory pressure or LMKD causality.
+
+## Hosted HyperMemory bridge
+
+`modules/runtime-learning-engine/runtime-stability-hypermemory-bridge.ts`
+projects V2 dumps and V2 diffs into bounded HyperMemory records.
+
+The bridge intentionally does **not** embed the full loaded-module list. It
+keeps:
+- source schema/hash;
+- stable/instrumentation identity;
+- visibility state;
+- recognition hints and module count;
+- thread/range/heap/PSS summaries;
+- gaps and timing;
+- diff change paths.
+
+Every bridged event preserves:
+
+```text
+causality = NOT_INFERRED
+claim_allowed = false
+```
+
+So the hosted bridge is implemented, while physical shared-memory/restart
+survival and physical causal attribution remain separate gates.
