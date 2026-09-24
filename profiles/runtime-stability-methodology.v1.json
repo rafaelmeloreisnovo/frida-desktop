@@ -34,7 +34,8 @@
     "outlier_threshold": 6,
     "module_model": "empirical_prevalence",
     "zero_mad_rule": "candidate outside observed min/max is deviation, not causality",
-    "independence_rule": "input paths and snapshot bytes must be unique; exact duplicate evidence is rejected"
+    "independence_rule": "input paths and snapshot bytes must be unique; exact duplicate evidence is rejected",
+    "capture_run_rule": "each baseline snapshot must carry a distinct controller_run_id"
   },
   "observation_quality": {
     "dimensions": [
