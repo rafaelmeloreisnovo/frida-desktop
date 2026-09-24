@@ -1,0 +1,88 @@
+{
+  "schema": "rafaelia.runtime-stability.methods-matrix/v1",
+  "claim_allowed": false,
+  "methods": [
+    {
+      "method": "differential_testing",
+      "status": "IMPLEMENTED_HOSTED",
+      "artifact": "tools/runtime-stability-diff.py",
+      "falsifier": "same authoritative structure with only ASLR or compact-hint changes must not become structural drift"
+    },
+    {
+      "method": "metamorphic_testing",
+      "status": "IMPLEMENTED_HOSTED",
+      "relations": [
+        "ASLR base change preserves module identity",
+        "compact fingerprint change alone preserves structural identity",
+        "duplicate evidence never increases evidence level"
+      ]
+    },
+    {
+      "method": "robust_repeated_measures",
+      "status": "IMPLEMENTED_HOSTED",
+      "artifact": "tools/runtime-stability-baseline.py",
+      "statistics": ["median", "MAD", "empirical module prevalence"],
+      "boundary": "distinct captures are not automatically statistically independent"
+    },
+    {
+      "method": "negative_positive_controls",
+      "status": "IMPLEMENTED_HOSTED",
+      "negative_controls": ["no drift", "ASLR-only", "hint-only"],
+      "positive_controls": ["identity mutation", "observer mutation", "module mutation", "runtime numeric outlier"]
+    },
+    {
+      "method": "falsification_ladder",
+      "status": "IMPLEMENTED_HOSTED",
+      "artifact": "tools/runtime-stability-evidence-gate.py",
+      "levels": ["OBSERVED", "REPEATED", "ASSOCIATED", "CAUSAL_CANDIDATE", "CAUSAL_SUPPORTED"]
+    },
+    {
+      "method": "controlled_intervention_reversal",
+      "status": "CONTRACT_IMPLEMENTED_PHYSICAL_TOKEN_VAZIO",
+      "required_for": "CAUSAL_SUPPORTED",
+      "boundary": "device intervention evidence not supplied by hosted CI"
+    },
+    {
+      "method": "independent_corroboration",
+      "status": "CONTRACT_IMPLEMENTED",
+      "rule": "distinct source_type and independence_group are required at association/causal levels"
+    },
+    {
+      "method": "chain_of_custody",
+      "status": "IMPLEMENTED_HOSTED",
+      "mechanisms": ["agent SHA-256", "controller SHA-256", "controller_run_id", "dump SHA-256 sidecar", "HyperMemory payload SHA chain"]
+    },
+    {
+      "method": "fault_tree_fmea",
+      "status": "DOCUMENTED_AND_GATED",
+      "hazards": [
+        "false causal promotion",
+        "observer-induced drift",
+        "duplicate evidence inflation",
+        "hash collision masking drift",
+        "tail discontinuity",
+        "storage exhaustion",
+        "tampered dump",
+        "privacy overcollection"
+      ]
+    },
+    {
+      "method": "privacy_threat_model",
+      "status": "IMPLEMENTED_HOSTED",
+      "controls": ["allowlisted structural fields", "forbidden payload/content surfaces", "minimized HyperMemory bridge"]
+    },
+    {
+      "method": "physical_fault_injection",
+      "status": "TOKEN_VAZIO",
+      "allowed_scope": "authorized lab target only",
+      "examples": ["controlled exception", "controlled target restart", "bounded memory pressure"],
+      "claim_allowed": false
+    },
+    {
+      "method": "cross_scale_causal_bridge",
+      "status": "PARTIAL",
+      "implemented": "dump/diff/outcome -> HyperMemory causal event",
+      "remaining": ["LMKD receipt", "SELinux denial receipt", "tombstone join", "SharedMemory survivor receipt"]
+    }
+  ]
+}
