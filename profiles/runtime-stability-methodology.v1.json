@@ -27,13 +27,14 @@
   "baseline": {
     "minimum_independent_snapshots": 3,
     "identity_invariant_required": true,
-    "required_observation_completeness": 1.0,
+    "required_observation_completeness": 1,
     "numeric_center": "median",
     "numeric_dispersion": "median_absolute_deviation",
     "robust_sigma_scale": 1.4826,
-    "outlier_threshold": 6.0,
+    "outlier_threshold": 6,
     "module_model": "empirical_prevalence",
-    "zero_mad_rule": "candidate outside observed min/max is deviation, not causality"
+    "zero_mad_rule": "candidate outside observed min/max is deviation, not causality",
+    "independence_rule": "input paths and snapshot bytes must be unique; exact duplicate evidence is rejected"
   },
   "observation_quality": {
     "dimensions": [
@@ -66,5 +67,21 @@
     "hosted evidence != physical-device evidence",
     "same app identity != same process generation",
     "compact fingerprint != authoritative structure"
-  ]
+  ],
+  "evidence_independence": {
+    "rule": "independent evidence requires distinct independence_group values, not merely distinct labels/source_type strings",
+    "observation_identity": "observations must have unique ids",
+    "fail_closed": true
+  },
+  "hyperMemory_chain": {
+    "eviction_rule": "if the predecessor cannot be observed after ring eviction, emit TOKEN_VAZIO_EVICTED_PREDECESSOR instead of GENESIS",
+    "chain_claim": "payload SHA-256 links are local causal-order evidence, not causal proof"
+  },
+  "storage": {
+    "publication": "temp + fsync + exclusive hard-link + directory fsync",
+    "deletion": "never automatic",
+    "default_max_dumps": 256,
+    "default_max_dir_bytes": 67108864,
+    "default_min_free_bytes": 16777216
+  }
 }
