@@ -106,19 +106,23 @@ describe('RuntimeLearningEngine Edge Cases & Hardening', () => {
         confidence_threshold: 0.75,
         min_occurrences_before_fix: 3
       });
-      await testEngine.start();
+      try {
+        await testEngine.start();
 
-      for (let i = 0; i < 15; i++) {
-        await testEngine.captureBug({
-          bug_type: 'crash',
-          class: `com.example.App${i}`,
-          exception_type: 'RuntimeException',
-          severity: 'critical'
-        });
+        for (let i = 0; i < 15; i++) {
+          await testEngine.captureBug({
+            bug_type: 'crash',
+            class: `com.example.App${i}`,
+            exception_type: 'RuntimeException',
+            severity: 'critical'
+          });
+        }
+
+        expect(testEngine.getStats().recentBugsCount).toBeLessThanOrEqual(10);
+        expect(testEngine.isRunning()).toBe(true);
+      } finally {
+        await testEngine.shutdown();
       }
-
-      expect(testEngine.getStats().recentBugsCount).toBeLessThanOrEqual(10);
-      expect(testEngine.isRunning()).toBe(true);
     });
   });
 
@@ -288,17 +292,21 @@ describe('RuntimeLearningEngine Edge Cases & Hardening', () => {
         bug_capacity: 5,
         confidence_threshold: 0.75
       });
-      await testEngine.start();
-      for (let i = 0; i < 20; i++) {
-        await testEngine.captureBug({
-          bug_type: 'crash',
-          class: `com.example.App${i}`,
-          exception_type: 'RuntimeException',
-          severity: 'critical'
-        });
+      try {
+        await testEngine.start();
+        for (let i = 0; i < 20; i++) {
+          await testEngine.captureBug({
+            bug_type: 'crash',
+            class: `com.example.App${i}`,
+            exception_type: 'RuntimeException',
+            severity: 'critical'
+          });
+        }
+        expect(testEngine.getStats().recentBugsCount).toBeLessThanOrEqual(5);
+        expect(testEngine.isRunning()).toBe(true);
+      } finally {
+        await testEngine.shutdown();
       }
-      expect(testEngine.getStats().recentBugsCount).toBeLessThanOrEqual(5);
-      expect(testEngine.isRunning()).toBe(true);
     });
   });
 });
