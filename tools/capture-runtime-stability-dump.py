@@ -153,7 +153,9 @@ def main() -> int:
         print("RAFAELIA_RUNTIME_STABILITY_DUMP_PASS")
         print(f"receipt={path}")
         print(f"sha256={digest}")
-        print("target_selector_persisted=NO")
+        print("target_name_persisted=NO")
+        print("endpoint_persisted=NO")
+        print("pid_in_dump=YES_VOLATILE_RUNTIME_STATE")
         print("claim_allowed=false")
         return 0
     finally:
