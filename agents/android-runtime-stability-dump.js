@@ -91,7 +91,7 @@ function collectThreads() {
 }
 
 function collectRanges() {
-  const protections = ['r--', 'rw-', 'r-x', 'rwx'];
+  const protections = ['---', '--x', '-w-', '-wx', 'r--', 'r-x', 'rw-', 'rwx'];
   const summary = Object.create(null);
 
   protections.forEach(function (protection) {
@@ -204,12 +204,24 @@ async function collectSnapshot(reason) {
   const recognitionKey = fnv1a32Text(
       platformKey + '|' + moduleSurfaceKey);
   const captureFinishedEpochMs = Date.now();
+  const deviceElapsedMs = java.runtime &&
+      typeof java.runtime.device_elapsed_ms === 'number'
+      ? java.runtime.device_elapsed_ms : null;
+  const estimatedBootEpochMs = deviceElapsedMs === null
+      ? 'TOKEN_VAZIO'
+      : captureFinishedEpochMs - deviceElapsedMs;
 
   return {
     schema: SCHEMA,
     capture_seq: sequence,
     reason: reason || 'MANUAL',
     captured_epoch_ms: captureFinishedEpochMs,
+    clock_context: {
+      wall_epoch_ms: captureFinishedEpochMs,
+      device_elapsed_ms: deviceElapsedMs === null ? 'TOKEN_VAZIO' : deviceElapsedMs,
+      estimated_boot_epoch_ms: estimatedBootEpochMs,
+      estimated_boot_epoch_semantics: 'APPROXIMATE_WALL_MINUS_ELAPSED_NOT_AUTHORITY'
+    },
     observer: {
       agent_schema: SCHEMA,
       frida_version: safe(function () { return Frida.version; }, 'TOKEN_VAZIO'),
