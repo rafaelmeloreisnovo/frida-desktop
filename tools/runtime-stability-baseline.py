@@ -225,7 +225,7 @@ def build_baseline(paths: list[Path]) -> dict[str, Any]:
     observer_reference = observers[0]
     observer_consistent = all(item == observer_reference for item in observers[1:])
 
-    platform_keys = [get_path(d, "platform_key") for d in dumps]
+    platform_keys = [get_path(d, "platform_key_hint") for d in dumps]
     platform_key_hint_consistent = all(
         key == platform_keys[0] for key in platform_keys[1:]
     )
@@ -373,7 +373,7 @@ def assess_candidate(baseline: dict[str, Any], candidate: dict[str, Any]) -> dic
     )
     identity_match = stable_identity_projection(candidate) == baseline["stable_identity"]
     observer_match = observer_projection(candidate) == baseline["observer_identity"]
-    platform_key_hint_match = get_path(candidate, "platform_key") == baseline["platform_key_hint"]
+    platform_key_hint_match = get_path(candidate, "platform_key_hint") == baseline["platform_key_hint"]
 
     baseline_modules = baseline.get("module_prevalence", [])
     expected = {
