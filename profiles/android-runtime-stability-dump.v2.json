@@ -174,8 +174,9 @@
       "rationale": "must remain independent source evidence before causal attribution"
     },
     "hypermemory_causal_tail": {
-      "status": "SUCCESSOR_BRIDGE_REQUIRED",
-      "rationale": "runtime dumps are context packets, not causal tails by themselves"
+      "status": "IMPLEMENTED_HOSTED_BRIDGE",
+      "rationale": "V2 dump/diff evidence is projected into bounded HyperMemory context events without embedding the full module list or promoting causality",
+      "physical_bridge": "TOKEN_VAZIO_NOT_EXECUTED"
     }
   },
   "token_vazio": [
