@@ -52,6 +52,7 @@ REQUIRED_PATHS = [
     "capture_provenance.agent_sha256",
     "capture_provenance.controller_sha256",
     "capture_provenance.frida_python_version",
+    "capture_provenance.condition_id",
     "runtime_state.modules.state",
     "runtime_state.modules.modules",
     "runtime_state.threads.state",
@@ -170,13 +171,35 @@ def java_runtime_projection(data: dict[str, Any]) -> Any:
     value = get_path(data, "runtime_state.java_runtime")
     if not isinstance(value, dict):
         return value
-    # Monotonic elapsed time must advance between valid captures. It is context,
-    # not target-state drift by itself.
+    # Monotonic/age/cumulative CPU counters advance by design. They remain
+    # context fields, not drift by themselves.
+    context_only = {
+        "device_elapsed_ms",
+        "process_start_elapsed_ms",
+        "process_age_ms",
+        "process_elapsed_cpu_ms",
+    }
     return {
         key: val
         for key, val in value.items()
-        if key != "device_elapsed_ms"
+        if key not in context_only
     }
+
+
+def process_instance_projection(data: dict[str, Any]) -> dict[str, Any]:
+    java_available = get_path(data, "stable_identity.java_available")
+    return {
+        "pid": get_path(data, "runtime_state.pid"),
+        "process_start_elapsed_ms": (
+            get_path(data, "runtime_state.java_runtime.process_start_elapsed_ms")
+            if java_available is True
+            else "TOKEN_VAZIO_NATIVE_ONLY"
+        ),
+    }
+
+
+def boot_session(data: dict[str, Any]) -> Any:
+    return get_path(data, "platform_context.boot_session_sha256")
 
 
 def consistency_state(data: dict[str, Any]) -> Any:
@@ -288,6 +311,28 @@ def compare(baseline: dict[str, Any], candidate: dict[str, Any]) -> dict[str, An
     baseline_observation_gaps = observation_gaps(baseline)
     candidate_observation_gaps = observation_gaps(candidate)
 
+    baseline_condition = get_path(baseline, "capture_provenance.condition_id")
+    candidate_condition = get_path(candidate, "capture_provenance.condition_id")
+    condition_match = baseline_condition == candidate_condition
+
+    baseline_process_instance = process_instance_projection(baseline)
+    candidate_process_instance = process_instance_projection(candidate)
+    process_instance_match = (
+        baseline_process_instance == candidate_process_instance
+    )
+
+    baseline_boot = boot_session(baseline)
+    candidate_boot = boot_session(candidate)
+    boot_session_comparable = (
+        not is_token_vazio(baseline_boot)
+        and not is_token_vazio(candidate_boot)
+    )
+    boot_session_match = (
+        baseline_boot == candidate_boot
+        if boot_session_comparable
+        else "TOKEN_VAZIO"
+    )
+
     identity_changes = compare_paths(baseline, candidate, identity_paths)
     observer_changes = compare_paths(baseline, candidate, observer_paths)
     runtime_changes = compare_paths(baseline, candidate, runtime_paths)
@@ -315,10 +360,16 @@ def compare(baseline: dict[str, Any], candidate: dict[str, Any]) -> dict[str, An
 
     if baseline_observation_gaps or candidate_observation_gaps:
         classification = "INSUFFICIENT_OBSERVATION"
+    elif not condition_match:
+        classification = "INCOMPARABLE_CONDITION"
     elif identity_changes:
         classification = "IDENTITY_DRIFT"
     elif observer_changes:
         classification = "OBSERVER_DRIFT"
+    elif boot_session_comparable and boot_session_match is False:
+        classification = "BOOT_SESSION_DRIFT"
+    elif not process_instance_match:
+        classification = "PROCESS_INSTANCE_DRIFT"
     elif module_changes:
         classification = "MODULE_SURFACE_DRIFT"
     elif runtime_changes:
@@ -330,8 +381,23 @@ def compare(baseline: dict[str, Any], candidate: dict[str, Any]) -> dict[str, An
         "schema": RESULT_SCHEMA,
         "classification": classification,
         "comparison_status": "COMPARABLE",
+        "condition_id": baseline_condition if condition_match else "TOKEN_VAZIO",
+        "condition_match": condition_match,
+        "condition_control": (
+            "EXPLICIT"
+            if condition_match and baseline_condition != "UNSPECIFIED"
+            else "UNSPECIFIED_DESCRIPTIVE_ONLY"
+            if condition_match
+            else "INCOMPARABLE"
+        ),
         "platform_identity_match": not identity_changes,
         "observer_match": not observer_changes,
+        "boot_session_match": boot_session_match,
+        "process_instance_match": process_instance_match,
+        "process_instance": {
+            "baseline": baseline_process_instance,
+            "candidate": candidate_process_instance,
+        },
         "module_surface_match": not module_changes,
         "recognition_match": not identity_changes and not module_changes,
         "identity_changes": identity_changes,
@@ -348,7 +414,8 @@ def compare(baseline: dict[str, Any], candidate: dict[str, Any]) -> dict[str, An
         "claim_allowed": False,
         "invariant": (
             "missing evidence != equality; drift != instability; "
-            "platform, observer, module and runtime drift are distinct"
+            "condition, platform, observer, boot, process-instance, module "
+            "and runtime drift are distinct"
         ),
     }
 
