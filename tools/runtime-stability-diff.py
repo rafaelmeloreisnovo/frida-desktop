@@ -145,6 +145,7 @@ def main() -> int:
         "visibility.threads",
         "visibility.memory_ranges",
         "visibility.java_runtime",
+        "visibility.system_properties",
     ]
     instrumentation_paths = [
         "instrumentation_identity.frida_version",
