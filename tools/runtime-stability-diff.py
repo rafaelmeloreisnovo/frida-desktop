@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
-"""Compare RAFAELIA Frida runtime-stability dumps without inventing causality.
+"""Compare RAFAELIA Frida runtime-stability V2 dumps without inventing causality.
 
-Fail-closed rules:
-- missing evidence is not equality;
-- compact hashes are hints only;
-- non-atomic capture races block module-surface claims;
-- observer drift is separated from target drift;
-- expected clock progression is context, not runtime drift.
+The comparator is deliberately fail-closed:
+- missing observation is not equality;
+- observer/instrument drift is separate from target drift;
+- condition, boot and process-generation context remain explicit;
+- ASLR, PID/TID and monotonic counters are not instability by themselves;
+- module name+size is a recognition surface, not binary identity.
 """
 
 from __future__ import annotations
@@ -16,50 +16,9 @@ import json
 from pathlib import Path
 from typing import Any
 
-
-CORE_OBSERVATION_PATHS = [
-    "runtime_state.modules.state",
-    "runtime_state.modules.modules",
-    "runtime_state.threads.state",
-    "runtime_state.memory_ranges.---.state",
-    "runtime_state.memory_ranges.--x.state",
-    "runtime_state.memory_ranges.-w-.state",
-    "runtime_state.memory_ranges.-wx.state",
-    "runtime_state.memory_ranges.r--.state",
-    "runtime_state.memory_ranges.r-x.state",
-    "runtime_state.memory_ranges.rw-.state",
-    "runtime_state.memory_ranges.rwx.state",
-]
-
-
-TOKEN_VAZIO = "TOKEN_VAZIO"
-DUMP_SCHEMA = "rafaelia.android.runtime-stability/v1"
+SCHEMA_V2 = "rafaelia.android.runtime-stability/v2"
 RESULT_SCHEMA = "rafaelia.android.runtime-stability-diff/v2"
-
-REQUIRED_PATHS = [
-    "schema",
-    "stable_identity.arch",
-    "stable_identity.pointer_size",
-    "stable_identity.page_size",
-    "stable_identity.platform",
-    "stable_identity.java_available",
-    "observer.agent_schema",
-    "observer.frida_version",
-    "observer.instrumentation_present",
-    "observer.introspection_visibility",
-    "observer.memory_range_semantics",
-    "consistency.module_surface_stable_during_capture",
-    "capture_provenance.agent_sha256",
-    "capture_provenance.controller_sha256",
-    "capture_provenance.frida_python_version",
-    "capture_provenance.condition_id",
-    "runtime_state.modules.state",
-    "runtime_state.modules.modules",
-    "runtime_state.threads.state",
-    "runtime_state.threads.count",
-    "runtime_state.memory_ranges._meta.state",
-    "runtime_state.memory_ranges",
-]
+TOKEN_VAZIO = "TOKEN_VAZIO"
 
 
 def load_json(path: Path) -> dict[str, Any]:
@@ -85,42 +44,9 @@ def get_path(data: dict[str, Any], dotted: str) -> Any:
 
 
 def is_missing(value: Any) -> bool:
-    if value is None:
-        return True
-    if isinstance(value, str) and value.startswith("TOKEN_VAZIO"):
-        return True
-    return False
-
-
-def missing_required(data: dict[str, Any]) -> list[str]:
-    missing = []
-    for path in REQUIRED_PATHS:
-        value = get_path(data, path)
-        if is_missing(value):
-            missing.append(path)
-
-    java_available = get_path(data, "stable_identity.java_available")
-    if java_available is True and is_missing(
-        get_path(data, "stable_identity.java_identity")
-    ):
-        missing.append("stable_identity.java_identity")
-    elif java_available not in (True, False):
-        missing.append("stable_identity.java_available")
-    return sorted(set(missing))
-
-
-def is_token_vazio(value: Any) -> bool:
     return value is None or (
         isinstance(value, str) and value.startswith("TOKEN_VAZIO")
     )
-
-
-def observation_gaps(data: dict[str, Any]) -> list[str]:
-    gaps: list[str] = []
-    for path in CORE_OBSERVATION_PATHS:
-        if is_token_vazio(get_path(data, path)):
-            gaps.append(path)
-    return gaps
 
 
 def compare_paths(
@@ -138,13 +64,11 @@ def compare_paths(
 
 
 def module_surface(data: dict[str, Any]) -> Any:
-    """Return authoritative module name+size multiset; ASLR bases are excluded."""
-    modules = get_path(data, "runtime_state.modules.modules")
-    if not isinstance(modules, list):
+    rows = get_path(data, "runtime_state.modules.modules")
+    if not isinstance(rows, list):
         return TOKEN_VAZIO
-
     surface: list[dict[str, Any]] = []
-    for row in modules:
+    for row in rows:
         if not isinstance(row, dict):
             return TOKEN_VAZIO
         name = row.get("name")
@@ -167,12 +91,15 @@ def module_name_ambiguity(data: dict[str, Any]) -> list[str]:
     return sorted(name for name, count in counts.items() if count > 1)
 
 
-def java_runtime_projection(data: dict[str, Any]) -> Any:
-    value = get_path(data, "runtime_state.java_runtime")
-    if not isinstance(value, dict):
-        return value
-    # Monotonic/age/cumulative CPU counters advance by design. They remain
-    # context fields, not drift by themselves.
+def java_runtime_surface(data: dict[str, Any]) -> Any:
+    runtime = get_path(data, "runtime_state.java_runtime")
+    if is_missing(runtime):
+        return runtime
+    if not isinstance(runtime, dict):
+        return TOKEN_VAZIO
+
+    # These advance by construction and are process/clock context, not
+    # stability drift by themselves.
     context_only = {
         "device_elapsed_ms",
         "process_start_elapsed_ms",
@@ -180,102 +107,171 @@ def java_runtime_projection(data: dict[str, Any]) -> Any:
         "process_elapsed_cpu_ms",
     }
     return {
-        key: val
-        for key, val in value.items()
+        key: value
+        for key, value in runtime.items()
         if key not in context_only
     }
 
 
-def process_instance_projection(data: dict[str, Any]) -> dict[str, Any]:
-    java_available = get_path(data, "stable_identity.java_available")
-    return {
-        "pid": get_path(data, "runtime_state.pid"),
-        "process_start_elapsed_ms": (
-            get_path(data, "runtime_state.java_runtime.process_start_elapsed_ms")
-            if java_available is True
-            else "TOKEN_VAZIO_NATIVE_ONLY"
-        ),
-    }
+def condition_id(data: dict[str, Any]) -> str:
+    value = get_path(data, "capture_provenance.condition_id")
+    if is_missing(value):
+        return "UNSPECIFIED"
+    return str(value)
 
 
 def boot_session(data: dict[str, Any]) -> Any:
     return get_path(data, "platform_context.boot_session_sha256")
 
 
-def consistency_state(data: dict[str, Any]) -> Any:
+def process_instance(data: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "pid": get_path(data, "runtime_state.pid"),
+        "process_start_elapsed_ms":
+            get_path(data, "runtime_state.java_runtime.process_start_elapsed_ms"),
+    }
+
+
+def capture_consistency(data: dict[str, Any]) -> Any:
     return get_path(data, "consistency.module_surface_stable_during_capture")
 
 
-def render_incomparable(
+def validate_dump(data: dict[str, Any]) -> list[str]:
+    errors: list[str] = []
+    if data.get("schema") != SCHEMA_V2:
+        errors.append(f"unsupported_schema:{data.get('schema', TOKEN_VAZIO)}")
+    if data.get("claim_allowed") is not False:
+        errors.append("claim_allowed_must_be_false")
+
+    required = (
+        "stable_identity",
+        "instrumentation_identity",
+        "visibility",
+        "runtime_state",
+        "runtime_state.modules",
+        "runtime_state.threads",
+        "runtime_state.memory_ranges",
+        "runtime_state.android_services",
+    )
+    for path in required:
+        value = get_path(data, path)
+        if is_missing(value):
+            errors.append(f"missing:{path}")
+
+    modules = module_surface(data)
+    if is_missing(modules):
+        errors.append("missing:runtime_state.modules.modules")
+
+    return sorted(set(errors))
+
+
+def visibility_state(data: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "modules": get_path(data, "visibility.modules"),
+        "threads": get_path(data, "visibility.threads"),
+        "memory_ranges": get_path(data, "visibility.memory_ranges"),
+        "java_runtime": get_path(data, "visibility.java_runtime"),
+        "system_properties": get_path(data, "visibility.system_properties"),
+    }
+
+
+def render_result(result: dict[str, Any], out: Path | None) -> None:
+    rendered = json.dumps(result, indent=2, sort_keys=True) + "\n"
+    if out:
+        out.write_text(rendered, encoding="utf-8")
+    else:
+        print(rendered, end="")
+
+
+def incomparable(
     classification: str,
-    baseline: dict[str, Any],
-    candidate: dict[str, Any],
-    *,
-    baseline_missing: list[str],
-    candidate_missing: list[str],
     reason: str,
+    baseline_errors: list[str],
+    candidate_errors: list[str],
 ) -> dict[str, Any]:
     return {
         "schema": RESULT_SCHEMA,
         "classification": classification,
         "comparison_status": "FAIL_CLOSED",
+        "comparable": False,
         "reason": reason,
-        "baseline_missing_required": baseline_missing,
-        "candidate_missing_required": candidate_missing,
-        "baseline_observation_gaps": baseline_missing,
-        "candidate_observation_gaps": candidate_missing,
-        "platform_identity_match": TOKEN_VAZIO,
-        "observer_match": TOKEN_VAZIO,
-        "module_surface_match": TOKEN_VAZIO,
-        "recognition_match": TOKEN_VAZIO,
-        "identity_changes": [],
-        "observer_changes": [],
-        "module_surface_changes": [],
-        "runtime_changes": [],
-        "hint_changes": [],
-        "module_name_ambiguity": {
-            "baseline": module_name_ambiguity(baseline),
-            "candidate": module_name_ambiguity(candidate),
-        },
-        "compact_fingerprints_authoritative": False,
+        "baseline_errors": baseline_errors,
+        "candidate_errors": candidate_errors,
         "causality": "NOT_INFERRED",
         "claim_allowed": False,
     }
 
 
-def compare(baseline: dict[str, Any], candidate: dict[str, Any]) -> dict[str, Any]:
-    if baseline.get("schema") != DUMP_SCHEMA or candidate.get("schema") != DUMP_SCHEMA:
-        return render_incomparable(
-            "INCOMPARABLE_SCHEMA",
-            baseline,
-            candidate,
-            baseline_missing=[],
-            candidate_missing=[],
-            reason="both dumps must use the supported runtime-stability schema",
+def compare(
+    baseline: dict[str, Any],
+    candidate: dict[str, Any],
+) -> dict[str, Any]:
+    baseline_errors = validate_dump(baseline)
+    candidate_errors = validate_dump(candidate)
+    if baseline_errors or candidate_errors:
+        return incomparable(
+            "INCOMPARABLE",
+            "unsupported or incomplete structural observation",
+            baseline_errors,
+            candidate_errors,
         )
 
-    baseline_missing = missing_required(baseline)
-    candidate_missing = missing_required(candidate)
-    if baseline_missing or candidate_missing:
-        return render_incomparable(
-            "INSUFFICIENT_OBSERVATION",
-            baseline,
-            candidate,
-            baseline_missing=baseline_missing,
-            candidate_missing=candidate_missing,
-            reason="missing observations cannot be treated as equal observations",
+    baseline_visibility = visibility_state(baseline)
+    candidate_visibility = visibility_state(candidate)
+    visibility_changes = []
+    for key in sorted(set(baseline_visibility) | set(candidate_visibility)):
+        before = baseline_visibility.get(key, TOKEN_VAZIO)
+        after = candidate_visibility.get(key, TOKEN_VAZIO)
+        if before != after:
+            visibility_changes.append({
+                "path": f"visibility.{key}",
+                "before": before,
+                "after": after,
+            })
+
+    # Same missing visibility on both sides is not evidence of equality.
+    shared_missing_visibility = sorted(
+        key for key in baseline_visibility
+        if is_missing(baseline_visibility[key])
+        and is_missing(candidate_visibility.get(key))
+        and key in {"modules", "threads", "memory_ranges"}
+    )
+    if shared_missing_visibility:
+        return incomparable(
+            "INCOMPARABLE_VISIBILITY",
+            "same missing observation cannot be treated as observed equality: "
+            + ",".join(shared_missing_visibility),
+            [],
+            [],
         )
 
-    if consistency_state(baseline) is False or consistency_state(candidate) is False:
-        return render_incomparable(
+    baseline_condition = condition_id(baseline)
+    candidate_condition = condition_id(candidate)
+    if baseline_condition != candidate_condition:
+        result = incomparable(
+            "INCOMPARABLE_CONDITION",
+            "experimental/workload condition_id differs",
+            [],
+            [],
+        )
+        result["baseline_condition_id"] = baseline_condition
+        result["candidate_condition_id"] = candidate_condition
+        return result
+
+    baseline_consistency = capture_consistency(baseline)
+    candidate_consistency = capture_consistency(candidate)
+    if baseline_consistency is False or candidate_consistency is False:
+        return incomparable(
             "INCOMPARABLE_CAPTURE_RACE",
-            baseline,
-            candidate,
-            baseline_missing=[],
-            candidate_missing=[],
-            reason="module surface changed during at least one non-atomic capture",
+            "module surface changed between endpoint fences of a non-atomic capture",
+            [],
+            [],
         )
 
+    instrumentation_paths = [
+        "instrumentation_identity.frida_version",
+        "instrumentation_identity.script_runtime",
+    ]
     identity_paths = [
         "stable_identity.arch",
         "stable_identity.pointer_size",
@@ -283,16 +279,7 @@ def compare(baseline: dict[str, Any], candidate: dict[str, Any]) -> dict[str, An
         "stable_identity.platform",
         "stable_identity.java_available",
         "stable_identity.java_identity",
-    ]
-    observer_paths = [
-        "observer.agent_schema",
-        "observer.frida_version",
-        "observer.instrumentation_present",
-        "observer.introspection_visibility",
-        "observer.memory_range_semantics",
-        "capture_provenance.agent_sha256",
-        "capture_provenance.controller_sha256",
-        "capture_provenance.frida_python_version",
+        "stable_identity.platform_contract",
     ]
     runtime_paths = [
         "runtime_state.debugger_attached",
@@ -300,73 +287,65 @@ def compare(baseline: dict[str, Any], candidate: dict[str, Any]) -> dict[str, An
         "runtime_state.threads.count",
         "runtime_state.threads.states",
         "runtime_state.memory_ranges",
+        "runtime_state.android_services",
     ]
     hint_paths = [
-        "platform_key",
-        "module_surface_key",
-        "recognition_key",
-        "runtime_state.modules.stable_set_fingerprint",
+        "platform_key_hint",
+        "module_surface_key_hint",
+        "recognition_key_hint",
+    ]
+    observer_paths = [
+        "runtime_state.observer.frida_heap_size_bytes",
+        "runtime_state.observer.kernel_api_available",
+        "timing.wall_duration_ms",
+        "timing.monotonic_duration_ms",
     ]
 
-    baseline_observation_gaps = observation_gaps(baseline)
-    candidate_observation_gaps = observation_gaps(candidate)
-
-    baseline_condition = get_path(baseline, "capture_provenance.condition_id")
-    candidate_condition = get_path(candidate, "capture_provenance.condition_id")
-    condition_match = baseline_condition == candidate_condition
-
-    baseline_process_instance = process_instance_projection(baseline)
-    candidate_process_instance = process_instance_projection(candidate)
-    process_instance_match = (
-        baseline_process_instance == candidate_process_instance
+    instrumentation_changes = compare_paths(
+        baseline, candidate, instrumentation_paths
     )
-
-    baseline_boot = boot_session(baseline)
-    candidate_boot = boot_session(candidate)
-    boot_session_comparable = (
-        not is_token_vazio(baseline_boot)
-        and not is_token_vazio(candidate_boot)
-    )
-    boot_session_match = (
-        baseline_boot == candidate_boot
-        if boot_session_comparable
-        else "TOKEN_VAZIO"
-    )
-
     identity_changes = compare_paths(baseline, candidate, identity_paths)
-    observer_changes = compare_paths(baseline, candidate, observer_paths)
     runtime_changes = compare_paths(baseline, candidate, runtime_paths)
+    hint_changes = compare_paths(baseline, candidate, hint_paths)
+    observer_changes = compare_paths(baseline, candidate, observer_paths)
 
-    before_java = java_runtime_projection(baseline)
-    after_java = java_runtime_projection(candidate)
+    before_java = java_runtime_surface(baseline)
+    after_java = java_runtime_surface(candidate)
     if before_java != after_java:
         runtime_changes.append({
-            "path": "runtime_state.java_runtime[excluding_device_elapsed_ms]",
+            "path": "runtime_state.java_runtime[excluding_monotonic_context]",
             "before": before_java,
             "after": after_java,
         })
 
-    baseline_surface = module_surface(baseline)
-    candidate_surface = module_surface(candidate)
+    before_modules = module_surface(baseline)
+    after_modules = module_surface(candidate)
     module_changes: list[dict[str, Any]] = []
-    if baseline_surface != candidate_surface:
+    if before_modules != after_modules:
         module_changes.append({
             "path": "runtime_state.modules.modules[name,size]",
-            "before": baseline_surface,
-            "after": candidate_surface,
+            "before": before_modules,
+            "after": after_modules,
         })
 
-    hint_changes = compare_paths(baseline, candidate, hint_paths)
+    before_boot = boot_session(baseline)
+    after_boot = boot_session(candidate)
+    boot_comparable = not is_missing(before_boot) and not is_missing(after_boot)
+    boot_session_match: bool | str = (
+        before_boot == after_boot if boot_comparable else TOKEN_VAZIO
+    )
 
-    if baseline_observation_gaps or candidate_observation_gaps:
-        classification = "INSUFFICIENT_OBSERVATION"
-    elif not condition_match:
-        classification = "INCOMPARABLE_CONDITION"
+    before_process = process_instance(baseline)
+    after_process = process_instance(candidate)
+    process_instance_match = before_process == after_process
+
+    if visibility_changes:
+        classification = "VISIBILITY_DRIFT"
+    elif instrumentation_changes:
+        classification = "INSTRUMENTATION_DRIFT"
     elif identity_changes:
         classification = "IDENTITY_DRIFT"
-    elif observer_changes:
-        classification = "OBSERVER_DRIFT"
-    elif boot_session_comparable and boot_session_match is False:
+    elif boot_comparable and boot_session_match is False:
         classification = "BOOT_SESSION_DRIFT"
     elif not process_instance_match:
         classification = "PROCESS_INSTANCE_DRIFT"
@@ -381,41 +360,59 @@ def compare(baseline: dict[str, Any], candidate: dict[str, Any]) -> dict[str, An
         "schema": RESULT_SCHEMA,
         "classification": classification,
         "comparison_status": "COMPARABLE",
-        "condition_id": baseline_condition if condition_match else "TOKEN_VAZIO",
-        "condition_match": condition_match,
+        "comparable": True,
+        "condition_id": baseline_condition,
         "condition_control": (
             "EXPLICIT"
-            if condition_match and baseline_condition != "UNSPECIFIED"
+            if baseline_condition != "UNSPECIFIED"
             else "UNSPECIFIED_DESCRIPTIVE_ONLY"
-            if condition_match
-            else "INCOMPARABLE"
         ),
         "platform_identity_match": not identity_changes,
-        "observer_match": not observer_changes,
+        "instrumentation_match": not instrumentation_changes,
+        "module_surface_match": not module_changes,
+        "recognition_match": not identity_changes and not module_changes,
         "boot_session_match": boot_session_match,
         "process_instance_match": process_instance_match,
         "process_instance": {
-            "baseline": baseline_process_instance,
-            "candidate": candidate_process_instance,
+            "baseline": before_process,
+            "candidate": after_process,
         },
-        "module_surface_match": not module_changes,
-        "recognition_match": not identity_changes and not module_changes,
+        "visibility_changes": visibility_changes,
+        "instrumentation_changes": instrumentation_changes,
         "identity_changes": identity_changes,
-        "observer_changes": observer_changes,
         "module_surface_changes": module_changes,
         "runtime_changes": runtime_changes,
-        "hint_changes": hint_changes,
+        "process_instance_changes": (
+            [] if process_instance_match else [{
+                "path": "process_instance",
+                "before": before_process,
+                "after": after_process,
+            }]
+        ),
+        "observer_effect_changes": observer_changes,
+        "compact_hint_changes": hint_changes,
         "module_name_ambiguity": {
             "baseline": module_name_ambiguity(baseline),
             "candidate": module_name_ambiguity(candidate),
         },
+        "excluded_from_classification": [
+            "wall/monotonic clock position",
+            "capture sequence",
+            "capture reason",
+            "ASLR module bases",
+            "current TID",
+            "process age/cumulative CPU counters",
+            "observer capture duration",
+            "compact hash hints",
+        ],
         "compact_fingerprints_authoritative": False,
+        "module_name_size_is_binary_identity": False,
         "causality": "NOT_INFERRED",
         "claim_allowed": False,
         "invariant": (
             "missing evidence != equality; drift != instability; "
-            "condition, platform, observer, boot, process-instance, module "
-            "and runtime drift are distinct"
+            "condition/visibility/instrument/platform/boot/process/module/runtime "
+            "are distinct evidence dimensions"
         ),
     }
 
@@ -428,12 +425,8 @@ def main() -> int:
     args = parser.parse_args()
 
     result = compare(load_json(args.baseline), load_json(args.candidate))
-    rendered = json.dumps(result, indent=2, sort_keys=True) + "\n"
-    if args.out:
-        args.out.write_text(rendered, encoding="utf-8")
-    else:
-        print(rendered, end="")
-    return 0
+    render_result(result, args.out)
+    return 0 if result.get("comparable") is True else 2
 
 
 if __name__ == "__main__":
