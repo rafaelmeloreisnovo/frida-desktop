@@ -116,6 +116,13 @@
       "positive_control": "renamed-thread event stores id and names_collected=false only",
       "falsifier": "new or previous thread name appears in event payload",
       "gate": "STATIC_CONTRACT+PHYSICAL_RECEIPT"
+    },
+    {
+      "id": "H16_SAFE_PROPERTY_ALLOWLIST",
+      "claim": "Only explicitly allowlisted non-identifying Android properties are collected into the Frida stability dump",
+      "positive_control": "zygote/ABI/memfd/LMKD/AVB/FBE/VNDK/service-state keys are present while serial/SIM/operator/radio-provisioning keys are absent",
+      "falsifier": "agent references or emits a forbidden identity/telephony property",
+      "gate": "STATIC_CONTRACT+PHYSICAL_RECEIPT"
     }
   ],
   "physical_promotion_rule": {
