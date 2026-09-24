@@ -118,29 +118,50 @@ function collectThreads() {
 
 function collectRanges() {
   const protections = ['---', '--x', '-w-', '-wx', 'r--', 'r-x', 'rw-', 'rwx'];
+  let ranges;
+  try {
+    // Frida's protection filter means "at least these permissions". Querying
+    // r--, rw-, r-x, ... separately overlaps. Enumerate everything once and
+    // aggregate by each range's exact returned protection.
+    ranges = Process.enumerateRanges({ protection: '---', coalesce: false });
+  } catch (error) {
+    const failed = Object.create(null);
+    protections.forEach(function (protection) {
+      failed[protection] = {
+        state: 'TOKEN_VAZIO',
+        count: 'TOKEN_VAZIO',
+        bytes: 'TOKEN_VAZIO'
+      };
+    });
+    failed._meta = {
+      state: 'TOKEN_VAZIO',
+      semantics: 'SINGLE_ENUMERATION_EXACT_RETURNED_PROTECTION',
+      total_count: 'TOKEN_VAZIO',
+      total_bytes: 'TOKEN_VAZIO',
+      overlap_by_construction: false,
+      error_class: error === null || error === undefined ?
+          'unknown' : error.constructor.name
+    };
+    return failed;
+  }
+
   const summary = Object.create(null);
   protections.forEach(function (protection) {
-    summary[protection] = { count: 0, bytes: 0 };
+    summary[protection] = { state: 'OBSERVED', count: 0, bytes: 0 };
   });
-
-  // Frida's protection filter means "at least these permissions". Querying
-  // r--, rw-, r-x, ... separately therefore overlaps. Enumerate everything
-  // once and classify by the exact protection reported on each range.
-  const ranges = safe(function () {
-    return Process.enumerateRanges({ protection: '---', coalesce: false });
-  }, []);
 
   let totalBytes = 0;
   ranges.forEach(function (range) {
     const protection = range.protection || 'unknown';
     if (!summary[protection])
-      summary[protection] = { count: 0, bytes: 0 };
+      summary[protection] = { state: 'OBSERVED', count: 0, bytes: 0 };
     summary[protection].count += 1;
     summary[protection].bytes += Number(range.size) || 0;
     totalBytes += Number(range.size) || 0;
   });
 
   summary._meta = {
+    state: 'OBSERVED',
     semantics: 'SINGLE_ENUMERATION_EXACT_RETURNED_PROTECTION',
     total_count: ranges.length,
     total_bytes: totalBytes,
@@ -150,13 +171,19 @@ function collectRanges() {
 }
 
 function moduleSurfaceMaterial(modules) {
+  if (!modules || modules.state !== 'OBSERVED' || !Array.isArray(modules.modules))
+    return 'TOKEN_VAZIO';
   return modules.modules.map(function (row) {
     return row.name + ':' + row.size;
   }).join('|');
 }
 
 function moduleSurfaceEqual(a, b) {
-  return moduleSurfaceMaterial(a) === moduleSurfaceMaterial(b);
+  const left = moduleSurfaceMaterial(a);
+  const right = moduleSurfaceMaterial(b);
+  if (left === 'TOKEN_VAZIO' || right === 'TOKEN_VAZIO')
+    return 'TOKEN_VAZIO';
+  return left === right;
 }
 
 function collectJavaRuntime() {
@@ -291,7 +318,8 @@ async function collectSnapshot(reason) {
       module_surface_start_hint: modulesAtStart.stable_set_fingerprint,
       module_surface_end_hint: modules.stable_set_fingerprint,
       recognition_surface_authoritative:
-          moduleSurfaceStableDuringCapture ? true : false
+          moduleSurfaceStableDuringCapture === true ? true :
+          moduleSurfaceStableDuringCapture === false ? false : 'TOKEN_VAZIO'
     },
     claim_allowed: false,
 
@@ -346,9 +374,12 @@ async function collectSnapshot(reason) {
       selinux_denial_causality: 'TOKEN_VAZIO',
       physical_memory_pressure: 'TOKEN_VAZIO',
       crash_causality: 'TOKEN_VAZIO',
-      module_surface_atomicity: moduleSurfaceStableDuringCapture
+      module_surface_atomicity:
+          moduleSurfaceStableDuringCapture === true
           ? 'OBSERVED_STABLE_DURING_CAPTURE'
-          : 'TOKEN_VAZIO_CAPTURE_RACE'
+          : moduleSurfaceStableDuringCapture === false
+          ? 'TOKEN_VAZIO_CAPTURE_RACE'
+          : 'TOKEN_VAZIO_MODULE_COLLECTOR'
     },
 
     privacy: {
