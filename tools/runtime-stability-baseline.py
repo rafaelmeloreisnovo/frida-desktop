@@ -13,6 +13,7 @@ It never labels an observed deviation as a bug or root cause.
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import math
 import statistics
@@ -34,6 +35,7 @@ NUMERIC_PATHS = [
     "runtime_state.memory_ranges.-w-.bytes",
     "runtime_state.memory_ranges.-wx.count",
     "runtime_state.memory_ranges.-wx.bytes",
+    "observer.capture_wall_duration_ms",
     "runtime_state.threads.count",
     "runtime_state.memory_ranges.r--.count",
     "runtime_state.memory_ranges.r--.bytes",
@@ -161,6 +163,14 @@ def build_baseline(paths: list[Path]) -> dict[str, Any]:
     if len(paths) < 3:
         raise ValueError("baseline requires at least 3 independent snapshots")
 
+    resolved_paths = [path.resolve() for path in paths]
+    if len(set(resolved_paths)) != len(resolved_paths):
+        raise ValueError("baseline input paths must be unique")
+
+    source_sha256 = [hashlib.sha256(path.read_bytes()).hexdigest() for path in paths]
+    if len(set(source_sha256)) != len(source_sha256):
+        raise ValueError("baseline snapshots must be independently captured; duplicate bytes detected")
+
     dumps = [load_json(path) for path in paths]
     bad_schema = [i for i, d in enumerate(dumps) if d.get("schema") != DUMP_SCHEMA]
     if bad_schema:
@@ -194,6 +204,12 @@ def build_baseline(paths: list[Path]) -> dict[str, Any]:
     quality = [completeness(d) for d in dumps]
     min_quality = min(item["ratio"] for item in quality)
 
+    baseline_strength = (
+        "MINIMAL" if len(dumps) < 5
+        else "ROBUST" if len(dumps) < 10
+        else "STRONG"
+    )
+
     valid = (
         identity_consistent
         and platform_key_consistent
@@ -203,6 +219,8 @@ def build_baseline(paths: list[Path]) -> dict[str, Any]:
     return {
         "schema": BASELINE_SCHEMA,
         "sample_count": len(dumps),
+        "baseline_strength": baseline_strength,
+        "independent_snapshot_sha256": source_sha256,
         "minimum_required_samples": 3,
         "baseline_valid": valid,
         "baseline_gate": "PASS" if valid else "FAIL",
@@ -223,6 +241,7 @@ def build_baseline(paths: list[Path]) -> dict[str, Any]:
             "candidate_outlier_threshold": 6.0,
             "module_model": "EMPIRICAL_PREVALENCE",
             "causal_inference": "FORBIDDEN",
+            "multiple_comparisons_note": "descriptive outlier screening only; no p-value or causal promotion",
         },
         "falsifiers": [
             "stable identity differs across baseline snapshots",
