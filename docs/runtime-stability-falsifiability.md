@@ -253,3 +253,61 @@ TOKEN_VAZIO_EVICTED_PREDECESSOR
 
 It must not reset the chain to `GENESIS`, because that would manufacture a
 false beginning.
+
+
+## Audit hardening: previously implicit failure modes
+
+The successor audit treats the following as first-class falsifiers rather than
+implementation details:
+
+- **Missingness is not equality.** Two missing observations never establish
+  `NO_OBSERVED_DRIFT`; the comparison fails closed as insufficient.
+- **Capture is non-atomic.** The module surface is fenced at capture start/end.
+  If the endpoint surfaces differ, module recognition is incomparable. Equal
+  endpoints still do not prove that no transient churn occurred between them.
+- **Observer visibility is bounded.** Frida introspection is Cloak-aware, so
+  instrumentation-owned resources may be absent from thread/range enumeration.
+- **Memory-range filters are overlapping predicates.** Ranges are therefore
+  enumerated once and aggregated by the exact protection returned by Frida.
+- **Java absence is a scope, not a failure.** A native-only process may produce
+  a valid `NATIVE_ONLY` observation. `JAVA_AWARE` and `NATIVE_ONLY`
+  observations are distinct stable-identity scopes.
+- **Condition matters.** Each controller capture carries a bounded
+  `condition_id`. Different conditions are incomparable, not target drift.
+- **Process instance matters.** PID and, when Java is available,
+  `Process.getStartElapsedRealtime()` are treated as process-generation
+  context, separate from firmware identity and from runtime instability.
+- **Boot session matters.** A privacy-safe SHA-256 of the per-boot kernel boot
+  id is controller context on a same-device capture; a reboot is reported as a
+  distinct dimension.
+- **Repeated capture is not independent evidence.** Repetition requires unique
+  observation fingerprints. Association/causal levels additionally require
+  distinct source types, independence groups and evidence references.
+- **Non-empty arrays are not evidence.** Falsifier, temporal-order,
+  intervention and alternative-explanation records must contain required
+  semantic fields; empty objects fail closed.
+- **Methodological completeness is not truth.** Even a structurally complete
+  `CAUSAL_SUPPORTED` packet leaves `causal_claim_allowed=false` and
+  `claim_allowed=false`; scientific/physical review is external to this gate.
+- **Append order is not causality.** Local dumps carry
+  `previous_dump_sha256`; the storage layer serializes writers and rejects a
+  stale predecessor before publication. This proves local order/integrity only.
+
+## System context and confounders
+
+When the controller itself is running on the same Android device as a loopback
+Frida target, it may add an explicitly bounded `CONTEXT_ONLY` packet:
+
+- selected non-identifying Android properties relevant to ashmem/LMKD/boot;
+- selected `/proc/meminfo` counters;
+- memory PSI when exposed by the kernel;
+- kernel release/machine;
+- SELinux enforcing state when readable;
+- load averages;
+- a SHA-256 of the per-boot boot id.
+
+For remote/USB targets this local context is not silently attributed to the
+target and is omitted as target context.
+
+These fields are potential confounders and covariates. They never establish an
+LMKD, SELinux, thermal, memory-pressure or crash cause by themselves.
