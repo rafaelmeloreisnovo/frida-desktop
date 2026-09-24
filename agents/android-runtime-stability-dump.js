@@ -49,7 +49,20 @@ function longNumber(value) {
 }
 
 function collectModules() {
-  const modules = safe(function () { return Process.enumerateModules(); }, []);
+  let modules;
+  try {
+    modules = Process.enumerateModules();
+  } catch (error) {
+    return {
+      state: 'TOKEN_VAZIO',
+      count: 'TOKEN_VAZIO',
+      stable_set_fingerprint: 'TOKEN_VAZIO',
+      modules: 'TOKEN_VAZIO',
+      error_class: error === null || error === undefined ?
+          'unknown' : error.constructor.name
+    };
+  }
+
   const rows = modules.map(function (module) {
     return {
       name: module.name,
@@ -69,6 +82,7 @@ function collectModules() {
   }).join('|');
 
   return {
+    state: 'OBSERVED',
     count: rows.length,
     stable_set_fingerprint: fnv1a32Text(stableMaterial),
     modules: rows
@@ -76,15 +90,27 @@ function collectModules() {
 }
 
 function collectThreads() {
-  const threads = safe(function () { return Process.enumerateThreads(); }, []);
-  const byState = Object.create(null);
+  let threads;
+  try {
+    threads = Process.enumerateThreads();
+  } catch (error) {
+    return {
+      state: 'TOKEN_VAZIO',
+      count: 'TOKEN_VAZIO',
+      states: 'TOKEN_VAZIO',
+      error_class: error === null || error === undefined ?
+          'unknown' : error.constructor.name
+    };
+  }
 
+  const byState = Object.create(null);
   threads.forEach(function (thread) {
     const state = thread.state || 'unknown';
     byState[state] = (byState[state] || 0) + 1;
   });
 
   return {
+    state: 'OBSERVED',
     count: threads.length,
     states: byState
   };
