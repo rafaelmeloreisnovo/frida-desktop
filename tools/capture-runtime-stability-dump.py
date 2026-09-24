@@ -145,6 +145,39 @@ def _publish_exclusive(path: Path, data: bytes) -> None:
             pass
 
 
+def _validate_directory_integrity(out_dir: Path) -> None:
+    temp_artifacts = list(out_dir.glob(".runtime-stability-*.tmp.*"))
+    if temp_artifacts:
+        raise RuntimeError(
+            "incomplete temporary dump artifacts require manual inspection: "
+            + ", ".join(item.name for item in temp_artifacts)
+        )
+
+    dumps = sorted(out_dir.glob("runtime-stability-*.json"))
+    sidecars = sorted(out_dir.glob("runtime-stability-*.json.sha256"))
+
+    expected_sidecars = {Path(str(item) + ".sha256") for item in dumps}
+    orphan_sidecars = [item for item in sidecars if Path(str(item)[:-7]) not in dumps]
+    missing_sidecars = [item for item in expected_sidecars if not item.exists()]
+
+    if orphan_sidecars or missing_sidecars:
+        raise RuntimeError(
+            "dump directory integrity mismatch: orphan_sidecars="
+            + ",".join(item.name for item in orphan_sidecars)
+            + " missing_sidecars="
+            + ",".join(item.name for item in missing_sidecars)
+        )
+
+    for dump in dumps:
+        digest = hashlib.sha256(dump.read_bytes()).hexdigest()
+        sidecar = Path(str(dump) + ".sha256")
+        line = sidecar.read_text(encoding="ascii").strip().split()
+        if len(line) != 2 or line[0] != digest or line[1] != dump.name:
+            raise RuntimeError(
+                f"dump integrity verification failed for {dump.name}"
+            )
+
+
 def _retention_preflight(
     out_dir: Path,
     encoded_bytes: int,
@@ -161,6 +194,8 @@ def _retention_preflight(
             f"dump retention limit reached: {len(dumps)} >= {max_dumps}; "
             "no evidence was deleted automatically"
         )
+
+    _validate_directory_integrity(out_dir)
 
     total_bytes = sum(
         item.stat().st_size
@@ -209,17 +244,17 @@ def write_append_only(
     ).encode("utf-8")
     digest = hashlib.sha256(encoded).hexdigest()
 
+    path = out_dir / f"runtime-stability-{stamp}.json"
+    sha_path = Path(str(path) + ".sha256")
+    sha_line = f"{digest}  {path.name}\n".encode("ascii")
+
     _retention_preflight(
         out_dir,
-        len(encoded),
+        len(encoded) + len(sha_line),
         max_dumps,
         max_dir_bytes,
         min_free_bytes,
     )
-
-    path = out_dir / f"runtime-stability-{stamp}.json"
-    sha_path = Path(str(path) + ".sha256")
-    sha_line = f"{digest}  {path.name}\n".encode("ascii")
 
     _publish_exclusive(path, encoded)
     _publish_exclusive(sha_path, sha_line)
