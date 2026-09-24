@@ -86,12 +86,21 @@ def main() -> int:
         "stable_identity.page_size",
         "stable_identity.platform",
         "stable_identity.java_identity",
-        "platform_key",
     ]
 
-    module_paths = [
+    observer_paths = [
+        "observer.agent_schema",
+        "observer.frida_version",
+        "observer.instrumentation_present",
+        "capture_provenance.agent_sha256",
+        "capture_provenance.controller_sha256",
+        "capture_provenance.frida_python_version",
+    ]
+
+    hint_paths = [
+        "platform_key",
         "module_surface_key",
-        "runtime_state.modules.count",
+        "recognition_key",
         "runtime_state.modules.stable_set_fingerprint",
     ]
 
@@ -105,7 +114,9 @@ def main() -> int:
     ]
 
     identity_changes = compare_paths(baseline, candidate, identity_paths)
-    module_changes = compare_paths(baseline, candidate, module_paths)
+    observer_changes = compare_paths(baseline, candidate, observer_paths)
+    hint_changes = compare_paths(baseline, candidate, hint_paths)
+    module_changes: list[dict[str, Any]] = []
     baseline_module_surface = module_surface(baseline)
     candidate_module_surface = module_surface(candidate)
     if baseline_module_surface != candidate_module_surface:
@@ -118,6 +129,8 @@ def main() -> int:
 
     if identity_changes:
         classification = "IDENTITY_DRIFT"
+    elif observer_changes:
+        classification = "OBSERVER_DRIFT"
     elif module_changes:
         classification = "MODULE_SURFACE_DRIFT"
     elif runtime_changes:
@@ -129,11 +142,15 @@ def main() -> int:
         "schema": "rafaelia.android.runtime-stability-diff/v1",
         "classification": classification,
         "platform_identity_match": not identity_changes,
+        "observer_match": not observer_changes,
         "module_surface_match": not module_changes,
         "recognition_match": not identity_changes and not module_changes,
         "identity_changes": identity_changes,
+        "observer_changes": observer_changes,
         "module_surface_changes": module_changes,
         "runtime_changes": runtime_changes,
+        "hint_changes": hint_changes,
+        "compact_fingerprints_authoritative": False,
         "causality": "NOT_INFERRED",
         "claim_allowed": False,
         "invariant":
