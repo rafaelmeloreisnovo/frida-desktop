@@ -68,9 +68,18 @@ REQUIRED_PATHS = [
     "capture_provenance.controller_sha256",
     "capture_provenance.frida_python_version",
     "capture_provenance.controller_run_id",
+    "runtime_state.modules.state",
     "runtime_state.modules.modules",
+    "runtime_state.threads.state",
     "runtime_state.threads.count",
-    "runtime_state.memory_ranges",
+    "runtime_state.memory_ranges.---.state",
+    "runtime_state.memory_ranges.--x.state",
+    "runtime_state.memory_ranges.-w-.state",
+    "runtime_state.memory_ranges.-wx.state",
+    "runtime_state.memory_ranges.r--.state",
+    "runtime_state.memory_ranges.r-x.state",
+    "runtime_state.memory_ranges.rw-.state",
+    "runtime_state.memory_ranges.rwx.state",
 ]
 
 
