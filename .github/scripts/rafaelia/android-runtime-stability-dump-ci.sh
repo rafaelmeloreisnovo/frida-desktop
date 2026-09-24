@@ -43,12 +43,13 @@ allowed_dispositions = {
     'EXTERNAL_EVIDENCE_REQUIRED',
     'SENSITIVE_EXCLUDED',
     'REJECTED_WITH_REASON',
+    'UNAVAILABLE_ON_TARGET',
 }
-assert len(omissions['entries']) >= 20
+assert len(omissions['entries']) >= 35
 assert all(row['disposition'] in allowed_dispositions for row in omissions['entries'])
 assert all(row.get('rationale') and row.get('falsifier') and row.get('next_gate') for row in omissions['entries'])
 assert len({row['id'] for row in omissions['entries']}) == len(omissions['entries'])
-assert len(sources['sources']) >= 8
+assert len(sources['sources']) >= 10
 assert all(row.get('proves') and row.get('cannot_prove') for row in sources['sources'])
 assert sources['claim_allowed'] is False
 PY
@@ -62,6 +63,7 @@ grep -Fq "protection: '---'" agents/android-runtime-stability-dump.js
 grep -Fq "BEST_EFFORT_NON_ATOMIC" agents/android-runtime-stability-dump.js
 grep -Fq "CALLER_DEFINED" agents/android-runtime-stability-dump.js
 grep -Fq "Frida.version" agents/android-runtime-stability-dump.js
+grep -Fq "PROCESS_INTROSPECTION_MAY_EXCLUDE_FRIDA_CLOAKED_RESOURCES" agents/android-runtime-stability-dump.js
 grep -Fq "Script.runtime" agents/android-runtime-stability-dump.js
 grep -Fq "Process.attachModuleObserver" agents/android-runtime-stability-dump.js
 grep -Fq "Process.attachThreadObserver" agents/android-runtime-stability-dump.js
