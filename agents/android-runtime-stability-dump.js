@@ -5,7 +5,7 @@
  *
  * Goals:
  * - capture enough structural state to compare runs;
- * - separate stable identity from volatile runtime state;
+ * - separate platform identity, module surface and volatile runtime state;
  * - never read application payload/content;
  * - never collect device/SIM/subscriber identifiers.
  */
@@ -206,11 +206,13 @@ async function collectSnapshot(reason) {
     pointer_size: Process.pointerSize,
     page_size: Process.pageSize,
     platform: Process.platform,
-    module_set_fingerprint: modules.stable_set_fingerprint,
     java_identity: java.identity || 'TOKEN_VAZIO'
   };
 
-  const recognitionKey = fnv1a32Text(JSON.stringify(stableIdentity));
+  const platformKey = fnv1a32Text(JSON.stringify(stableIdentity));
+  const moduleSurfaceKey = modules.stable_set_fingerprint;
+  const recognitionKey = fnv1a32Text(
+      platformKey + '|' + moduleSurfaceKey);
 
   return {
     schema: SCHEMA,
@@ -225,8 +227,10 @@ async function collectSnapshot(reason) {
         'pointer_size',
         'page_size',
         'platform',
-        'module_set_fingerprint',
         'java_identity'
+      ],
+      recognition_surface: [
+        'loaded_module_name_size_set'
       ],
       volatile_observations: [
         'pid',
@@ -239,10 +243,12 @@ async function collectSnapshot(reason) {
         'device_elapsed_ms'
       ],
       invariant:
-          'volatile drift is evidence of state change, not automatic instability'
+          'platform drift, module-surface drift and volatile runtime drift are distinct evidence classes'
     },
 
     stable_identity: stableIdentity,
+    platform_key: platformKey,
+    module_surface_key: moduleSurfaceKey,
     recognition_key: recognitionKey,
 
     runtime_state: {
