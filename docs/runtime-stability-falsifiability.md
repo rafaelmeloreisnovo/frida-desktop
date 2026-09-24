@@ -215,3 +215,41 @@ FRIDA_REATTACH_RECOVERY
 ```
 
 Those remain `TOKEN_VAZIO` until device evidence exists.
+
+## 9. Evidence independence
+
+Three references to the same snapshot are not three observations. Baseline
+construction rejects duplicate paths and byte-identical snapshots.
+
+Likewise, two source labels are not necessarily independent. Evidence packets
+carry an `independence_group`; association and causal levels require distinct
+groups. A Frida-derived summary and another file mechanically derived from that
+same summary cannot masquerade as two independent measurements.
+
+## 10. Retention and crash consistency
+
+Append-only does not mean unbounded.
+
+The controller defaults to:
+
+- at most 256 raw dump JSON files;
+- at most 64 MiB in the dump directory;
+- at least 16 MiB free-space reserve after the new dump.
+
+Reaching a bound fails closed. Old evidence is not deleted automatically.
+
+Publication uses a temporary file, file `fsync`, an exclusive hard-link into
+the final filename and directory `fsync`. JSON serialization rejects NaN and
+Infinity.
+
+## 11. Tail discontinuity
+
+A bounded HyperMemory ring may evict an earlier causal-tail event. If the bridge
+cannot observe the predecessor and eviction has occurred, it records:
+
+```text
+TOKEN_VAZIO_EVICTED_PREDECESSOR
+```
+
+It must not reset the chain to `GENESIS`, because that would manufacture a
+false beginning.
