@@ -26,6 +26,8 @@ from pathlib import Path
 
 profile = json.loads(Path('profiles/android-runtime-stability-dump.v2.json').read_text())
 matrix = json.loads(Path('profiles/runtime-stability-falsification-matrix.v1.json').read_text())
+omissions = json.loads(Path('profiles/runtime-stability-omission-ledger.v1.json').read_text())
+sources = json.loads(Path('profiles/runtime-stability-evidence-source-matrix.v1.json').read_text())
 assert profile['claim_allowed'] is False
 assert profile['consistency']['model'] == 'BEST_EFFORT_NON_ATOMIC'
 assert profile['capture_mode']['periodic_polling'] is False
@@ -35,6 +37,20 @@ assert profile['privacy']['target_selector_persisted'] is False
 assert len(matrix['hypotheses']) >= 16
 assert all(row.get('falsifier') for row in matrix['hypotheses'])
 assert matrix['physical_promotion_rule']['minimum_independent_runs'] >= 3
+allowed_dispositions = {
+    'IMPLEMENTED',
+    'DEFERRED_WITH_GATE',
+    'EXTERNAL_EVIDENCE_REQUIRED',
+    'SENSITIVE_EXCLUDED',
+    'REJECTED_WITH_REASON',
+}
+assert len(omissions['entries']) >= 20
+assert all(row['disposition'] in allowed_dispositions for row in omissions['entries'])
+assert all(row.get('rationale') and row.get('falsifier') and row.get('next_gate') for row in omissions['entries'])
+assert len({row['id'] for row in omissions['entries']}) == len(omissions['entries'])
+assert len(sources['sources']) >= 8
+assert all(row.get('proves') and row.get('cannot_prove') for row in sources['sources'])
+assert sources['claim_allowed'] is False
 PY
 
 if grep -En 'Build\.SERIAL|ANDROID_ID|TelephonyManager|SubscriberId|SimSerial|ClipboardManager|getText\(|readUtf8String|readByteArray|Memory\.read|enumerateClasses|module\.path' agents/android-runtime-stability-dump.js; then
@@ -285,6 +301,8 @@ rafaelia_write_sha256_manifest "$EVIDENCE_DIR/SOURCE_SHA256SUMS.txt" \
   profiles/android-runtime-stability-dump.v1.json \
   profiles/android-runtime-stability-dump.v2.json \
   profiles/runtime-stability-falsification-matrix.v1.json \
+  profiles/runtime-stability-omission-ledger.v1.json \
+  profiles/runtime-stability-evidence-source-matrix.v1.json \
   tools/runtime-stability-diff.py \
   tools/capture-runtime-stability-dump.py \
   modules/runtime-learning-engine/runtime-stability-hypermemory-bridge.ts \
@@ -304,6 +322,8 @@ receipt = {
     'agent_syntax': 'PASS',
     'profile_v2_contract': 'PASS',
     'falsification_matrix': 'PASS',
+    'omission_ledger': 'PASS',
+    'evidence_source_matrix': 'PASS',
     'privacy_guard': 'PASS',
     'range_exact_bucket_contract': 'PASS',
     'reason_allowlist_contract': 'PASS',
