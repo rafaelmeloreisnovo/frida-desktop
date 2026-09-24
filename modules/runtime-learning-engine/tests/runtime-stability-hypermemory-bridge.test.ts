@@ -69,7 +69,7 @@ describe('RuntimeStabilityHyperMemoryBridge', () => {
 
   test('links successor envelopes by prior HyperMemory payload SHA-256', () => {
     bridge.appendDiff({
-      schema: 'rafaelia.android.runtime-stability-diff/v1',
+      schema: 'rafaelia.android.runtime-stability-diff/v2',
       classification: 'RUNTIME_DRIFT',
       platform_identity_match: true,
       module_surface_match: true,
@@ -170,6 +170,15 @@ describe('RuntimeStabilityHyperMemoryBridge', () => {
     expect(payload.previous_payload_sha256).toBe(
       'TOKEN_VAZIO_EVICTED_PREDECESSOR'
     );
+  });
+
+  test('accepts historical v1 stability diffs during schema transition', () => {
+    expect(() =>
+      bridge.appendDiff({
+        schema: 'rafaelia.android.runtime-stability-diff/v1',
+        classification: 'NO_OBSERVED_DRIFT'
+      })
+    ).not.toThrow();
   });
 
   test('fails closed on unsupported schemas and malformed outcomes', () => {
