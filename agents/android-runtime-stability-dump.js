@@ -184,6 +184,7 @@ function collectJavaRuntime() {
 }
 
 async function collectSnapshot(reason) {
+  const captureStartedEpochMs = Date.now();
   const sequence = ++captureSequence;
   const modules = collectModules();
   const threads = collectThreads();
@@ -202,12 +203,22 @@ async function collectSnapshot(reason) {
   const moduleSurfaceKey = modules.stable_set_fingerprint;
   const recognitionKey = fnv1a32Text(
       platformKey + '|' + moduleSurfaceKey);
+  const captureFinishedEpochMs = Date.now();
 
   return {
     schema: SCHEMA,
     capture_seq: sequence,
     reason: reason || 'MANUAL',
-    captured_epoch_ms: Date.now(),
+    captured_epoch_ms: captureFinishedEpochMs,
+    observer: {
+      agent_schema: SCHEMA,
+      frida_version: safe(function () { return Frida.version; }, 'TOKEN_VAZIO'),
+      capture_started_epoch_ms: captureStartedEpochMs,
+      capture_finished_epoch_ms: captureFinishedEpochMs,
+      capture_wall_duration_ms: Math.max(0, captureFinishedEpochMs - captureStartedEpochMs),
+      instrumentation_present: true,
+      observer_effect: 'POSSIBLE_NOT_QUANTIFIED'
+    },
     claim_allowed: false,
 
     semantics: {
