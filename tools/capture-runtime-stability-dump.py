@@ -1,16 +1,13 @@
 #!/usr/bin/env python3
-"""Capture one privacy-safe RAFAELIA Frida runtime stability dump.
-
-This controller writes only the sanitized dump emitted by
-agents/android-runtime-stability-dump.js. Target-selection inputs are used
-only to attach and are not persisted as identity metadata.
-"""
+"""Capture one privacy-safe RAFAELIA Frida runtime stability dump V2."""
 
 from __future__ import annotations
 
 import argparse
 import datetime as dt
+import fcntl
 import hashlib
+import ipaddress
 import json
 import os
 from pathlib import Path
@@ -19,9 +16,9 @@ from typing import Any
 
 import frida
 
-
-SCHEMA = "rafaelia.android.runtime-stability/v1"
+SCHEMA = "rafaelia.android.runtime-stability/v2"
 CHANNEL = "rafaelia.android.runtime.stability"
+DEFAULT_MAX_BYTES = 8 * 1024 * 1024
 
 
 def parse_args() -> argparse.Namespace:
@@ -29,9 +26,16 @@ def parse_args() -> argparse.Namespace:
     target = parser.add_mutually_exclusive_group()
     target.add_argument("--pid", type=int)
     target.add_argument("--process", default="Gadget")
+
     transport = parser.add_mutually_exclusive_group()
     transport.add_argument("--endpoint", default="127.0.0.1:27042")
     transport.add_argument("--usb", action="store_true")
+
+    parser.add_argument(
+        "--allow-remote",
+        action="store_true",
+        help="Allow a non-loopback Frida endpoint. Off by default.",
+    )
     parser.add_argument(
         "--agent",
         type=Path,
@@ -49,12 +53,42 @@ def parse_args() -> argparse.Namespace:
         / "frida-runtime-stability",
     )
     parser.add_argument("--timeout-seconds", type=float, default=10.0)
+    parser.add_argument("--max-bytes", type=int, default=DEFAULT_MAX_BYTES)
     return parser.parse_args()
+
+
+def endpoint_host(endpoint: str) -> str:
+    endpoint = endpoint.strip()
+    if endpoint.startswith("["):
+        end = endpoint.find("]")
+        if end < 0:
+            raise ValueError("invalid bracketed endpoint")
+        return endpoint[1:end]
+    if ":" not in endpoint:
+        return endpoint
+    return endpoint.rsplit(":", 1)[0]
+
+
+def endpoint_is_loopback(endpoint: str) -> bool:
+    host = endpoint_host(endpoint)
+    if host.lower() == "localhost":
+        return True
+    try:
+        return ipaddress.ip_address(host).is_loopback
+    except ValueError:
+        return False
 
 
 def resolve_device(args: argparse.Namespace):
     if args.usb:
         return frida.get_usb_device(timeout=int(args.timeout_seconds * 1000))
+
+    if not args.allow_remote and not endpoint_is_loopback(args.endpoint):
+        raise RuntimeError(
+            "non-loopback endpoint refused; pass --allow-remote only for an "
+            "explicitly authorized target"
+        )
+
     manager = frida.get_device_manager()
     return manager.add_remote_device(args.endpoint)
 
@@ -69,20 +103,117 @@ def resolve_pid(device: Any, args: argparse.Namespace) -> int:
     raise RuntimeError("authorized target process was not found")
 
 
-def write_append_only(out_dir: Path, dump: dict[str, Any]) -> tuple[Path, str]:
+def validate_dump(dump: dict[str, Any]) -> None:
+    if dump.get("schema") != SCHEMA:
+        raise RuntimeError(
+            f"unexpected dump schema: {dump.get('schema', 'TOKEN_VAZIO')}"
+        )
+    if dump.get("claim_allowed") is not False:
+        raise RuntimeError("dump must keep claim_allowed=false")
+
+    for section in ("stable_identity", "instrumentation_identity", "visibility", "runtime_state"):
+        if not isinstance(dump.get(section), dict):
+            raise RuntimeError(f"missing required section: {section}")
+
+    forbidden_runtime_keys = {
+        "process_name",
+        "device_serial",
+        "android_id",
+        "sim_serial",
+        "subscriber_id",
+        "clipboard",
+        "credential",
+        "password",
+        "network_payload",
+    }
+
+    def scan(value: Any, path: str) -> None:
+        if isinstance(value, dict):
+            for key, nested in value.items():
+                lowered = str(key).lower()
+                if lowered in forbidden_runtime_keys:
+                    raise RuntimeError(f"forbidden runtime key at {path}.{key}")
+                scan(nested, f"{path}.{key}")
+        elif isinstance(value, list):
+            for index, nested in enumerate(value):
+                scan(nested, f"{path}[{index}]")
+
+    scan(dump["stable_identity"], "stable_identity")
+    scan(dump["runtime_state"], "runtime_state")
+
+
+def encode_dump(dump: dict[str, Any], max_bytes: int) -> tuple[bytes, str]:
+    encoded = (
+        json.dumps(dump, ensure_ascii=False, indent=2, sort_keys=True) + "\n"
+    ).encode("utf-8")
+    if len(encoded) > max_bytes:
+        raise RuntimeError(
+            f"dump exceeds configured size ceiling: {len(encoded)} > {max_bytes}"
+        )
+    return encoded, hashlib.sha256(encoded).hexdigest()
+
+
+def append_hash_chain(
+    out_dir: Path,
+    *,
+    filename: str,
+    digest: str,
+    dump: dict[str, Any],
+) -> str:
+    ledger_path = out_dir / "ledger.jsonl"
+    fd = os.open(ledger_path, os.O_RDWR | os.O_CREAT | os.O_APPEND, 0o600)
+    previous = "GENESIS"
+    with os.fdopen(fd, "r+b", buffering=0) as ledger:
+        fcntl.flock(ledger.fileno(), fcntl.LOCK_EX)
+        ledger.seek(0)
+        lines = [line for line in ledger.read().splitlines() if line.strip()]
+        if lines:
+            try:
+                previous_record = json.loads(lines[-1].decode("utf-8"))
+                previous = str(
+                    previous_record.get("dump_sha256", "TOKEN_VAZIO")
+                )
+            except Exception:
+                previous = "TOKEN_VAZIO_LEDGER_PARSE"
+
+        record = {
+            "schema": "rafaelia.android.runtime-stability-ledger/v1",
+            "filename": filename,
+            "dump_sha256": digest,
+            "previous_dump_sha256": previous,
+            "dump_schema": dump.get("schema", "TOKEN_VAZIO"),
+            "capture_seq": dump.get("capture_seq", "TOKEN_VAZIO"),
+            "wall_end_epoch_ms":
+                dump.get("timing", {}).get("wall_end_epoch_ms", "TOKEN_VAZIO"),
+            "claim_allowed": False,
+        }
+        line = (json.dumps(record, sort_keys=True) + "\n").encode("utf-8")
+        ledger.seek(0, os.SEEK_END)
+        ledger.write(line)
+        ledger.flush()
+        os.fsync(ledger.fileno())
+        fcntl.flock(ledger.fileno(), fcntl.LOCK_UN)
+
+    return previous
+
+
+def write_append_only(
+    out_dir: Path,
+    dump: dict[str, Any],
+    max_bytes: int,
+) -> tuple[Path, str, str]:
     out_dir.mkdir(parents=True, exist_ok=True)
     try:
         os.chmod(out_dir, 0o700)
     except OSError:
         pass
 
-    stamp = dt.datetime.now(dt.timezone.utc).strftime("%Y%m%dT%H%M%S.%fZ")
-    encoded = (
-        json.dumps(dump, ensure_ascii=False, indent=2, sort_keys=True) + "\n"
-    ).encode("utf-8")
-    digest = hashlib.sha256(encoded).hexdigest()
+    validate_dump(dump)
+    encoded, digest = encode_dump(dump, max_bytes)
 
+    stamp = dt.datetime.now(dt.timezone.utc).strftime("%Y%m%dT%H%M%S.%fZ")
     path = out_dir / f"runtime-stability-{stamp}.json"
+
     fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
     with os.fdopen(fd, "wb") as handle:
         handle.write(encoded)
@@ -97,13 +228,21 @@ def write_append_only(out_dir: Path, dump: dict[str, Any]) -> tuple[Path, str]:
         handle.flush()
         os.fsync(handle.fileno())
 
-    return path, digest
+    previous = append_hash_chain(
+        out_dir,
+        filename=path.name,
+        digest=digest,
+        dump=dump,
+    )
+    return path, digest, previous
 
 
 def main() -> int:
     args = parse_args()
-    source = args.agent.read_text(encoding="utf-8")
+    if args.max_bytes <= 0:
+        raise SystemExit("--max-bytes must be > 0")
 
+    source = args.agent.read_text(encoding="utf-8")
     device = resolve_device(args)
     pid = resolve_pid(device, args)
 
@@ -145,14 +284,20 @@ def main() -> int:
             raise TimeoutError("runtime stability dump timed out")
         if "error" in holder:
             raise RuntimeError(str(holder["error"]))
+
         dump = holder.get("dump")
         if not isinstance(dump, dict):
             raise RuntimeError("agent returned no stability dump")
 
-        path, digest = write_append_only(args.out_dir, dump)
+        path, digest, previous = write_append_only(
+            args.out_dir, dump, args.max_bytes
+        )
+
         print("RAFAELIA_RUNTIME_STABILITY_DUMP_PASS")
         print(f"receipt={path}")
         print(f"sha256={digest}")
+        print(f"previous_sha256={previous}")
+        print("ledger=ledger.jsonl")
         print("target_name_persisted=NO")
         print("endpoint_persisted=NO")
         print("pid_in_dump=YES_VOLATILE_RUNTIME_STATE")
