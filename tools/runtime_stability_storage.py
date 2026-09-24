@@ -4,12 +4,28 @@
 from __future__ import annotations
 
 import datetime as dt
+import fcntl
 import hashlib
 import json
 import os
 from pathlib import Path
 import shutil
-from typing import Any
+from contextlib import contextmanager
+from typing import Any, Iterator
+
+
+@contextmanager
+def directory_write_lock(out_dir: Path) -> Iterator[None]:
+    """Serialize local writers; this is a process lock, not a distributed lock."""
+    out_dir.mkdir(parents=True, exist_ok=True)
+    lock_path = out_dir / ".runtime-stability.lock"
+    fd = os.open(lock_path, os.O_RDWR | os.O_CREAT, 0o600)
+    try:
+        fcntl.flock(fd, fcntl.LOCK_EX)
+        yield
+    finally:
+        fcntl.flock(fd, fcntl.LOCK_UN)
+        os.close(fd)
 
 
 def canonical_sha256(value: Any) -> str:
@@ -229,14 +245,30 @@ def write_append_only(
     sha_path = Path(str(path) + ".sha256")
     sha_line = f"{digest}  {path.name}\n".encode("ascii")
 
-    retention_preflight(
-        out_dir,
-        len(encoded) + len(sha_line),
-        max_dumps,
-        max_dir_bytes,
-        min_free_bytes,
-    )
+    with directory_write_lock(out_dir):
+        retention_preflight(
+            out_dir,
+            len(encoded) + len(sha_line),
+            max_dumps,
+            max_dir_bytes,
+            min_free_bytes,
+        )
 
-    publish_exclusive(path, encoded)
-    publish_exclusive(sha_path, sha_line)
+        provenance = dump.get("capture_provenance")
+        if isinstance(provenance, dict) and "previous_dump_sha256" in provenance:
+            observed_previous = provenance.get("previous_dump_sha256")
+            dumps = sorted(out_dir.glob("runtime-stability-*.json"))
+            expected_previous = (
+                "GENESIS"
+                if not dumps
+                else hashlib.sha256(dumps[-1].read_bytes()).hexdigest()
+            )
+            if observed_previous != expected_previous:
+                raise RuntimeError(
+                    "stale/concurrent predecessor: "
+                    f"observed={observed_previous} expected={expected_previous}"
+                )
+
+        publish_exclusive(path, encoded)
+        publish_exclusive(sha_path, sha_line)
     return path, digest
