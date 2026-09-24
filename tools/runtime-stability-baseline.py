@@ -28,39 +28,18 @@ BASELINE_SCHEMA = "rafaelia.android.runtime-stability-baseline/v1"
 ASSESSMENT_SCHEMA = "rafaelia.android.runtime-stability-assessment/v1"
 
 NUMERIC_PATHS = [
-    "runtime_state.memory_ranges.---.count",
-    "runtime_state.memory_ranges.---.bytes",
-    "runtime_state.memory_ranges.--x.count",
-    "runtime_state.memory_ranges.--x.bytes",
-    "runtime_state.memory_ranges.-w-.count",
-    "runtime_state.memory_ranges.-w-.bytes",
-    "runtime_state.memory_ranges.-wx.count",
-    "runtime_state.memory_ranges.-wx.bytes",
-    "observer.capture_wall_duration_ms",
+    "timing.wall_duration_ms",
     "runtime_state.threads.count",
-    "runtime_state.memory_ranges._meta.total_count",
-    "runtime_state.memory_ranges._meta.total_bytes",
-    "platform_context.memory.MemAvailable_kb",
-    "platform_context.memory.SwapFree_kb",
-    "platform_context.memory.Dirty_kb",
-    "platform_context.memory.Shmem_kb",
-    "platform_context.psi_memory.some.avg10",
-    "platform_context.psi_memory.full.avg10",
-    "runtime_state.memory_ranges.r--.count",
-    "runtime_state.memory_ranges.r--.bytes",
-    "runtime_state.memory_ranges.rw-.count",
-    "runtime_state.memory_ranges.rw-.bytes",
-    "runtime_state.memory_ranges.r-x.count",
-    "runtime_state.memory_ranges.r-x.bytes",
-    "runtime_state.memory_ranges.rwx.count",
-    "runtime_state.memory_ranges.rwx.bytes",
+    "runtime_state.memory_ranges.total_ranges",
+    "runtime_state.memory_ranges.total_bytes",
     "runtime_state.java_runtime.java_heap_total_bytes",
     "runtime_state.java_runtime.java_heap_free_bytes",
     "runtime_state.java_runtime.java_heap_max_bytes",
     "runtime_state.java_runtime.native_heap_allocated_bytes",
     "runtime_state.java_runtime.native_heap_size_bytes",
     "runtime_state.java_runtime.native_heap_free_bytes",
-    "runtime_state.java_runtime.pss_kb",
+    "runtime_state.java_runtime.process_pss_kb",
+    "runtime_state.java_runtime.loaded_class_count",
 ]
 
 REQUIRED_PATHS = [
@@ -70,29 +49,22 @@ REQUIRED_PATHS = [
     "stable_identity.page_size",
     "stable_identity.platform",
     "stable_identity.java_available",
-    "observer.agent_schema",
-    "observer.frida_version",
-    "observer.instrumentation_present",
-    "observer.introspection_visibility",
-    "observer.memory_range_semantics",
+    "instrumentation_identity.frida_version",
+    "instrumentation_identity.script_runtime",
+    "visibility.modules",
+    "visibility.threads",
+    "visibility.memory_ranges",
     "consistency.module_surface_stable_during_capture",
     "capture_provenance.agent_sha256",
     "capture_provenance.controller_sha256",
     "capture_provenance.frida_python_version",
     "capture_provenance.controller_run_id",
     "capture_provenance.condition_id",
-    "runtime_state.modules.state",
+    "runtime_state.modules.status",
     "runtime_state.modules.modules",
-    "runtime_state.threads.state",
+    "runtime_state.threads.status",
     "runtime_state.threads.count",
-    "runtime_state.memory_ranges.---.state",
-    "runtime_state.memory_ranges.--x.state",
-    "runtime_state.memory_ranges.-w-.state",
-    "runtime_state.memory_ranges.-wx.state",
-    "runtime_state.memory_ranges.r--.state",
-    "runtime_state.memory_ranges.r-x.state",
-    "runtime_state.memory_ranges.rw-.state",
-    "runtime_state.memory_ranges.rwx.state",
+    "runtime_state.memory_ranges.status",
 ]
 
 
@@ -119,6 +91,8 @@ def get_path(data: dict[str, Any], dotted: str) -> Any:
 
 
 def module_surface(data: dict[str, Any]) -> Counter[tuple[str, int]]:
+    if get_path(data, "runtime_state.modules.status") != "PASS":
+        return Counter()
     rows = get_path(data, "runtime_state.modules.modules")
     out: Counter[tuple[str, int]] = Counter()
     if not isinstance(rows, list):
@@ -204,16 +178,11 @@ def stable_identity_projection(dump: dict[str, Any]) -> dict[str, Any]:
 
 def observer_projection(dump: dict[str, Any]) -> dict[str, Any]:
     return {
-        "agent_schema": get_path(dump, "observer.agent_schema"),
-        "frida_version": get_path(dump, "observer.frida_version"),
-        "instrumentation_present": get_path(
-            dump, "observer.instrumentation_present"
+        "frida_version": get_path(
+            dump, "instrumentation_identity.frida_version"
         ),
-        "introspection_visibility": get_path(
-            dump, "observer.introspection_visibility"
-        ),
-        "memory_range_semantics": get_path(
-            dump, "observer.memory_range_semantics"
+        "script_runtime": get_path(
+            dump, "instrumentation_identity.script_runtime"
         ),
         "agent_sha256": get_path(dump, "capture_provenance.agent_sha256"),
         "controller_sha256": get_path(
