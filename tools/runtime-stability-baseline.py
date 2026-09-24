@@ -259,6 +259,7 @@ def build_baseline(paths: list[Path]) -> dict[str, Any]:
         "baseline_strength": baseline_strength,
         "independent_snapshot_sha256": source_sha256,
         "independent_controller_run_ids": run_ids,
+        "independence_claim": "DISTINCT_ACQUISITIONS_NOT_STATISTICAL_INDEPENDENCE",
         "minimum_required_samples": 3,
         "baseline_valid": valid,
         "baseline_gate": "PASS" if valid else "FAIL",
