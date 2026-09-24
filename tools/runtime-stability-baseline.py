@@ -18,6 +18,7 @@ import json
 import math
 import statistics
 from pathlib import Path
+from collections import Counter
 from typing import Any, Iterable
 
 
@@ -86,18 +87,18 @@ def get_path(data: dict[str, Any], dotted: str) -> Any:
     return cur
 
 
-def module_surface(data: dict[str, Any]) -> set[tuple[str, int]]:
+def module_surface(data: dict[str, Any]) -> Counter[tuple[str, int]]:
     rows = get_path(data, "runtime_state.modules.modules")
+    out: Counter[tuple[str, int]] = Counter()
     if not isinstance(rows, list):
-        return set()
-    out: set[tuple[str, int]] = set()
+        return out
     for row in rows:
         if not isinstance(row, dict):
             continue
         name = row.get("name")
         size = row.get("size")
         if isinstance(name, str) and isinstance(size, int):
-            out.add((name, size))
+            out[(name, size)] += 1
     return out
 
 
@@ -184,16 +185,19 @@ def build_baseline(paths: list[Path]) -> dict[str, Any]:
     platform_key_hint_consistent = all(key == platform_keys[0] for key in platform_keys[1:])
 
     surfaces = [module_surface(d) for d in dumps]
-    union = set().union(*surfaces)
+    union = set().union(*(set(surface.keys()) for surface in surfaces))
     prevalence = []
     for item in sorted(union):
-        count = sum(1 for surface in surfaces if item in surface)
+        present_count = sum(1 for surface in surfaces if surface[item] > 0)
+        multiplicities = [surface[item] for surface in surfaces]
         prevalence.append({
             "name": item[0],
             "size": item[1],
-            "count": count,
-            "prevalence": count / len(dumps),
-            "core": count == len(dumps),
+            "snapshot_presence_count": present_count,
+            "prevalence": present_count / len(dumps),
+            "core": present_count == len(dumps),
+            "min_multiplicity": min(multiplicities),
+            "max_multiplicity": max(multiplicities),
         })
 
     metrics = {
@@ -266,18 +270,30 @@ def assess_candidate(baseline: dict[str, Any], candidate: dict[str, Any]) -> dic
     platform_key_hint_match = get_path(candidate, "platform_key") == baseline["platform_key_hint"]
 
     baseline_modules = baseline.get("module_prevalence", [])
-    core = {
-        (row["name"], row["size"])
-        for row in baseline_modules
-        if row.get("core") is True
-    }
-    known = {
-        (row["name"], row["size"])
+    expected = {
+        (row["name"], row["size"]): (
+            int(row.get("min_multiplicity", 0)),
+            int(row.get("max_multiplicity", 0)),
+        )
         for row in baseline_modules
     }
     candidate_modules = module_surface(candidate)
-    missing_core = sorted(core - candidate_modules)
-    novel = sorted(candidate_modules - known)
+    missing_core = []
+    novel = []
+    multiplicity_outside_baseline = []
+
+    for item, (minimum, maximum) in expected.items():
+        observed = candidate_modules[item]
+        if minimum > 0 and observed < minimum:
+            missing_core.append((item[0], item[1], minimum, observed))
+        if observed > maximum:
+            multiplicity_outside_baseline.append(
+                (item[0], item[1], minimum, maximum, observed)
+            )
+
+    for item, observed in candidate_modules.items():
+        if item not in expected:
+            novel.append((item[0], item[1], observed))
 
     metric_assessments = []
     outlier_count = 0
@@ -326,7 +342,7 @@ def assess_candidate(baseline: dict[str, Any], candidate: dict[str, Any]) -> dic
 
     if not identity_match:
         classification = "IDENTITY_DRIFT"
-    elif missing_core or novel:
+    elif missing_core or novel or multiplicity_outside_baseline:
         classification = "MODULE_SURFACE_OUTSIDE_BASELINE"
     elif outlier_count:
         classification = "RUNTIME_OUTLIER_OBSERVED"
@@ -344,10 +360,28 @@ def assess_candidate(baseline: dict[str, Any], candidate: dict[str, Any]) -> dic
         "candidate_quality": candidate_quality,
         "modules": {
             "missing_core": [
-                {"name": name, "size": size} for name, size in missing_core
+                {
+                    "name": name,
+                    "size": size,
+                    "baseline_min_multiplicity": minimum,
+                    "candidate_multiplicity": observed,
+                }
+                for name, size, minimum, observed in missing_core
             ],
             "novel": [
-                {"name": name, "size": size} for name, size in novel
+                {"name": name, "size": size, "candidate_multiplicity": observed}
+                for name, size, observed in novel
+            ],
+            "multiplicity_outside_baseline": [
+                {
+                    "name": name,
+                    "size": size,
+                    "baseline_min_multiplicity": minimum,
+                    "baseline_max_multiplicity": maximum,
+                    "candidate_multiplicity": observed,
+                }
+                for name, size, minimum, maximum, observed
+                in multiplicity_outside_baseline
             ],
         },
         "metrics": metric_assessments,
