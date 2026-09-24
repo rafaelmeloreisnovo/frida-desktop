@@ -26,6 +26,14 @@ BASELINE_SCHEMA = "rafaelia.android.runtime-stability-baseline/v1"
 ASSESSMENT_SCHEMA = "rafaelia.android.runtime-stability-assessment/v1"
 
 NUMERIC_PATHS = [
+    "runtime_state.memory_ranges.---.count",
+    "runtime_state.memory_ranges.---.bytes",
+    "runtime_state.memory_ranges.--x.count",
+    "runtime_state.memory_ranges.--x.bytes",
+    "runtime_state.memory_ranges.-w-.count",
+    "runtime_state.memory_ranges.-w-.bytes",
+    "runtime_state.memory_ranges.-wx.count",
+    "runtime_state.memory_ranges.-wx.bytes",
     "runtime_state.threads.count",
     "runtime_state.memory_ranges.r--.count",
     "runtime_state.memory_ranges.r--.bytes",
