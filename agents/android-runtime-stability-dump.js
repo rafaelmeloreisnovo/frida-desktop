@@ -258,6 +258,12 @@ function readAndroidClock() {
 
 function collectAllowlistedProperties(SystemProperties, keys) {
   const out = Object.create(null);
+  if (SystemProperties === null) {
+    keys.forEach(function (key) {
+      out[key] = 'TOKEN_VAZIO';
+    });
+    return out;
+  }
   keys.forEach(function (key) {
     out[key] = safe(function () {
       const value = SystemProperties.get(key, '');
@@ -291,8 +297,12 @@ function collectJavaRuntime() {
         const Runtime = Java.use('java.lang.Runtime');
         const Debug = Java.use('android.os.Debug');
         const System = Java.use('java.lang.System');
-        const SystemProperties = Java.use('android.os.SystemProperties');
         const runtime = Runtime.getRuntime();
+        const SystemProperties = safe(function () {
+          return Java.use('android.os.SystemProperties');
+        }, null);
+        if (SystemProperties === null)
+          out.token_vazio.push('SYSTEM_PROPERTIES_UNAVAILABLE');
 
         const abis = [];
         try {
