@@ -1,0 +1,64 @@
+{
+  "schema": "rafaelia.frida.hypermemory.device-preflight/v1",
+  "captured_on": "2026-09-24",
+  "source_origin": "USER_SUPPLIED_TERMUX_OUTPUT",
+  "execution_by_assistant": false,
+  "serial_persisted": false,
+  "evidence_class": "PHYSICAL_DEVICE_METADATA",
+  "device": {
+    "product_model": "moto e(7) power",
+    "commercial_model": "XT2097-5",
+    "software_channel": "retbr",
+    "android_release": "10",
+    "android_sdk": 29,
+    "android_security_patch": "2023-02-05",
+    "google_play_system_update": "2021-05-01",
+    "cpu_abi": "armeabi-v7a",
+    "board": "malta",
+    "boot_hardware": "mt6762"
+  },
+  "build": {
+    "fingerprint": "motorola/malta_l/malta:10/QOLS30.288-52-23/2c2b6:user/release-keys",
+    "version": "QOLS30.288-52-23",
+    "incremental": "2c2b6"
+  },
+  "radio": {
+    "baseband": "MOLY.LR12A.R3.MP.V127.6.P27"
+  },
+  "kernel": {
+    "release": "4.9.190+",
+    "uname": "Linux localhost 4.9.190+ #1 SMP PREEMPT Wed Mar 8 11:51:22 CST 2023 armv7l Android",
+    "architecture": "armv7l",
+    "preempt": true,
+    "build_timestamp": "Wed Mar 8 11:51:22 CST 2023"
+  },
+  "observed_commands": [
+    "getprop ro.build.fingerprint",
+    "getprop ro.build.version.release",
+    "getprop ro.build.version.sdk",
+    "getprop ro.build.version.security_patch",
+    "getprop ro.product.cpu.abi",
+    "getprop ro.product.board",
+    "getprop ro.boot.hardware",
+    "getprop ro.build.version.incremental",
+    "getprop ro.product.model",
+    "uname -a"
+  ],
+  "gates": {
+    "device_metadata_readback": "PASS",
+    "android_api29_sharedmemory_eligibility": "COMPATIBLE_BY_PLATFORM_VERSION",
+    "sharedmemory_fd_handoff": "TOKEN_VAZIO_NOT_EXECUTED",
+    "sharedmemory_mmap": "TOKEN_VAZIO_NOT_EXECUTED",
+    "target_kill_restart": "TOKEN_VAZIO_NOT_EXECUTED",
+    "frida_reattach": "TOKEN_VAZIO_NOT_EXECUTED",
+    "state_restore": "TOKEN_VAZIO_NOT_EXECUTED"
+  },
+  "boundaries": [
+    "USER_SUPPLIED_TERMINAL_OUTPUT!=ASSISTANT_EXECUTED_DEVICE_TEST",
+    "DEVICE_METADATA_PASS!=SHAREDMEMORY_RUNTIME_PASS",
+    "API_COMPATIBILITY!=PHYSICAL_EXECUTION",
+    "PROCESS_RESTART!=FORCE_STOP_BYPASS",
+    "claim_allowed=false"
+  ],
+  "claim_allowed": false
+}
