@@ -100,7 +100,7 @@ export class IntegrityVerifier {
         file: filename,
         hash,
         hash_algorithm: INTEGRITY_HASH_ALGORITHM,
-        size:
+        size,
         status: isValid ? 'valid' : 'invalid',
         error: isValid ? undefined : 'File format validation failed'
       };
