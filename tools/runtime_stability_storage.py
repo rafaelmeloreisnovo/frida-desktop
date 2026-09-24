@@ -31,7 +31,8 @@ def strong_fingerprints(dump: dict[str, Any]) -> dict[str, str]:
         .get("modules", [])
     )
     module_surface = []
-    if isinstance(rows, list):
+    module_surface_observed = isinstance(rows, list)
+    if module_surface_observed:
         for row in rows:
             if not isinstance(row, dict):
                 continue
@@ -39,13 +40,19 @@ def strong_fingerprints(dump: dict[str, Any]) -> dict[str, str]:
             size = row.get("size")
             if isinstance(name, str) and isinstance(size, int):
                 module_surface.append({"name": name, "size": size})
-    module_surface.sort(key=lambda row: (row["name"], row["size"]))
+        module_surface.sort(key=lambda row: (row["name"], row["size"]))
 
     identity_sha = canonical_sha256(identity)
-    module_sha = canonical_sha256(module_surface)
-    recognition_sha = hashlib.sha256(
-        f"{identity_sha}|{module_sha}".encode("ascii")
-    ).hexdigest()
+    module_sha = (
+        canonical_sha256(module_surface)
+        if module_surface_observed
+        else "TOKEN_VAZIO"
+    )
+    recognition_sha = (
+        hashlib.sha256(f"{identity_sha}|{module_sha}".encode("ascii")).hexdigest()
+        if module_sha != "TOKEN_VAZIO"
+        else "TOKEN_VAZIO"
+    )
     return {
         "stable_identity_sha256": identity_sha,
         "module_surface_sha256": module_sha,
