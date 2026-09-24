@@ -123,6 +123,13 @@
       "positive_control": "zygote/ABI/memfd/LMKD/AVB/FBE/VNDK/service-state keys are present while serial/SIM/operator/radio-provisioning keys are absent",
       "falsifier": "agent references or emits a forbidden identity/telephony property",
       "gate": "STATIC_CONTRACT+PHYSICAL_RECEIPT"
+    },
+    {
+      "id": "H18_OPTIONAL_SOURCE_ISOLATION",
+      "claim": "Failure to access optional Android SystemProperties must not invalidate independent Java/ART heap and build observations.",
+      "positive_control": "SystemProperties unavailable is represented by TOKEN_VAZIO while the rest of the Java collector remains typed independently.",
+      "falsifier": "A SystemProperties lookup failure collapses the entire Java runtime collector.",
+      "gate": "STATIC_CONTRACT+PHYSICAL_RECEIPT"
     }
   ],
   "physical_promotion_rule": {
