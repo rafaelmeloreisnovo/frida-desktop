@@ -177,6 +177,66 @@ def gate(packet: dict[str, Any]) -> dict[str, Any]:
         passed = (observed is True) if required else True
         add(field, passed, observed, required)
 
+    falsifier_results = [
+        item for item in packet.get("falsifier_results", [])
+        if isinstance(item, dict)
+    ]
+    temporal_order_evidence = [
+        item for item in packet.get("temporal_order_evidence", [])
+        if isinstance(item, dict)
+    ]
+    interventions = [
+        item for item in packet.get("interventions", [])
+        if isinstance(item, dict)
+    ]
+    alternative_explanations = [
+        item for item in packet.get("alternative_explanations", [])
+        if isinstance(item, dict)
+    ]
+
+    if req["requires_falsifier_attempt"]:
+        add(
+            "falsifier_result_recorded",
+            len(falsifier_results) >= 1,
+            len(falsifier_results),
+            ">=1 structured falsifier result",
+        )
+    if req["requires_temporal_precedence"]:
+        add(
+            "temporal_order_evidence_recorded",
+            len(temporal_order_evidence) >= 1,
+            len(temporal_order_evidence),
+            ">=1 structured temporal-order evidence item",
+        )
+    if req["requires_intervention_or_reversal"]:
+        add(
+            "intervention_recorded",
+            len(interventions) >= 1,
+            len(interventions),
+            ">=1 controlled intervention/reversal record",
+        )
+    if req["requires_alternative_explanation_check"]:
+        add(
+            "alternative_explanations_recorded",
+            len(alternative_explanations) >= 1,
+            len(alternative_explanations),
+            ">=1 structured alternative-explanation review",
+        )
+        if requested == "CAUSAL_SUPPORTED":
+            unresolved_alternatives = [
+                item for item in alternative_explanations
+                if item.get("status") not in (
+                    "REJECTED_BY_EVIDENCE",
+                    "BOUNDED_NOT_EXPLANATORY",
+                )
+            ]
+            add(
+                "alternative_explanations_resolved_for_causal_support",
+                not unresolved_alternatives,
+                len(unresolved_alternatives),
+                0,
+            )
+
     contradictions = [
         item for item in packet.get("contradictory_evidence", [])
         if isinstance(item, dict)
@@ -228,16 +288,19 @@ def gate(packet: dict[str, Any]) -> dict[str, Any]:
         "source_types": sorted(types),
         "independence_groups": sorted(groups),
         "contradictory_evidence_count": len(contradictions),
-        "causal_claim_allowed": promoted_level == "CAUSAL_SUPPORTED",
+        "methodology_structure_complete": promoted_level != "TOKEN_VAZIO",
+        "causal_support_structure_complete": promoted_level == "CAUSAL_SUPPORTED",
+        "causal_claim_allowed": False,
         "study_mode": study_mode,
         "hypothesis_registered_before_test": hypothesis_registered_before_test,
-        "confirmatory_ready": confirmatory_ready,
-        "publication_grade_causal_support": (
-            promoted_level == "CAUSAL_SUPPORTED" and confirmatory_ready
-        ),
-        "claim_allowed": promoted_level != "TOKEN_VAZIO",
+        "confirmatory_structure_ready": confirmatory_ready,
+        "confirmatory_ready": False,
+        "publication_grade_causal_support": False,
+        "scientific_claim_review_required": True,
+        "claim_allowed": False,
         "invariant": (
-            "observation != repetition != association != causal candidate != causal support"
+            "observation != repetition != association != causal candidate != causal support; "
+            "methodology structure != scientific truth != claim permission"
         ),
     }
 
