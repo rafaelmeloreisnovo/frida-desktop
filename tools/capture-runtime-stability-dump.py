@@ -17,6 +17,7 @@ from pathlib import Path
 import shutil
 import threading
 from typing import Any
+import uuid
 
 import frida
 
@@ -267,6 +268,7 @@ def main() -> int:
     agent_sha256 = hashlib.sha256(source.encode("utf-8")).hexdigest()
     controller_path = Path(__file__).resolve()
     controller_sha256 = hashlib.sha256(controller_path.read_bytes()).hexdigest()
+    controller_run_id = str(uuid.uuid4())
 
     device = resolve_device(args)
     pid = resolve_pid(device, args)
@@ -321,6 +323,7 @@ def main() -> int:
             "transport_selector_persisted": False,
             "target_selector_persisted": False,
             "source_binding": "LOCAL_FILE_SHA256",
+            "controller_run_id": controller_run_id,
         }
 
         path, digest = write_append_only(
@@ -338,6 +341,7 @@ def main() -> int:
         print("pid_in_dump=YES_VOLATILE_RUNTIME_STATE")
         print(f"agent_sha256={agent_sha256}")
         print(f"controller_sha256={controller_sha256}")
+        print(f"controller_run_id={controller_run_id}")
         print(f"max_dumps={args.max_dumps}")
         print(f"max_dir_bytes={args.max_dir_bytes}")
         print(f"min_free_bytes={args.min_free_bytes}")
