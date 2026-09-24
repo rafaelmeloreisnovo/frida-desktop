@@ -182,8 +182,9 @@ Possible classifications:
 - `RUNTIME_DRIFT`
 - `MODULE_SURFACE_DRIFT`
 - `IDENTITY_DRIFT`
+- `OBSERVER_DRIFT`
 
-None of these establishes root cause.
+Compact FNV changes alone do not produce these structural classifications; they are emitted separately as `hint_changes`. `OBSERVER_DRIFT` takes precedence over module/runtime drift when the observer version or source binding changed. None of these establishes root cause.
 
 ## Repeated baseline and falsifiability
 
