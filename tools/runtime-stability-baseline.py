@@ -64,6 +64,7 @@ REQUIRED_PATHS = [
     "capture_provenance.agent_sha256",
     "capture_provenance.controller_sha256",
     "capture_provenance.frida_python_version",
+    "capture_provenance.controller_run_id",
     "runtime_state.modules.modules",
     "runtime_state.threads.count",
     "runtime_state.memory_ranges",
@@ -195,6 +196,12 @@ def build_baseline(paths: list[Path]) -> dict[str, Any]:
         raise ValueError("baseline snapshots must be independently captured; duplicate bytes detected")
 
     dumps = [load_json(path) for path in paths]
+    run_ids = [get_path(d, "capture_provenance.controller_run_id") for d in dumps]
+    if any(run_id == TOKEN_VAZIO for run_id in run_ids):
+        raise ValueError("baseline snapshots require controller_run_id provenance")
+    if len(set(run_ids)) != len(run_ids):
+        raise ValueError("baseline snapshots must come from distinct controller runs")
+
     bad_schema = [i for i, d in enumerate(dumps) if d.get("schema") != DUMP_SCHEMA]
     if bad_schema:
         raise ValueError(f"unsupported dump schema at indexes: {bad_schema}")
@@ -251,6 +258,7 @@ def build_baseline(paths: list[Path]) -> dict[str, Any]:
         "sample_count": len(dumps),
         "baseline_strength": baseline_strength,
         "independent_snapshot_sha256": source_sha256,
+        "independent_controller_run_ids": run_ids,
         "minimum_required_samples": 3,
         "baseline_valid": valid,
         "baseline_gate": "PASS" if valid else "FAIL",
@@ -282,6 +290,7 @@ def build_baseline(paths: list[Path]) -> dict[str, Any]:
             "compact platform hints may differ without invalidating the baseline; full stable identity is authoritative",
             "any required observation is missing",
             "fewer than 3 independent snapshots",
+            "controller_run_id is missing or repeated",
         ],
         "claim_allowed": False,
     }
