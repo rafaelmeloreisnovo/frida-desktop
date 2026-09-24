@@ -164,19 +164,19 @@ with tempfile.TemporaryDirectory() as td:
 
     bad = sample("0x3000")
     bad["capture_provenance"] = {"previous_dump_sha256": "not-the-predecessor"}
-    write_append_only(
-        root,
-        bad,
-        max_dumps=4,
-        max_dir_bytes=1024 * 1024,
-        min_free_bytes=0,
-    )
     try:
-        validate_directory_integrity(root)
+        write_append_only(
+            root,
+            bad,
+            max_dumps=4,
+            max_dir_bytes=1024 * 1024,
+            min_free_bytes=0,
+        )
     except RuntimeError:
         pass
     else:
-        raise AssertionError("broken dump hash-chain was accepted")
+        raise AssertionError("stale/concurrent dump predecessor was published")
+    validate_directory_integrity(root)
 
 with tempfile.TemporaryDirectory() as td:
     root = Path(td)
@@ -221,8 +221,10 @@ cat > "$BUILD_DIR/baseline.json" <<'JSON'
     "module_surface_stable_during_capture": true,
     "recognition_surface_authoritative": true
   },
-  "capture_provenance": {"agent_sha256":"agent-a","controller_sha256":"controller-a","frida_python_version":"17.0.0","controller_run_id":"fixture-base-run"},
+  "capture_provenance": {"agent_sha256":"agent-a","controller_sha256":"controller-a","frida_python_version":"17.0.0","controller_run_id":"fixture-base-run","condition_id":"CI_BASELINE"},
+  "platform_context": {"boot_session_sha256":"boot-a"},
   "runtime_state": {
+    "pid": 100,
     "debugger_attached": true,
     "code_signing_policy": "optional",
     "modules": {
@@ -246,7 +248,17 @@ cat > "$BUILD_DIR/baseline.json" <<'JSON'
       "rw-": {"state": "OBSERVED", "count": 2, "bytes": 8192},
       "rwx": {"state": "OBSERVED", "count": 0, "bytes": 0}
     },
-    "java_runtime": {"java_heap_total_bytes": 100, "device_elapsed_ms": 1000}
+    "java_runtime": {
+      "java_heap_total_bytes": 100,
+      "device_elapsed_ms": 1000,
+      "process_start_elapsed_ms": 500,
+      "process_age_ms": 500,
+      "process_elapsed_cpu_ms": 25,
+      "native_heap_size_bytes": 200,
+      "native_heap_allocated_bytes": 120,
+      "native_heap_free_bytes": 80,
+      "pss_kb": 4096
+    }
   }
 }
 JSON
@@ -334,6 +346,19 @@ for row in (native_a, native_b):
 
 java_vs_native = json.loads(json.dumps(native_a))
 (root/'java-vs-native.json').write_text(json.dumps(java_vs_native))
+
+condition_mismatch = json.loads(json.dumps(base))
+condition_mismatch['capture_provenance']['condition_id'] = 'CI_OTHER'
+(root/'condition-mismatch.json').write_text(json.dumps(condition_mismatch))
+
+process_instance = json.loads(json.dumps(base))
+process_instance['runtime_state']['pid'] = 101
+process_instance['runtime_state']['java_runtime']['process_start_elapsed_ms'] = 700
+(root/'process-instance.json').write_text(json.dumps(process_instance))
+
+boot_change = json.loads(json.dumps(base))
+boot_change['platform_context']['boot_session_sha256'] = 'boot-b'
+(root/'boot-change.json').write_text(json.dumps(boot_change))
 PY
 
 python3 tools/runtime-stability-diff.py   "$BUILD_DIR/baseline.json" "$BUILD_DIR/runtime.json"   --out "$BUILD_DIR/runtime-drift.json"
@@ -349,6 +374,9 @@ python3 tools/runtime-stability-diff.py   "$BUILD_DIR/baseline.json" "$BUILD_DIR
 python3 tools/runtime-stability-diff.py   "$BUILD_DIR/baseline.json" "$BUILD_DIR/elapsed-only.json"   --out "$BUILD_DIR/elapsed-only.out.json"
 python3 tools/runtime-stability-diff.py   "$BUILD_DIR/native-a.json" "$BUILD_DIR/native-b.json"   --out "$BUILD_DIR/native-only.out.json"
 python3 tools/runtime-stability-diff.py   "$BUILD_DIR/baseline.json" "$BUILD_DIR/java-vs-native.json"   --out "$BUILD_DIR/java-vs-native.out.json"
+python3 tools/runtime-stability-diff.py   "$BUILD_DIR/baseline.json" "$BUILD_DIR/condition-mismatch.json"   --out "$BUILD_DIR/condition-mismatch.out.json"
+python3 tools/runtime-stability-diff.py   "$BUILD_DIR/baseline.json" "$BUILD_DIR/process-instance.json"   --out "$BUILD_DIR/process-instance.out.json"
+python3 tools/runtime-stability-diff.py   "$BUILD_DIR/baseline.json" "$BUILD_DIR/boot-change.json"   --out "$BUILD_DIR/boot-change.out.json"
 
 python3 - <<'PY'
 import json
@@ -697,6 +725,9 @@ assert json.loads((root/'capture-race.out.json').read_text())['classification'] 
 assert json.loads((root/'elapsed-only.out.json').read_text())['classification'] == 'NO_OBSERVED_DRIFT'
 assert json.loads((root/'native-only.out.json').read_text())['classification'] == 'NO_OBSERVED_DRIFT'
 assert json.loads((root/'java-vs-native.out.json').read_text())['classification'] == 'IDENTITY_DRIFT'
+assert json.loads((root/'condition-mismatch.out.json').read_text())['classification'] == 'INCOMPARABLE_CONDITION'
+assert json.loads((root/'process-instance.out.json').read_text())['classification'] == 'PROCESS_INSTANCE_DRIFT'
+assert json.loads((root/'boot-change.out.json').read_text())['classification'] == 'BOOT_SESSION_DRIFT'
 robust = json.loads((root/'robust-baseline.json').read_text())
 assert robust['baseline_gate'] == 'PASS'
 assert robust['sample_count'] == 3
@@ -794,6 +825,10 @@ receipt = {
     'duplicate_evidence_ref_rejected': 'PASS',
     'empty_structured_causal_records_rejected': 'PASS',
     'observation_fingerprint_required_for_repetition': 'PASS',
+    'condition_mismatch_incomparable': 'PASS',
+    'process_instance_drift_separated': 'PASS',
+    'boot_session_drift_separated': 'PASS',
+    'stale_predecessor_rejected_before_publish': 'PASS',
     'atomic_publication_contract_static': 'PASS',
     'storage_atomic_publish_executed': 'PASS',
     'storage_tamper_detection_executed': 'PASS',
