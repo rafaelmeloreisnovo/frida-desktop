@@ -14,6 +14,7 @@ import hashlib
 import json
 import os
 from pathlib import Path
+import re
 import shutil
 import subprocess
 import threading
@@ -63,6 +64,11 @@ def parse_args() -> argparse.Namespace:
         / "frida-runtime-stability",
     )
     parser.add_argument("--timeout-seconds", type=float, default=10.0)
+    parser.add_argument(
+        "--condition-id",
+        default="UNSPECIFIED",
+        help="comparability label: 1-64 chars [A-Za-z0-9_.-]",
+    )
     parser.add_argument("--max-dumps", type=int, default=256)
     parser.add_argument("--max-dir-bytes", type=int, default=64 * 1024 * 1024)
     parser.add_argument("--min-free-bytes", type=int, default=16 * 1024 * 1024)
@@ -131,7 +137,14 @@ MEMINFO_KEYS = {
 }
 
 
-def collect_local_android_context() -> dict[str, Any]:
+def collect_local_android_context(*, same_device_target: bool) -> dict[str, Any]:
+    if not same_device_target:
+        return {
+            "scope": "NOT_COLLECTED_REMOTE_OR_USB_TARGET",
+            "causal_role": "CONTEXT_ONLY",
+            "same_device_target": False,
+        }
+
     getprop = "/system/bin/getprop"
     if not Path(getprop).exists():
         candidate = shutil.which("getprop")
@@ -187,10 +200,45 @@ def collect_local_android_context() -> dict[str, Any]:
         except Exception:
             pressure = {}
 
+    boot_session_sha256: str | None = None
+    try:
+        boot_id = Path("/proc/sys/kernel/random/boot_id").read_text(
+            encoding="ascii"
+        ).strip()
+        if boot_id:
+            boot_session_sha256 = hashlib.sha256(
+                boot_id.encode("ascii")
+            ).hexdigest()
+    except Exception:
+        pass
+
+    selinux_enforcing: bool | str = "TOKEN_VAZIO"
+    try:
+        raw = Path("/sys/fs/selinux/enforce").read_text(
+            encoding="ascii"
+        ).strip()
+        if raw in ("0", "1"):
+            selinux_enforcing = raw == "1"
+    except Exception:
+        pass
+
+    loadavg: dict[str, float | int] | str = "TOKEN_VAZIO"
+    try:
+        parts = Path("/proc/loadavg").read_text(encoding="ascii").split()
+        if len(parts) >= 3:
+            loadavg = {
+                "load_1m": float(parts[0]),
+                "load_5m": float(parts[1]),
+                "load_15m": float(parts[2]),
+            }
+    except Exception:
+        pass
+
     uname = os.uname()
     return {
-        "scope": "CONTROLLER_LOCAL_ANDROID",
+        "scope": "CONTROLLER_LOCAL_ANDROID_SAME_DEVICE_TARGET",
         "causal_role": "CONTEXT_ONLY",
+        "same_device_target": True,
         "properties": properties,
         "memory": memory if memory else "TOKEN_VAZIO",
         "psi_memory": pressure if pressure else "TOKEN_VAZIO",
@@ -199,6 +247,13 @@ def collect_local_android_context() -> dict[str, Any]:
             "release": uname.release,
             "machine": uname.machine,
         },
+        "boot_session_sha256": (
+            boot_session_sha256
+            if boot_session_sha256 is not None
+            else "TOKEN_VAZIO"
+        ),
+        "selinux_enforcing": selinux_enforcing,
+        "loadavg": loadavg,
         "privacy": "ALLOWLISTED_STRUCTURAL_AND_RESOURCE_METRICS_ONLY",
     }
 
@@ -215,6 +270,10 @@ def resolve_pid(device: Any, args: argparse.Namespace) -> int:
 
 def main() -> int:
     args = parse_args()
+    if re.fullmatch(r"[A-Za-z0-9_.-]{1,64}", args.condition_id) is None:
+        raise ValueError(
+            "--condition-id must be 1-64 chars from [A-Za-z0-9_.-]"
+        )
     source = args.agent.read_text(encoding="utf-8")
     agent_sha256 = hashlib.sha256(source.encode("utf-8")).hexdigest()
     controller_path = Path(__file__).resolve()
@@ -268,7 +327,12 @@ def main() -> int:
             raise RuntimeError("agent returned no stability dump")
 
         dump["strong_fingerprints"] = strong_fingerprints(dump)
-        dump["platform_context"] = collect_local_android_context()
+        same_device_target = (
+            not args.usb and is_loopback_endpoint(args.endpoint)
+        )
+        dump["platform_context"] = collect_local_android_context(
+            same_device_target=same_device_target
+        )
         dump["capture_provenance"] = {
             "agent_sha256": agent_sha256,
             "controller_sha256": controller_sha256,
@@ -277,6 +341,12 @@ def main() -> int:
             "target_selector_persisted": False,
             "source_binding": "LOCAL_FILE_SHA256",
             "controller_run_id": controller_run_id,
+            "condition_id": args.condition_id,
+            "condition_semantics": (
+                "EXPLICIT_COMPARABILITY_LABEL"
+                if args.condition_id != "UNSPECIFIED"
+                else "UNSPECIFIED_DESCRIPTIVE_ONLY"
+            ),
             "previous_dump_sha256": previous_dump_sha256,
             "chain_semantics": "LOCAL_APPEND_ORDER_INTEGRITY_NOT_CAUSALITY",
         }
@@ -297,6 +367,7 @@ def main() -> int:
         print(f"agent_sha256={agent_sha256}")
         print(f"controller_sha256={controller_sha256}")
         print(f"controller_run_id={controller_run_id}")
+        print(f"condition_id={args.condition_id}")
         print(f"previous_dump_sha256={previous_dump_sha256}")
         print(f"max_dumps={args.max_dumps}")
         print(f"max_dir_bytes={args.max_dir_bytes}")
