@@ -372,3 +372,35 @@ claim_allowed = false
 
 So the hosted bridge is implemented, while physical shared-memory/restart
 survival and physical causal attribution remain separate gates.
+
+
+## Omission accounting
+
+The runtime-stability layer now has two machine-readable governance companions:
+
+```text
+profiles/runtime-stability-omission-ledger.v1.json
+profiles/runtime-stability-evidence-source-matrix.v1.json
+```
+
+The omission ledger prevents low-weight observations from silently disappearing.
+Every observed family receives exactly one explicit disposition:
+
+- `IMPLEMENTED`
+- `DEFERRED_WITH_GATE`
+- `EXTERNAL_EVIDENCE_REQUIRED`
+- `SENSITIVE_EXCLUDED`
+- `REJECTED_WITH_REASON`
+
+Each row also carries a rationale, a falsifier and the next gate. Therefore
+"not in the active dump" is no longer semantically equivalent to "irrelevant"
+or "forgotten".
+
+The evidence-source matrix defines the authority boundary of Frida structural
+dumps, HyperMemory, tombstones, LMKD/kernel evidence, SELinux AVC evidence,
+Perfetto/atrace, safe getprop properties and independent physical repetition.
+Cross-source causal claims require an explicit time/identity bridge; no single
+source is allowed to silently promote itself into a stronger evidence class.
+
+This accounting is CI-gated together with the active collector so governance
+cannot drift away from implementation.
