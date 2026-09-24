@@ -34,7 +34,7 @@ assert profile['capture_mode']['periodic_polling'] is False
 assert profile['capture_mode']['event_observers_default'] is False
 assert profile['recognition']['compact_fingerprint_role'] == 'HINT_ONLY'
 assert profile['privacy']['target_selector_persisted'] is False
-assert len(matrix['hypotheses']) >= 16
+assert len(matrix['hypotheses']) >= 18
 assert all(row.get('falsifier') for row in matrix['hypotheses'])
 assert matrix['physical_promotion_rule']['minimum_independent_runs'] >= 3
 allowed_dispositions = {
@@ -69,6 +69,7 @@ grep -Fq "Process.attachModuleObserver" agents/android-runtime-stability-dump.js
 grep -Fq "Process.attachThreadObserver" agents/android-runtime-stability-dump.js
 grep -Fq "names_collected: false" agents/android-runtime-stability-dump.js
 grep -Fq "SAFE_SYSTEM_PROPERTIES" agents/android-runtime-stability-dump.js
+grep -Fq "SYSTEM_PROPERTIES_UNAVAILABLE" agents/android-runtime-stability-dump.js
 grep -Fq "Debug.getPss()" agents/android-runtime-stability-dump.js
 grep -Fq "runtime-stability-hypermemory-event/v1" modules/runtime-learning-engine/runtime-stability-hypermemory-bridge.ts
 grep -Fq "causality: 'NOT_INFERRED'" modules/runtime-learning-engine/runtime-stability-hypermemory-bridge.ts
