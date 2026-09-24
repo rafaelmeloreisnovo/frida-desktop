@@ -104,6 +104,12 @@
     "file_mode": "0600",
     "fsync": true,
     "sha256_sidecar": true,
-    "target_selector_persisted": false
+    "target_selector_persisted": false,
+    "atomic_publication": "temp + fsync + exclusive hard-link + directory fsync",
+    "strict_json_finite_numbers": true,
+    "default_max_dumps": 256,
+    "default_max_dir_bytes": 67108864,
+    "default_min_free_bytes": 16777216,
+    "automatic_deletion": false
   }
 }
