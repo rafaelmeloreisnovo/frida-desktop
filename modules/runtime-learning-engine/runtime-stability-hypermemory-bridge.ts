@@ -1,7 +1,10 @@
 import { HyperMemoryRuntime } from './hypermemory-runtime';
 
 const DUMP_SCHEMA = 'rafaelia.android.runtime-stability/v1';
-const DIFF_SCHEMA = 'rafaelia.android.runtime-stability-diff/v1';
+const DIFF_SCHEMAS = new Set([
+  'rafaelia.android.runtime-stability-diff/v1',
+  'rafaelia.android.runtime-stability-diff/v2'
+]);
 const BRIDGE_SCHEMA = 'rafaelia.runtime-stability-hypermemory-bridge/v1';
 
 export interface RuntimeStabilityDumpLike {
@@ -31,14 +34,17 @@ export interface RuntimeStabilityDumpLike {
 export interface RuntimeStabilityDiffLike {
   schema: string;
   classification?: string;
-  platform_identity_match?: boolean;
-  module_surface_match?: boolean;
-  recognition_match?: boolean;
+  comparison_status?: string;
+  platform_identity_match?: boolean | string;
+  module_surface_match?: boolean | string;
+  recognition_match?: boolean | string;
   identity_changes?: Array<{ path?: string }>;
   observer_changes?: Array<{ path?: string }>;
   module_surface_changes?: Array<{ path?: string }>;
   runtime_changes?: Array<{ path?: string }>;
   hint_changes?: Array<{ path?: string }>;
+  baseline_observation_gaps?: string[];
+  candidate_observation_gaps?: string[];
 }
 
 export interface RuntimeOutcomeEvent {
@@ -130,12 +136,14 @@ export class RuntimeStabilityHyperMemoryBridge {
   }
 
   appendDiff(diff: RuntimeStabilityDiffLike): number {
-    if (diff.schema !== DIFF_SCHEMA) {
+    if (!DIFF_SCHEMAS.has(diff.schema)) {
       throw new Error('unsupported runtime stability diff schema: ' + diff.schema);
     }
 
     const payload: Record<string, unknown> = {
+      diff_schema: diff.schema,
       classification: safeText(diff.classification),
+      comparison_status: safeText(diff.comparison_status),
       platform_identity_match:
         diff.platform_identity_match ?? 'TOKEN_VAZIO',
       module_surface_match: diff.module_surface_match ?? 'TOKEN_VAZIO',
@@ -145,6 +153,14 @@ export class RuntimeStabilityHyperMemoryBridge {
       module_surface_change_paths: pathsOnly(diff.module_surface_changes),
       runtime_change_paths: pathsOnly(diff.runtime_changes),
       hint_change_paths: pathsOnly(diff.hint_changes),
+      baseline_observation_gaps:
+        Array.isArray(diff.baseline_observation_gaps)
+          ? [...diff.baseline_observation_gaps].sort()
+          : [],
+      candidate_observation_gaps:
+        Array.isArray(diff.candidate_observation_gaps)
+          ? [...diff.candidate_observation_gaps].sort()
+          : [],
       causality: 'NOT_INFERRED',
       stability_claim: 'NOT_PROMOTED'
     };
