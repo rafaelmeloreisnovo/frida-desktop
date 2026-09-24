@@ -101,15 +101,19 @@ describe('RuntimeStabilityHyperMemoryBridge', () => {
     bridge.appendDiff({
       schema: 'rafaelia.android.runtime-stability-diff/v1',
       classification: 'MODULE_SURFACE_DRIFT',
+      observer_changes: [{ path: 'observer.frida_version' }],
       module_surface_changes: [
         { path: 'runtime_state.modules.modules[name,size]' }
       ],
       runtime_changes: [
         { path: 'runtime_state.java_runtime.java_heap_total_bytes' }
-      ]
+      ],
+      hint_changes: [{ path: 'platform_key' }]
     });
 
     const payload = JSON.parse(memory.readRecords(1)[0].payload.toString('utf8'));
+    expect(payload.payload.observer_change_paths).toEqual(['observer.frida_version']);
+    expect(payload.payload.hint_change_paths).toEqual(['platform_key']);
     expect(payload.payload.module_surface_change_paths).toEqual([
       'runtime_state.modules.modules[name,size]'
     ]);
