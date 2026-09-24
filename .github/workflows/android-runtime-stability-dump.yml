@@ -5,6 +5,10 @@ on:
     paths:
       - 'agents/android-runtime-stability-dump.js'
       - 'profiles/android-runtime-stability-dump.v1.json'
+      - 'profiles/android-runtime-stability-dump.v2.json'
+      - 'profiles/runtime-stability-falsification-matrix.v1.json'
+      - 'profiles/android-runtime-stability-dump.v2.json'
+      - 'profiles/runtime-stability-falsification-matrix.v1.json'
       - 'tools/runtime-stability-diff.py'
       - 'tools/capture-runtime-stability-dump.py'
       - 'docs/android-runtime-stability-dump.md'
