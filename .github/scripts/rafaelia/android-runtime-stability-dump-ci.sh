@@ -442,9 +442,14 @@ assert repeated['highest_supported_level'] == 'REPEATED'
 causal_pass = json.loads((root/'causal-pass-result.json').read_text())
 assert causal_pass['gate'] == 'PASS'
 assert causal_pass['highest_supported_level'] == 'CAUSAL_SUPPORTED'
-assert causal_pass['causal_claim_allowed'] is True
-assert causal_pass['confirmatory_ready'] is True
-assert causal_pass['publication_grade_causal_support'] is True
+assert causal_pass['methodology_structure_complete'] is True
+assert causal_pass['causal_support_structure_complete'] is True
+assert causal_pass['causal_claim_allowed'] is False
+assert causal_pass['confirmatory_structure_ready'] is True
+assert causal_pass['confirmatory_ready'] is False
+assert causal_pass['publication_grade_causal_support'] is False
+assert causal_pass['scientific_claim_review_required'] is True
+assert causal_pass['claim_allowed'] is False
 duplicate_observation = json.loads((root/'duplicate-observation-result.json').read_text())
 assert duplicate_observation['gate'] == 'FAIL'
 false_independence = json.loads((root/'false-independence-result.json').read_text())
@@ -482,6 +487,7 @@ receipt = {
     'falsifiability_repeated_gate': 'PASS',
     'falsifiability_causal_supported_gate': 'PASS',
     'confirmatory_preregistration_gate': 'PASS',
+    'methodology_gate_never_self_authorizes_scientific_claim': 'PASS',
     'methods_matrix_contract': 'PASS',
     'unsupported_causal_claim_fail_closed': 'PASS',
     'duplicate_baseline_rejected': 'PASS',
