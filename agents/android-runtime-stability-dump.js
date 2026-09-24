@@ -301,6 +301,8 @@ function collectJavaRuntime() {
         const SystemProperties = safe(function () {
           return Java.use('android.os.SystemProperties');
         }, null);
+        out.system_properties_status =
+            SystemProperties === null ? 'TOKEN_VAZIO' : 'PASS';
         if (SystemProperties === null)
           out.token_vazio.push('SYSTEM_PROPERTIES_UNAVAILABLE');
 
@@ -457,6 +459,8 @@ async function collectSnapshot(reason) {
       threads: threads.status,
       memory_ranges: ranges.status,
       java_runtime: java.status,
+      system_properties:
+          java.system_properties_status || 'TOKEN_VAZIO',
       android_clock_start: monotonicStart.status,
       android_clock_end: monotonicEnd.status
     },
