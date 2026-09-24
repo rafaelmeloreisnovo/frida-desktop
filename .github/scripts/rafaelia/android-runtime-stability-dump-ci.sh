@@ -39,6 +39,14 @@ assert method['baseline']['minimum_independent_snapshots'] == 3
 assert method['baseline']['numeric_center'] == 'median'
 assert method['baseline']['numeric_dispersion'] == 'median_absolute_deviation'
 assert 'drift != instability' in method['falsifiability_invariants']
+methods = json.loads(
+    Path('profiles/runtime-stability-methods-matrix.v1.json').read_text()
+)
+assert methods['claim_allowed'] is False
+method_states = {row['method']: row['status'] for row in methods['methods']}
+assert method_states['differential_testing'] == 'IMPLEMENTED_HOSTED'
+assert method_states['metamorphic_testing'] == 'IMPLEMENTED_HOSTED'
+assert method_states['physical_fault_injection'] == 'TOKEN_VAZIO'
 PY
 
 if grep -En 'Build\.SERIAL|ANDROID_ID|TelephonyManager|SubscriberId|SimSerial|ClipboardManager|getText\(|readUtf8String|readByteArray|Memory\.read|enumerateClasses|module\.path'     agents/android-runtime-stability-dump.js; then
@@ -296,6 +304,8 @@ cat > "$BUILD_DIR/causal-pass-packet.json" <<'JSON'
   "hypothesis_id": "H-NATIVE-FAULT-CAUSE",
   "hypothesis": "a controlled native fault causes the observed outcome",
   "requested_level": "CAUSAL_SUPPORTED",
+  "study_mode": "CONFIRMATORY",
+  "hypothesis_registered_before_test": true,
   "falsifiers": ["remove the controlled fault and require the outcome to disappear"],
   "observations": [{"id":1},{"id":2},{"id":3}],
   "evidence": [
@@ -412,6 +422,8 @@ causal_pass = json.loads((root/'causal-pass-result.json').read_text())
 assert causal_pass['gate'] == 'PASS'
 assert causal_pass['highest_supported_level'] == 'CAUSAL_SUPPORTED'
 assert causal_pass['causal_claim_allowed'] is True
+assert causal_pass['confirmatory_ready'] is True
+assert causal_pass['publication_grade_causal_support'] is True
 duplicate_observation = json.loads((root/'duplicate-observation-result.json').read_text())
 assert duplicate_observation['gate'] == 'FAIL'
 false_independence = json.loads((root/'false-independence-result.json').read_text())
@@ -422,7 +434,7 @@ assert causal_fail['gate'] == 'FAIL'
 assert causal_fail['causal_claim_allowed'] is False
 PY
 
-rafaelia_write_sha256_manifest "$EVIDENCE_DIR/SOURCE_SHA256SUMS.txt"   agents/android-runtime-stability-dump.js   profiles/android-runtime-stability-dump.v1.json   profiles/runtime-stability-methodology.v1.json   tools/runtime-stability-diff.py   tools/capture-runtime-stability-dump.py   tools/runtime_stability_storage.py   tools/runtime-stability-baseline.py   tools/runtime-stability-evidence-gate.py   docs/android-runtime-stability-dump.md   docs/runtime-stability-falsifiability.md
+rafaelia_write_sha256_manifest "$EVIDENCE_DIR/SOURCE_SHA256SUMS.txt"   agents/android-runtime-stability-dump.js   profiles/android-runtime-stability-dump.v1.json   profiles/runtime-stability-methodology.v1.json   profiles/runtime-stability-methods-matrix.v1.json   tools/runtime-stability-diff.py   tools/capture-runtime-stability-dump.py   tools/runtime_stability_storage.py   tools/runtime-stability-baseline.py   tools/runtime-stability-evidence-gate.py   docs/android-runtime-stability-dump.md   docs/runtime-stability-falsifiability.md
 
 GITHUB_REPOSITORY="${GITHUB_REPOSITORY:-LOCAL}" GITHUB_RUN_ID="${GITHUB_RUN_ID:-0}" GITHUB_SHA="${GITHUB_SHA:-LOCAL}" python3 - <<'PY'
 import json
@@ -448,6 +460,8 @@ receipt = {
     'candidate_outlier_without_causal_promotion': 'PASS',
     'falsifiability_repeated_gate': 'PASS',
     'falsifiability_causal_supported_gate': 'PASS',
+    'confirmatory_preregistration_gate': 'PASS',
+    'methods_matrix_contract': 'PASS',
     'unsupported_causal_claim_fail_closed': 'PASS',
     'duplicate_baseline_rejected': 'PASS',
     'distinct_controller_run_provenance_required': 'PASS',
