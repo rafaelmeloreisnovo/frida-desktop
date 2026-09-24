@@ -59,7 +59,7 @@ cat > "$BUILD_DIR/baseline.json" <<'JSON'
   "module_surface_key": "mod11111",
   "recognition_key": "rec11111",
   "observer": {"agent_schema":"rafaelia.android.runtime-stability/v1","frida_version":"17.0.0","instrumentation_present":true,"capture_wall_duration_ms":2},
-  "capture_provenance": {"agent_sha256":"agent-a","controller_sha256":"controller-a","frida_python_version":"17.0.0"},
+  "capture_provenance": {"agent_sha256":"agent-a","controller_sha256":"controller-a","frida_python_version":"17.0.0","controller_run_id":"fixture-base-run"},
   "runtime_state": {
     "debugger_attached": true,
     "code_signing_policy": "optional",
@@ -145,12 +145,14 @@ base = json.loads((root/'baseline.json').read_text())
 for index, threads in enumerate((4, 5, 6), start=1):
     row = json.loads(json.dumps(base))
     row['capture_seq'] = index
+    row['capture_provenance']['controller_run_id'] = f'fixture-robust-run-{index}'
     row['runtime_state']['threads']['count'] = threads
     row['runtime_state']['java_runtime']['java_heap_total_bytes'] = 100 + (index - 1) * 5
     (root/f'robust-{index}.json').write_text(json.dumps(row))
 
 candidate = json.loads(json.dumps(base))
 candidate['capture_seq'] = 10
+candidate['capture_provenance']['controller_run_id'] = 'fixture-candidate-run'
 candidate['runtime_state']['threads']['count'] = 40
 candidate['runtime_state']['java_runtime']['java_heap_total_bytes'] = 500
 (root/'robust-candidate.json').write_text(json.dumps(candidate))
@@ -360,6 +362,7 @@ receipt = {
     'falsifiability_causal_supported_gate': 'PASS',
     'unsupported_causal_claim_fail_closed': 'PASS',
     'duplicate_baseline_rejected': 'PASS',
+    'distinct_controller_run_provenance_required': 'PASS',
     'identity_inconsistent_baseline_rejected': 'PASS',
     'false_independence_rejected': 'PASS',
     'duplicate_observation_rejected': 'PASS',
