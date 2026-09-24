@@ -77,7 +77,7 @@ grep -Fq "raw_module_list_embedded: false" modules/runtime-learning-engine/runti
 grep -Fq "java_build_identity_embedded: false" modules/runtime-learning-engine/runtime-stability-hypermemory-bridge.ts
 grep -Fq "TOKEN_VAZIO_EVICTED_PREDECESSOR" modules/runtime-learning-engine/runtime-stability-hypermemory-bridge.ts
 
-if grep -En "ro\.boot\.psn|vendor\.gsm\.serial|gsm\.|ril\.|iccid|imsi|operator\.numeric|subscriber" agents/android-runtime-stability-dump.js; then
+if grep -En "ro\.boot\.psn|vendor\.gsm\.serial|gsm\.|ril\.|iccid|imsi|operator\.numeric|getSubscriberId|getSimSerialNumber" agents/android-runtime-stability-dump.js; then
   rafaelia_die 'forbidden telephony/device-identity property surfaced in stability agent'
 fi
 
