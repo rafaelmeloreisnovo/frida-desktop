@@ -10,6 +10,9 @@ import hashlib
 import ipaddress
 import json
 import os
+import re
+import shutil
+import uuid
 from pathlib import Path
 import threading
 from typing import Any
@@ -52,6 +55,14 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument("--timeout-seconds", type=float, default=10.0)
     parser.add_argument("--max-bytes", type=int, default=DEFAULT_MAX_BYTES)
+    parser.add_argument(
+        "--condition-id",
+        default="UNSPECIFIED",
+        help="Comparability label: 1-64 chars [A-Za-z0-9_.-].",
+    )
+    parser.add_argument("--max-dumps", type=int, default=256)
+    parser.add_argument("--max-dir-bytes", type=int, default=64 * 1024 * 1024)
+    parser.add_argument("--min-free-bytes", type=int, default=16 * 1024 * 1024)
     return parser.parse_args()
 
 
@@ -75,6 +86,72 @@ def endpoint_is_loopback(endpoint: str) -> bool:
         return ipaddress.ip_address(host).is_loopback
     except ValueError:
         return False
+
+
+
+CONDITION_RE = re.compile(r"^[A-Za-z0-9_.-]{1,64}$")
+
+
+def validate_condition_id(value: str) -> str:
+    if not CONDITION_RE.fullmatch(value):
+        raise ValueError("--condition-id must match [A-Za-z0-9_.-]{1,64}")
+    return value
+
+
+def collect_controller_context(args: argparse.Namespace) -> dict[str, Any]:
+    same_device = not args.usb and endpoint_is_loopback(args.endpoint)
+    context: dict[str, Any] = {
+        "causal_role": "CONTEXT_ONLY",
+        "same_device_target": same_device,
+        "scope": (
+            "CONTROLLER_LOCAL_ANDROID_SAME_DEVICE_TARGET"
+            if same_device
+            else "NOT_COLLECTED_REMOTE_OR_USB_TARGET"
+        ),
+        "boot_session_sha256": "TOKEN_VAZIO",
+    }
+    if not same_device:
+        return context
+
+    try:
+        boot_id = Path("/proc/sys/kernel/random/boot_id").read_text(
+            encoding="ascii"
+        ).strip()
+        if boot_id:
+            context["boot_session_sha256"] = hashlib.sha256(
+                boot_id.encode("ascii")
+            ).hexdigest()
+    except Exception:
+        pass
+    return context
+
+
+def retention_preflight(
+    out_dir: Path,
+    *,
+    max_dumps: int,
+    max_dir_bytes: int,
+    min_free_bytes: int,
+    max_next_bytes: int,
+) -> None:
+    if max_dumps < 1 or max_dir_bytes < 1 or min_free_bytes < 0:
+        raise ValueError("invalid retention limits")
+    out_dir.mkdir(parents=True, exist_ok=True)
+    dumps = list(out_dir.glob("runtime-stability-*.json"))
+    if len(dumps) >= max_dumps:
+        raise RuntimeError(
+            f"dump retention limit reached: {len(dumps)} >= {max_dumps}; "
+            "no evidence was deleted automatically"
+        )
+    total = sum(p.stat().st_size for p in out_dir.iterdir() if p.is_file())
+    if total + max_next_bytes > max_dir_bytes:
+        raise RuntimeError(
+            "dump directory byte bound would be exceeded; "
+            "no evidence was deleted automatically"
+        )
+    free = shutil.disk_usage(out_dir).free
+    if free - max_next_bytes < min_free_bytes:
+        raise RuntimeError("insufficient free-space reserve for evidence capture")
 
 
 def resolve_device(args: argparse.Namespace):
@@ -241,8 +318,19 @@ def main() -> int:
     args = parse_args()
     if args.max_bytes <= 0:
         raise SystemExit("--max-bytes must be > 0")
+    validate_condition_id(args.condition_id)
+    retention_preflight(
+        args.out_dir,
+        max_dumps=args.max_dumps,
+        max_dir_bytes=args.max_dir_bytes,
+        min_free_bytes=args.min_free_bytes,
+        max_next_bytes=args.max_bytes + 4096,
+    )
 
     source = args.agent.read_text(encoding="utf-8")
+    agent_sha256 = hashlib.sha256(source.encode("utf-8")).hexdigest()
+    controller_sha256 = hashlib.sha256(Path(__file__).read_bytes()).hexdigest()
+    controller_run_id = str(uuid.uuid4())
     device = resolve_device(args)
     pid = resolve_pid(device, args)
 
@@ -289,6 +377,24 @@ def main() -> int:
         if not isinstance(dump, dict):
             raise RuntimeError("agent returned no stability dump")
 
+        import frida
+
+        dump["capture_provenance"] = {
+            "agent_sha256": agent_sha256,
+            "controller_sha256": controller_sha256,
+            "frida_python_version": getattr(frida, "__version__", "TOKEN_VAZIO"),
+            "controller_run_id": controller_run_id,
+            "condition_id": args.condition_id,
+            "condition_semantics": (
+                "EXPLICIT_COMPARABILITY_LABEL"
+                if args.condition_id != "UNSPECIFIED"
+                else "UNSPECIFIED_DESCRIPTIVE_ONLY"
+            ),
+            "transport_selector_persisted": False,
+            "target_selector_persisted": False,
+        }
+        dump["platform_context"] = collect_controller_context(args)
+
         path, digest, previous = write_append_only(
             args.out_dir, dump, args.max_bytes
         )
@@ -298,6 +404,13 @@ def main() -> int:
         print(f"sha256={digest}")
         print(f"previous_sha256={previous}")
         print("ledger=ledger.jsonl")
+        print(f"agent_sha256={agent_sha256}")
+        print(f"controller_sha256={controller_sha256}")
+        print(f"controller_run_id={controller_run_id}")
+        print(f"condition_id={args.condition_id}")
+        print(f"max_dumps={args.max_dumps}")
+        print(f"max_dir_bytes={args.max_dir_bytes}")
+        print(f"min_free_bytes={args.min_free_bytes}")
         print("target_name_persisted=NO")
         print("endpoint_persisted=NO")
         print("pid_in_dump=YES_VOLATILE_RUNTIME_STATE")

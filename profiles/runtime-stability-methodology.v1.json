@@ -1,0 +1,147 @@
+{
+  "schema": "rafaelia.runtime-stability.methodology/v1",
+  "purpose": "Make runtime stability analysis falsifiable, repeatable, multiscale and fail-closed.",
+  "claim_allowed": false,
+  "evidence_ladder": [
+    {
+      "level": "OBSERVED",
+      "meaning": "A directly measured value or structural delta exists."
+    },
+    {
+      "level": "REPEATED",
+      "meaning": "The observation recurs across at least three independent captures and an explicit falsifier has been attempted."
+    },
+    {
+      "level": "ASSOCIATED",
+      "meaning": "Repeated observation co-varies with an outcome and at least two independent source types contribute evidence; causality remains forbidden."
+    },
+    {
+      "level": "CAUSAL_CANDIDATE",
+      "meaning": "Association also has temporal precedence, explicit falsifier testing and alternative-explanation review."
+    },
+    {
+      "level": "CAUSAL_SUPPORTED",
+      "meaning": "Causal candidate additionally survives controlled intervention or reversal/reproduction."
+    }
+  ],
+  "baseline": {
+    "minimum_independent_snapshots": 3,
+    "identity_invariant_required": true,
+    "required_observation_completeness": 1,
+    "numeric_center": "median",
+    "numeric_dispersion": "median_absolute_deviation",
+    "robust_sigma_scale": 1.4826,
+    "outlier_threshold": 6,
+    "module_model": "empirical_prevalence",
+    "zero_mad_rule": "candidate outside observed min/max is deviation, not causality",
+    "independence_rule": "input paths, bytes and controller_run_id must be distinct; this proves distinct acquisition events only",
+    "capture_run_rule": "each baseline snapshot must carry a distinct controller_run_id",
+    "minimum_distinct_captures": 3,
+    "minimum_independent_snapshots_semantics": "legacy field name; distinct captures are repeated measures, not proof of statistical/source independence",
+    "capture_independence_claim": false,
+    "sample_depth_labels": "MINIMAL/ROBUST/STRONG describe count depth only, not evidentiary strength or statistical power",
+    "outlier_threshold_semantics": "ENGINEERING_SCREENING_THRESHOLD_NOT_A_UNIVERSAL_SIGNIFICANCE_TEST",
+    "robust_sigma_scale_semantics": "NORMAL-CONSISTENCY SCALING FOR MAD; DESCRIPTIVE SCREENING DOES NOT CREATE A P-VALUE"
+  },
+  "observation_quality": {
+    "dimensions": [
+      "schema validity",
+      "required field completeness",
+      "stable identity consistency",
+      "source provenance",
+      "clock semantics",
+      "observer/instrumentation state",
+      "capture consistency / module churn during non-atomic snapshot",
+      "Frida Cloak visibility",
+      "exact memory-range aggregation semantics",
+      "external controller context scope"
+    ],
+    "rule": "low-quality or incomparable observations must become TOKEN_VAZIO rather than negative evidence"
+  },
+  "multiscale_rule": "Evidence from one scale cannot promote another scale without an explicit bridge.",
+  "alternative_explanations": [
+    "lazy module loading",
+    "ASLR movement",
+    "normal thread scheduling",
+    "GC/JIT tier transitions",
+    "thermal/power state",
+    "LMKD or memory pressure",
+    "SELinux denial",
+    "process restart/generation change",
+    "instrumentation observer effect",
+    "snapshot race / module churn during capture",
+    "Frida Cloak hiding instrumentation-owned resources",
+    "same module basename representing different filesystem objects",
+    "wall-clock adjustment while monotonic elapsed time remains valid",
+    "controller local context differing from remotely attached target context"
+  ],
+  "falsifiability_invariants": [
+    "drift != instability",
+    "association != causation",
+    "absence != zero",
+    "TOKEN_VAZIO != FAIL",
+    "hosted evidence != physical-device evidence",
+    "same app identity != same process generation",
+    "compact fingerprint != authoritative structure",
+    "compact fingerprint drift != structural identity drift",
+    "missing evidence != equality",
+    "distinct capture != independent evidence channel",
+    "structural methodology gate != scientific truth",
+    "causal-support-ready structure != permission to publish a causal claim",
+    "local hash-chain order != causality",
+    "observer-visible process state != complete physical process state",
+    "distinct label != distinct evidence reference",
+    "distinct observation id != distinct observation evidence",
+    "non-empty array != valid structured evidence record"
+  ],
+  "evidence_independence": {
+    "rule": "independent evidence requires distinct independence_group values, not merely distinct labels/source_type strings",
+    "observation_identity": "observations must have unique ids",
+    "fail_closed": true,
+    "baseline_note": "repeated baseline captures may share one instrumentation channel; source independence must be established separately",
+    "observation_repetition": "REPEATED and higher require unique observation ids and unique non-empty observation fingerprints",
+    "evidence_reference_rule": "association/causal levels require distinct non-empty evidence refs in addition to distinct source_type and independence_group",
+    "structured_record_rule": "falsifier, temporal-order, intervention and alternative-explanation records must contain required non-empty semantic fields; empty objects never satisfy a gate"
+  },
+  "hyperMemory_chain": {
+    "eviction_rule": "if the predecessor cannot be observed after ring eviction, emit TOKEN_VAZIO_EVICTED_PREDECESSOR instead of GENESIS",
+    "chain_claim": "payload SHA-256 links are local causal-order evidence, not causal proof"
+  },
+  "storage": {
+    "publication": "temp + fsync + exclusive hard-link + directory fsync",
+    "deletion": "never automatic",
+    "default_max_dumps": 256,
+    "default_max_dir_bytes": 67108864,
+    "default_min_free_bytes": 16777216
+  },
+  "observer_drift": {
+    "priority": "before module/runtime drift classification",
+    "authoritative_fields": [
+      "observer.agent_schema",
+      "observer.frida_version",
+      "observer.instrumentation_present",
+      "capture_provenance.agent_sha256",
+      "capture_provenance.controller_sha256",
+      "capture_provenance.frida_python_version"
+    ],
+    "excluded_from_drift_authority": [
+      "capture duration",
+      "compact FNV hints"
+    ]
+  },
+  "epistemic_claim_boundary": {
+    "methodology_gate_can_validate": [
+      "required structure is present",
+      "declared evidence channels are distinct by independence_group",
+      "falsifier/intervention/alternative-review records exist",
+      "contradictory evidence is explicitly resolved"
+    ],
+    "methodology_gate_cannot_validate": [
+      "scientific truth of the hypothesis",
+      "physical correctness of evidence contents",
+      "absence of unmeasured confounding",
+      "publication-grade causal claim"
+    ],
+    "causal_claim_allowed_by_gate": false
+  }
+}

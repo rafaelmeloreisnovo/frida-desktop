@@ -4,7 +4,7 @@ import * as path from 'path';
 import { HyperMemoryRuntime } from '../hypermemory-runtime';
 import { RuntimeStabilityHyperMemoryBridge } from '../runtime-stability-hypermemory-bridge';
 
-describe('RuntimeStabilityHyperMemoryBridge', () => {
+describe('RuntimeStabilityHyperMemoryBridge V2', () => {
   let storagePath: string;
   let memory: HyperMemoryRuntime;
   let bridge: RuntimeStabilityHyperMemoryBridge;
@@ -25,81 +25,176 @@ describe('RuntimeStabilityHyperMemoryBridge', () => {
     fs.rmSync(storagePath, { recursive: true, force: true });
   });
 
-  test('projects a V2 dump without embedding the full module list', () => {
-    const sequence = bridge.appendDump({
-      schema: 'rafaelia.android.runtime-stability/v2',
-      claim_allowed: false,
-      capture_seq: 7,
-      reason: 'BASELINE',
-      instrumentation_identity: {
-        frida_version: '17.0.0',
-        script_runtime: 'QJS'
+  const dump = () => ({
+    schema: 'rafaelia.android.runtime-stability/v2',
+    claim_allowed: false,
+    capture_seq: 7,
+    reason: 'BASELINE',
+    capture_provenance: { condition_id: 'idle-v1' },
+    instrumentation_identity: {
+      frida_version: '17.0.0',
+      script_runtime: 'QJS'
+    },
+    stable_identity: {
+      arch: 'arm',
+      pointer_size: 4,
+      page_size: 4096,
+      platform: 'linux',
+      java_available: true,
+      java_identity: {
+        build_fingerprint: 'PRIVATE-BUILD-IDENTITY-MUST-NOT-BRIDGE'
+      }
+    },
+    visibility: { modules: 'PASS', threads: 'PASS' },
+    consistency: {
+      snapshot_atomic: false,
+      module_surface_stable_during_capture: true
+    },
+    platform_key_hint: 'abcd',
+    module_surface_key_hint: 'efgh',
+    recognition_key_hint: 'ijkl',
+    platform_context: { boot_session_sha256: 'b'.repeat(64) },
+    runtime_state: {
+      pid: 123,
+      current_tid: 124,
+      debugger_attached: true,
+      modules: {
+        count: 2,
+        modules: [
+          { name: 'liba.so', size: 4096, base: '0x1000' },
+          { name: 'libb.so', size: 8192, base: '0x2000' }
+        ]
       },
-      stable_identity: { arch: 'arm', pointer_size: 4 },
-      visibility: { modules: 'PASS', threads: 'PASS' },
-      platform_key_hint: 'abcd',
-      module_surface_key_hint: 'efgh',
-      recognition_key_hint: 'ijkl',
-      runtime_state: {
-        pid: 123,
-        current_tid: 124,
-        modules: {
-          count: 2,
-          modules: [
-            { name: 'liba.so', size: 4096, base: '0x1000' },
-            { name: 'libb.so', size: 8192, base: '0x2000' }
-          ]
-        },
-        threads: { count: 3, states: { waiting: 3 } },
-        memory_ranges: { status: 'PASS' },
-        java_runtime: { java_heap_total_bytes: 100 },
-        observer: { frida_heap_size_bytes: 50 }
-      },
-      timing: { wall_duration_ms: 4 },
-      gaps: { crash_causality: 'TOKEN_VAZIO' }
-    }, {
+      threads: { count: 3, states: { waiting: 3 } },
+      memory_ranges: { status: 'PASS', total_ranges: 5 },
+      java_runtime: {
+        process_start_elapsed_ms: 100,
+        process_age_ms: 25,
+        process_pss_kb: 1024,
+        native_heap_allocated_bytes: 2048
+      }
+    },
+    gaps: { crash_causality: 'TOKEN_VAZIO' }
+  });
+
+  test('projects V2 dump without raw modules or Java build identity', () => {
+    const sequence = bridge.appendDump(dump(), {
       sourceSha256: 'a'.repeat(64)
     });
 
     expect(sequence).toBe(1);
-    const payload = JSON.parse(memory.readRecords(1)[0].payload.toString('utf8'));
-    expect(payload.event_kind).toBe('STABILITY_DUMP');
-    expect(payload.claim_allowed).toBe(false);
-    expect(payload.causality).toBe('NOT_INFERRED');
-    expect(payload.recognition.module_count).toBe(2);
-    expect(payload.full_module_list_embedded).toBe(false);
-    expect(JSON.stringify(payload)).not.toContain('liba.so');
+    const record = memory.readRecords(1)[0];
+    const envelope = JSON.parse(record.payload.toString('utf8'));
+    const encoded = JSON.stringify(envelope);
+
+    expect(envelope.event_kind).toBe('STABILITY_DUMP');
+    expect(envelope.source_sha256).toBe('a'.repeat(64));
+    expect(envelope.payload.condition_id).toBe('idle-v1');
+    expect(envelope.payload.recognition.module_count).toBe(2);
+    expect(envelope.payload.raw_module_list_embedded).toBe(false);
+    expect(envelope.payload.java_build_identity_embedded).toBe(false);
+    expect(encoded).not.toContain('liba.so');
+    expect(encoded).not.toContain('PRIVATE-BUILD-IDENTITY');
+    expect(envelope.claim_allowed).toBe(false);
   });
 
-  test('projects diff paths without promoting causality', () => {
+  test('projects diff paths without before/after values or causal promotion', () => {
     bridge.appendDiff({
       schema: 'rafaelia.android.runtime-stability-diff/v2',
       claim_allowed: false,
       classification: 'MODULE_SURFACE_DRIFT',
+      comparison_status: 'COMPARABLE',
       comparable: true,
+      condition_id: 'idle-v1',
       recognition_match: false,
-      module_surface_changes: [
-        { path: 'runtime_state.modules.modules[name,size]', before: [], after: [] }
-      ],
-      runtime_changes: [
-        { path: 'runtime_state.threads.count', before: 3, after: 4 }
-      ],
-      excluded_from_classification: ['ASLR module bases']
-    });
+      module_surface_changes: [{
+        path: 'runtime_state.modules.modules[name,size]',
+        before: [{ name: 'secret-before' }],
+        after: [{ name: 'secret-after' }]
+      }],
+      runtime_changes: [{
+        path: 'runtime_state.threads.count',
+        before: 3,
+        after: 4
+      }]
+    }, { sourceSha256: 'c'.repeat(64) });
 
-    const payload = JSON.parse(memory.readRecords(1)[0].payload.toString('utf8'));
-    expect(payload.event_kind).toBe('STABILITY_DIFF');
-    expect(payload.change_paths.modules).toEqual([
+    const envelope = JSON.parse(
+      memory.readRecords(1)[0].payload.toString('utf8')
+    );
+    const encoded = JSON.stringify(envelope);
+
+    expect(envelope.payload.change_paths.modules).toEqual([
       'runtime_state.modules.modules[name,size]'
     ]);
-    expect(payload.change_paths.runtime).toEqual([
-      'runtime_state.threads.count'
-    ]);
-    expect(payload.causality).toBe('NOT_INFERRED');
-    expect(payload.claim_allowed).toBe(false);
+    expect(envelope.payload.before_after_values_embedded).toBe(false);
+    expect(encoded).not.toContain('secret-before');
+    expect(encoded).not.toContain('secret-after');
+    expect(envelope.payload.causality).toBe('NOT_INFERRED');
   });
 
-  test('fails closed on unsupported schemas and invalid claim boundaries', () => {
+  test('links causal-tail envelopes and records outcomes as observations only', () => {
+    bridge.appendDump(dump());
+    const first = memory.readRecords(1)[0];
+
+    bridge.appendOutcome({
+      timestamp: 222,
+      layer: 'NATIVE_ELF',
+      event_type: 'SIGSEGV',
+      source: 'tombstone',
+      process_generation: 3,
+      thread_id: 77,
+      evidence_ref: 'receipt://tombstone/abc'
+    });
+
+    const records = memory.readRecords();
+    const second = records[records.length - 1];
+    const envelope = JSON.parse(second.payload.toString('utf8'));
+
+    expect(envelope.previous_payload_sha256).toBe(first.sha256);
+    expect(envelope.event_kind).toBe('OUTCOME');
+    expect(envelope.payload.causal_role).toBe('OBSERVATION_ONLY');
+    expect(envelope.claim_allowed).toBe(false);
+  });
+
+  test('marks predecessor unknown after causal-tail eviction', () => {
+    const tiny = new HyperMemoryRuntime({
+      storagePath: storagePath + '-tiny',
+      capacityBytes: 4096,
+      checkpointIntervalMs: 0
+    });
+
+    return tiny.start().then(async () => {
+      const tinyBridge = new RuntimeStabilityHyperMemoryBridge(tiny);
+      tinyBridge.appendOutcome({
+        timestamp: 1,
+        layer: 'PROCESS',
+        event_type: 'START',
+        source: 'lifecycle'
+      });
+      for (let i = 0; i < 16; i++) {
+        tiny.append('noise', 'x'.repeat(700));
+      }
+      tinyBridge.appendOutcome({
+        timestamp: 2,
+        layer: 'PROCESS',
+        event_type: 'RESTART',
+        source: 'lifecycle'
+      });
+
+      const records = tiny.readRecords();
+      const envelope = JSON.parse(
+        records[records.length - 1].payload.toString('utf8')
+      );
+      expect(envelope.previous_payload_sha256).toBe(
+        'TOKEN_VAZIO_EVICTED_PREDECESSOR'
+      );
+      await tiny.stop();
+      fs.rmSync(storagePath + '-tiny', { recursive: true, force: true });
+    });
+  });
+
+  test('fails closed on schema, claim boundary and malformed source hash', () => {
     expect(() => bridge.appendDump({
       schema: 'rafaelia.android.runtime-stability/v1',
       claim_allowed: false
@@ -110,12 +205,17 @@ describe('RuntimeStabilityHyperMemoryBridge', () => {
       claim_allowed: true
     })).toThrow(/claim_allowed=false/);
 
-    expect(() => bridge.appendDump({
-      schema: 'rafaelia.android.runtime-stability/v2',
-      claim_allowed: false,
-      runtime_state: { modules: {}, threads: {} }
-    }, {
+    expect(() => bridge.appendDump(dump(), {
       sourceSha256: 'not-a-hash'
     })).toThrow(/sourceSha256/);
+  });
+
+  test('rejects malformed outcome independently of dump schemas', () => {
+    expect(() => bridge.appendOutcome({
+      timestamp: -1,
+      layer: 'UNKNOWN',
+      event_type: '',
+      source: ''
+    })).toThrow(/timestamp/);
   });
 });

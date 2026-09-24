@@ -14,6 +14,13 @@ on:
       - 'modules/runtime-learning-engine/runtime-stability-hypermemory-bridge.ts'
       - 'modules/runtime-learning-engine/tests/runtime-stability-hypermemory-bridge.test.ts'
       - 'modules/runtime-learning-engine/index.ts'
+      - 'profiles/runtime-stability-methodology.v1.json'
+      - 'profiles/runtime-stability-methods-matrix.v1.json'
+      - 'tools/runtime_stability_storage.py'
+      - 'tools/runtime-stability-baseline.py'
+      - 'tools/runtime-stability-evidence-gate.py'
+      - 'docs/runtime-stability-falsifiability.md'
+      - '.github/scripts/rafaelia/runtime-stability-falsifiability-merge-ci.sh'
       - 'docs/android-runtime-stability-dump.md'
       - '.github/scripts/rafaelia/android-runtime-stability-dump-ci.sh'
       - '.github/workflows/android-runtime-stability-dump.yml'
@@ -32,6 +39,13 @@ on:
       - 'modules/runtime-learning-engine/runtime-stability-hypermemory-bridge.ts'
       - 'modules/runtime-learning-engine/tests/runtime-stability-hypermemory-bridge.test.ts'
       - 'modules/runtime-learning-engine/index.ts'
+      - 'profiles/runtime-stability-methodology.v1.json'
+      - 'profiles/runtime-stability-methods-matrix.v1.json'
+      - 'tools/runtime_stability_storage.py'
+      - 'tools/runtime-stability-baseline.py'
+      - 'tools/runtime-stability-evidence-gate.py'
+      - 'docs/runtime-stability-falsifiability.md'
+      - '.github/scripts/rafaelia/runtime-stability-falsifiability-merge-ci.sh'
       - 'docs/android-runtime-stability-dump.md'
       - '.github/scripts/rafaelia/android-runtime-stability-dump-ci.sh'
       - '.github/workflows/android-runtime-stability-dump.yml'
@@ -62,6 +76,9 @@ jobs:
 
       - name: Validate runtime stability dump
         run: bash .github/scripts/rafaelia/android-runtime-stability-dump-ci.sh
+
+      - name: Validate repeated-measure falsifiability successor
+        run: bash .github/scripts/rafaelia/runtime-stability-falsifiability-merge-ci.sh
 
       - name: Upload evidence
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1

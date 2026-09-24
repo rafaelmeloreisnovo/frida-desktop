@@ -157,6 +157,23 @@ function collectModules() {
   }
 }
 
+
+function moduleSurfaceMaterial(modules) {
+  if (!modules || modules.status !== 'PASS' || !Array.isArray(modules.modules))
+    return 'TOKEN_VAZIO';
+  return modules.modules.map(function (row) {
+    return row.name + ':' + row.size;
+  }).join('|');
+}
+
+function moduleSurfaceEqual(a, b) {
+  const left = moduleSurfaceMaterial(a);
+  const right = moduleSurfaceMaterial(b);
+  if (left === 'TOKEN_VAZIO' || right === 'TOKEN_VAZIO')
+    return 'TOKEN_VAZIO';
+  return left === right;
+}
+
 function collectThreads() {
   try {
     const threads = Process.enumerateThreads();
@@ -296,6 +313,8 @@ function collectJavaRuntime() {
         const Version = Java.use('android.os.Build$VERSION');
         const Runtime = Java.use('java.lang.Runtime');
         const Debug = Java.use('android.os.Debug');
+        const AndroidProcess = Java.use('android.os.Process');
+        const SystemClock = Java.use('android.os.SystemClock');
         const System = Java.use('java.lang.System');
         const runtime = Runtime.getRuntime();
         const SystemProperties = safe(function () {
@@ -339,7 +358,20 @@ function collectJavaRuntime() {
           }, null)
         };
 
+        const deviceElapsedMs =
+            scalarNumberOrText(SystemClock.elapsedRealtime());
+        const processStartElapsedMs =
+            scalarNumberOrText(AndroidProcess.getStartElapsedRealtime());
         out.runtime = {
+          device_elapsed_ms: deviceElapsedMs,
+          process_start_elapsed_ms: processStartElapsedMs,
+          process_age_ms:
+              typeof deviceElapsedMs === 'number' &&
+              typeof processStartElapsedMs === 'number'
+              ? Math.max(0, deviceElapsedMs - processStartElapsedMs)
+              : 'TOKEN_VAZIO',
+          process_elapsed_cpu_ms:
+              scalarNumberOrText(AndroidProcess.getElapsedCpuTime()),
           java_heap_total_bytes: scalarNumberOrText(runtime.totalMemory()),
           java_heap_free_bytes: scalarNumberOrText(runtime.freeMemory()),
           java_heap_max_bytes: scalarNumberOrText(runtime.maxMemory()),
@@ -389,10 +421,13 @@ async function collectSnapshot(reason) {
   const wallStartMs = Date.now();
   const monotonicStart = await readAndroidClock();
 
-  const modules = collectModules();
+  const modulesAtStart = collectModules();
   const threads = collectThreads();
   const ranges = collectRanges();
   const java = await collectJavaRuntime();
+  const modules = collectModules();
+  const moduleSurfaceStableDuringCapture =
+      moduleSurfaceEqual(modulesAtStart, modules);
 
   const monotonicEnd = await readAndroidClock();
   const wallEndMs = Date.now();
@@ -413,6 +448,7 @@ async function collectSnapshot(reason) {
     pointer_size: Process.pointerSize,
     page_size: Process.pageSize,
     platform: Process.platform,
+    java_available: java.available === true,
     java_identity: java.identity || 'TOKEN_VAZIO',
     platform_contract: java.platform_contract || 'TOKEN_VAZIO'
   };
@@ -435,7 +471,24 @@ async function collectSnapshot(reason) {
       periodic_polling: false,
       active_mutation: false,
       compact_hashes_authoritative: false,
-      frida_cloak_semantics: 'PROCESS_INTROSPECTION_MAY_EXCLUDE_FRIDA_CLOAKED_RESOURCES'
+      frida_cloak_semantics: 'PROCESS_INTROSPECTION_MAY_EXCLUDE_FRIDA_CLOAKED_RESOURCES',
+      introspection_visibility: 'FRIDA_CLOAK_AWARE'
+    },
+
+
+    consistency: {
+      snapshot_atomic: false,
+      capture_model: 'BEST_EFFORT_NON_ATOMIC',
+      module_churn_detection:
+          'ENDPOINT_FENCE_ONLY_TRANSIENT_CHURN_BETWEEN_FENCES_MAY_ESCAPE',
+      module_surface_stable_during_capture: moduleSurfaceStableDuringCapture,
+      module_surface_start_hint:
+          modulesAtStart.stable_set_fingerprint_hint || 'TOKEN_VAZIO',
+      module_surface_end_hint:
+          modules.stable_set_fingerprint_hint || 'TOKEN_VAZIO',
+      recognition_surface_authoritative:
+          moduleSurfaceStableDuringCapture === true ? true :
+          moduleSurfaceStableDuringCapture === false ? false : 'TOKEN_VAZIO'
     },
 
     timing: {
@@ -503,6 +556,11 @@ async function collectSnapshot(reason) {
           'TOKEN_VAZIO_NAME_AND_SIZE_DO_NOT_PROVE_BINARY_IDENTITY',
       atomic_snapshot:
           'TOKEN_VAZIO_COLLECTION_IS_SEQUENTIAL',
+      module_surface_atomicity: moduleSurfaceStableDuringCapture === true
+          ? 'OBSERVED_STABLE_AT_ENDPOINT_FENCES'
+          : moduleSurfaceStableDuringCapture === false
+          ? 'TOKEN_VAZIO_CAPTURE_RACE'
+          : 'TOKEN_VAZIO_VISIBILITY',
       kernel_lmk_reason: 'TOKEN_VAZIO',
       selinux_denial_causality: 'TOKEN_VAZIO',
       physical_memory_pressure: 'TOKEN_VAZIO',

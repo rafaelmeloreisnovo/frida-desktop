@@ -71,11 +71,13 @@ grep -Fq "names_collected: false" agents/android-runtime-stability-dump.js
 grep -Fq "SAFE_SYSTEM_PROPERTIES" agents/android-runtime-stability-dump.js
 grep -Fq "SYSTEM_PROPERTIES_UNAVAILABLE" agents/android-runtime-stability-dump.js
 grep -Fq "Debug.getPss()" agents/android-runtime-stability-dump.js
-grep -Fq "runtime-stability-hypermemory-event/v1" modules/runtime-learning-engine/runtime-stability-hypermemory-bridge.ts
+grep -Fq "rafaelia.runtime-stability-hypermemory-bridge/v2" modules/runtime-learning-engine/runtime-stability-hypermemory-bridge.ts
 grep -Fq "causality: 'NOT_INFERRED'" modules/runtime-learning-engine/runtime-stability-hypermemory-bridge.ts
-grep -Fq "full_module_list_embedded: false" modules/runtime-learning-engine/runtime-stability-hypermemory-bridge.ts
+grep -Fq "raw_module_list_embedded: false" modules/runtime-learning-engine/runtime-stability-hypermemory-bridge.ts
+grep -Fq "java_build_identity_embedded: false" modules/runtime-learning-engine/runtime-stability-hypermemory-bridge.ts
+grep -Fq "TOKEN_VAZIO_EVICTED_PREDECESSOR" modules/runtime-learning-engine/runtime-stability-hypermemory-bridge.ts
 
-if grep -En "ro\.boot\.psn|vendor\.gsm\.serial|gsm\.|ril\.|iccid|imsi|operator\.numeric|subscriber" agents/android-runtime-stability-dump.js; then
+if grep -En "ro\.boot\.psn|vendor\.gsm\.serial|gsm\.|ril\.|iccid|imsi|operator\.numeric|getSubscriberId|getSimSerialNumber" agents/android-runtime-stability-dump.js; then
   rafaelia_die 'forbidden telephony/device-identity property surfaced in stability agent'
 fi
 
@@ -241,7 +243,7 @@ assert c('visibility.out.json')['classification'] == 'VISIBILITY_DRIFT'
 assert c('property-visibility.out.json')['classification'] == 'VISIBILITY_DRIFT'
 assert c('aslr.out.json')['classification'] == 'NO_OBSERVED_DRIFT'
 assert c('clock.out.json')['classification'] == 'NO_OBSERVED_DRIFT'
-assert c('pid.out.json')['classification'] == 'NO_OBSERVED_DRIFT'
+assert c('pid.out.json')['classification'] == 'PROCESS_INSTANCE_DRIFT'
 assert c('pid.out.json')['process_instance_changes']
 assert c('hints.out.json')['classification'] == 'NO_OBSERVED_DRIFT'
 assert c('hints.out.json')['compact_hint_changes']

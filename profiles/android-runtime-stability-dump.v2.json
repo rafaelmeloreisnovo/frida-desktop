@@ -27,7 +27,13 @@
     "monotonic_clock_recorded_when_java_available": true,
     "observer_duration_recorded": true,
     "observer_effect": "MEASURED_NOT_ASSUMED_ZERO",
-    "frida_cloak_semantics": "Process introspection may exclude Frida-cloaked runtime resources; observer cost is therefore tracked separately."
+    "frida_cloak_semantics": "Process introspection may exclude Frida-cloaked runtime resources; observer cost is therefore tracked separately.",
+    "module_surface_endpoint_fence": {
+      "implemented": true,
+      "semantics": "module name+size surface captured at start and end",
+      "limitation": "equal endpoints do not prove absence of transient mid-capture churn",
+      "fail_closed": "detected endpoint churn => INCOMPARABLE_CAPTURE_RACE"
+    }
   },
   "semantic_layers": {
     "stable_identity": [
@@ -55,7 +61,9 @@
     ],
     "process_instance": [
       "pid",
-      "current tid"
+      "current tid",
+      "Android process start elapsed time when Java is available",
+      "process age/cumulative CPU are context-only counters"
     ],
     "observer_effect": [
       "Frida heap size",
@@ -65,23 +73,37 @@
     "timing": [
       "wall start/end",
       "monotonic elapsed/uptime when available"
+    ],
+    "experimental_context": [
+      "condition_id",
+      "same-device boot_session_sha256 when controller can observe it"
     ]
   },
   "comparator": {
     "classifications": [
       "INCOMPARABLE",
+      "INCOMPARABLE_VISIBILITY",
+      "INCOMPARABLE_CONDITION",
+      "INCOMPARABLE_CAPTURE_RACE",
       "VISIBILITY_DRIFT",
       "INSTRUMENTATION_DRIFT",
       "IDENTITY_DRIFT",
+      "BOOT_SESSION_DRIFT",
+      "PROCESS_INSTANCE_DRIFT",
       "MODULE_SURFACE_DRIFT",
       "RUNTIME_DRIFT",
       "NO_OBSERVED_DRIFT"
     ],
     "priority": [
       "schema/required-field incomparability",
+      "shared missing core visibility fails closed",
+      "experimental condition mismatch",
+      "detected non-atomic module churn",
       "visibility drift",
       "instrumentation drift",
       "platform identity drift",
+      "boot session drift when observable",
+      "process instance drift",
       "module surface drift",
       "runtime drift",
       "no observed drift"
@@ -151,7 +173,13 @@
     "sha256_sidecar": true,
     "hash_chain_ledger": "ledger.jsonl",
     "default_max_bytes": 8388608,
-    "remote_endpoint_default": "REFUSED_UNLESS_EXPLICIT_ALLOW_REMOTE"
+    "remote_endpoint_default": "REFUSED_UNLESS_EXPLICIT_ALLOW_REMOTE",
+    "default_max_dumps": 256,
+    "default_max_dir_bytes": 67108864,
+    "default_min_free_bytes": 16777216,
+    "controller_run_id": true,
+    "condition_id": true,
+    "source_sha256": true
   },
   "alternative_modes": {
     "snapshot_on_demand": {
@@ -175,9 +203,11 @@
       "rationale": "must remain independent source evidence before causal attribution"
     },
     "hypermemory_causal_tail": {
-      "status": "IMPLEMENTED_HOSTED_BRIDGE",
-      "rationale": "V2 dump/diff evidence is projected into bounded HyperMemory context events without embedding the full module list or promoting causality",
-      "physical_bridge": "TOKEN_VAZIO_NOT_EXECUTED"
+      "status": "IMPLEMENTED_HOSTED_BRIDGE_V2",
+      "rationale": "bounded minimized dump/diff/outcome envelopes, source SHA validation and local predecessor linkage without raw module names or Java build identity",
+      "eviction_rule": "missing predecessor after ring eviction => TOKEN_VAZIO_EVICTED_PREDECESSOR",
+      "physical_bridge": "TOKEN_VAZIO_NOT_EXECUTED",
+      "claim_allowed": false
     },
     "application_exit_info": {
       "status": "UNAVAILABLE_ON_CURRENT_TARGET",
@@ -191,6 +221,36 @@
     "physical memory pressure without measured source",
     "crash root cause without corroboration",
     "module binary identity without independent artifact identity",
-    "atomic snapshot guarantee"
-  ]
+    "atomic snapshot guarantee",
+    "transient module churn between equal endpoint fences",
+    "boot-session identity for remote/USB target without an independent bridge",
+    "physical causal support absent independent device receipts"
+  ],
+  "experimental_condition": {
+    "field": "capture_provenance.condition_id",
+    "default": "UNSPECIFIED",
+    "syntax": "[A-Za-z0-9_.-]{1,64}",
+    "semantics": "comparability label, not a causal variable",
+    "mismatch": "INCOMPARABLE_CONDITION"
+  },
+  "repeated_measure_baseline": {
+    "artifact": "tools/runtime-stability-baseline.py",
+    "minimum_distinct_captures": 3,
+    "numeric_center": "median",
+    "dispersion": "median_absolute_deviation",
+    "module_model": "empirical prevalence",
+    "authority": "descriptive/outlier screening only; no causal promotion"
+  },
+  "epistemic_gate": {
+    "artifact": "tools/runtime-stability-evidence-gate.py",
+    "ladder": [
+      "OBSERVED",
+      "REPEATED",
+      "ASSOCIATED",
+      "CAUSAL_CANDIDATE",
+      "CAUSAL_SUPPORTED"
+    ],
+    "boundary": "structural methodology readiness never self-authorizes scientific truth or claims",
+    "causal_claim_allowed": false
+  }
 }

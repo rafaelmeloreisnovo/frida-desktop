@@ -404,3 +404,104 @@ source is allowed to silently promote itself into a stronger evidence class.
 
 This accounting is CI-gated together with the active collector so governance
 cannot drift away from implementation.
+
+
+## Repeated-measure and falsifiability successor
+
+The V2 sensor remains the authoritative collection surface. The successor layer
+adds experimental comparability and epistemic gates without replacing the
+existing visibility/instrumentation/privacy contracts.
+
+### Condition control
+
+The host controller accepts:
+
+```text
+--condition-id <label>
+```
+
+with `[A-Za-z0-9_.-]{1,64}`. Equal labels mean only that the operator declared
+the captures comparable under the same workload/condition contract. They are
+not causal variables. Different labels fail closed as
+`INCOMPARABLE_CONDITION`.
+
+### Non-atomic module fence
+
+The sensor enumerates the module recognition surface at both endpoints of its
+sequential capture. If the endpoint surfaces differ, the comparator returns
+`INCOMPARABLE_CAPTURE_RACE`.
+
+Equal endpoints are weaker evidence: transient load/unload activity may occur
+between fences and escape observation. Therefore this fence detects some
+non-atomicity; it does not convert the snapshot into an atomic world-state.
+
+### Boot and process generation
+
+For a same-device loopback controller, the boot identifier is reduced to
+SHA-256 and carried as context only. Remote/USB targets do not silently inherit
+the controller's boot identity.
+
+When Java is available, process start elapsed time, process age and cumulative
+CPU time are captured. PID/process-start changes are reported as
+`PROCESS_INSTANCE_DRIFT`, not platform instability.
+
+### Robust baseline
+
+`tools/runtime-stability-baseline.py` requires at least three distinct
+capture events under a consistent stable identity, instrumentation surface and
+`condition_id`. It uses median + MAD for numeric envelopes and empirical
+module prevalence.
+
+A baseline outlier is an observation:
+
+```text
+RUNTIME_OUTLIER_OBSERVED != BUG != ROOT_CAUSE
+```
+
+### Evidence ladder
+
+`tools/runtime-stability-evidence-gate.py` validates the structural readiness
+of packets through:
+
+```text
+OBSERVED
+  -> REPEATED
+  -> ASSOCIATED
+  -> CAUSAL_CANDIDATE
+  -> CAUSAL_SUPPORTED
+```
+
+Even a structurally complete `CAUSAL_SUPPORTED` packet keeps:
+
+```text
+causal_claim_allowed = false
+publication_grade_causal_support = false
+claim_allowed = false
+```
+
+The gate validates methodology structure. It does not decide scientific truth.
+
+### HyperMemory minimization
+
+The V2 HyperMemory bridge validates the source schema and claim boundary,
+accepts an optional source SHA-256, and stores only bounded semantic
+projections. It does not copy raw module lists or Java/build fingerprints.
+
+Causal-tail envelopes are locally SHA-linked. If the predecessor has already
+been evicted, the bridge emits
+`TOKEN_VAZIO_EVICTED_PREDECESSOR` instead of inventing a new genesis.
+
+### Merge-resolution invariant
+
+This successor intentionally composes the two independent V2 development
+lines:
+
+```text
+PR70 sensor/control-plane
++
+PR71 repeated-measure/methodology/causal-tail hardening
+!= overwrite either side
+```
+
+Physical Frida execution, SharedMemory process-death survival, LMKD/SELinux
+causality and crash root cause remain separate `TOKEN_VAZIO` gates.

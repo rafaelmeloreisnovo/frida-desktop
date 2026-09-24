@@ -513,5 +513,11 @@ export { AlertRulesEngine } from './alert-rules-3-2';
 export { HyperMemoryRuntime } from './hypermemory-runtime';
 export type { HyperMemoryRuntimeOptions, HyperMemoryStats, HyperMemoryRecordView } from './hypermemory-runtime';
 
-export { RuntimeStabilityHyperMemoryBridge } from './runtime-stability-hypermemory-bridge';
-export type { RuntimeStabilityBridgeOptions } from './runtime-stability-hypermemory-bridge';
+export {
+  RuntimeStabilityHyperMemoryBridge,
+  RUNTIME_STABILITY_HYPERMEMORY_BRIDGE_SCHEMA
+} from './runtime-stability-hypermemory-bridge';
+export type {
+  RuntimeStabilityBridgeOptions,
+  RuntimeOutcomeEvent
+} from './runtime-stability-hypermemory-bridge';

@@ -1,0 +1,194 @@
+{
+  "schema": "rafaelia.runtime-stability.methods-matrix/v1",
+  "claim_allowed": false,
+  "methods": [
+    {
+      "method": "differential_testing",
+      "status": "IMPLEMENTED_HOSTED",
+      "artifact": "tools/runtime-stability-diff.py",
+      "falsifier": "same authoritative structure with only ASLR or compact-hint changes must not become structural drift"
+    },
+    {
+      "method": "metamorphic_testing",
+      "status": "IMPLEMENTED_HOSTED",
+      "relations": [
+        "ASLR base change preserves module identity",
+        "compact fingerprint change alone preserves structural identity",
+        "duplicate evidence never increases evidence level"
+      ]
+    },
+    {
+      "method": "robust_repeated_measures",
+      "status": "IMPLEMENTED_HOSTED",
+      "artifact": "tools/runtime-stability-baseline.py",
+      "statistics": [
+        "median",
+        "MAD",
+        "empirical module prevalence"
+      ],
+      "boundary": "distinct captures are not automatically statistically independent"
+    },
+    {
+      "method": "negative_positive_controls",
+      "status": "IMPLEMENTED_HOSTED",
+      "negative_controls": [
+        "no drift",
+        "ASLR-only",
+        "hint-only"
+      ],
+      "positive_controls": [
+        "identity mutation",
+        "observer mutation",
+        "module mutation",
+        "runtime numeric outlier"
+      ]
+    },
+    {
+      "method": "falsification_ladder",
+      "status": "IMPLEMENTED_HOSTED",
+      "artifact": "tools/runtime-stability-evidence-gate.py",
+      "levels": [
+        "OBSERVED",
+        "REPEATED",
+        "ASSOCIATED",
+        "CAUSAL_CANDIDATE",
+        "CAUSAL_SUPPORTED"
+      ],
+      "boundary": "validates structural methodology readiness only; scientific truth/claim permission remains external"
+    },
+    {
+      "method": "controlled_intervention_reversal",
+      "status": "CONTRACT_IMPLEMENTED_PHYSICAL_TOKEN_VAZIO",
+      "required_for": "CAUSAL_SUPPORTED",
+      "boundary": "device intervention evidence not supplied by hosted CI"
+    },
+    {
+      "method": "independent_corroboration",
+      "status": "CONTRACT_IMPLEMENTED",
+      "rule": "distinct source_type and independence_group are required at association/causal levels"
+    },
+    {
+      "method": "chain_of_custody",
+      "status": "IMPLEMENTED_HOSTED",
+      "mechanisms": [
+        "agent SHA-256",
+        "controller SHA-256",
+        "controller_run_id",
+        "dump SHA-256 sidecar",
+        "HyperMemory payload SHA chain",
+        "previous_dump_sha256 local append chain"
+      ]
+    },
+    {
+      "method": "fault_tree_fmea",
+      "status": "DOCUMENTED_AND_GATED",
+      "hazards": [
+        "false causal promotion",
+        "observer-induced drift",
+        "duplicate evidence inflation",
+        "hash collision masking drift",
+        "tail discontinuity",
+        "storage exhaustion",
+        "tampered dump",
+        "privacy overcollection"
+      ]
+    },
+    {
+      "method": "privacy_threat_model",
+      "status": "IMPLEMENTED_HOSTED",
+      "controls": [
+        "allowlisted structural fields",
+        "forbidden payload/content surfaces",
+        "minimized HyperMemory bridge"
+      ]
+    },
+    {
+      "method": "physical_fault_injection",
+      "status": "TOKEN_VAZIO",
+      "allowed_scope": "authorized lab target only",
+      "examples": [
+        "controlled exception",
+        "controlled target restart",
+        "bounded memory pressure"
+      ],
+      "claim_allowed": false
+    },
+    {
+      "method": "cross_scale_causal_bridge",
+      "status": "PARTIAL",
+      "implemented": "dump/diff/outcome -> HyperMemory causal event",
+      "remaining": [
+        "LMKD receipt",
+        "SELinux denial receipt",
+        "tombstone join",
+        "SharedMemory survivor receipt"
+      ]
+    },
+    {
+      "method": "schema_missingness_fail_closed",
+      "status": "IMPLEMENTED_HOSTED",
+      "artifact": "tools/runtime-stability-diff.py",
+      "falsifier": "two equally missing observations must classify as insufficient observation, never no-drift"
+    },
+    {
+      "method": "capture_consistency_fence",
+      "status": "IMPLEMENTED_HOSTED_CONTRACT_PHYSICAL_TOKEN_VAZIO",
+      "artifact": "agents/android-runtime-stability-dump.js",
+      "mechanism": "module surface sampled before and after the non-atomic snapshot; churn makes module recognition incomparable"
+    },
+    {
+      "method": "observer_visibility_bias",
+      "status": "IMPLEMENTED_CONTRACT",
+      "mechanism": "Frida Cloak-aware introspection is declared explicitly; observer-visible state is not claimed to be complete physical state"
+    },
+    {
+      "method": "exact_memory_range_aggregation",
+      "status": "IMPLEMENTED_HOSTED_STATIC_PHYSICAL_TOKEN_VAZIO",
+      "mechanism": "enumerate all ranges once, then aggregate by exact returned protection to avoid overlapping 'at least permission' filters"
+    },
+    {
+      "method": "external_platform_context",
+      "status": "IMPLEMENTED_CONTROLLER_PHYSICAL_TOKEN_VAZIO",
+      "artifact": "tools/capture-runtime-stability-dump.py",
+      "mechanism": "privacy-safe allowlisted getprop + selected meminfo/PSI when controller runs locally on Android; CONTEXT_ONLY"
+    },
+    {
+      "method": "local_append_hash_chain",
+      "status": "IMPLEMENTED_HOSTED",
+      "artifact": "tools/runtime_stability_storage.py",
+      "boundary": "proves local append order/integrity only; never causality"
+    },
+    {
+      "method": "structural_causal_gate_claim_boundary",
+      "status": "IMPLEMENTED_HOSTED",
+      "artifact": "tools/runtime-stability-evidence-gate.py",
+      "boundary": "CAUSAL_SUPPORTED structural completeness never auto-sets causal_claim_allowed or claim_allowed"
+    },
+    {
+      "method": "experimental_condition_control",
+      "status": "IMPLEMENTED_HOSTED",
+      "mechanism": "condition_id must match for comparable pairwise/baseline analysis; UNSPECIFIED remains descriptive-only"
+    },
+    {
+      "method": "process_generation_disambiguation",
+      "status": "IMPLEMENTED_JAVA_AWARE_PHYSICAL_TOKEN_VAZIO",
+      "mechanism": "PID plus Android Process.getStartElapsedRealtime distinguishes process instance from application/platform identity"
+    },
+    {
+      "method": "boot_session_disambiguation",
+      "status": "IMPLEMENTED_CONTROLLER_PHYSICAL_TOKEN_VAZIO",
+      "mechanism": "same-device controller hashes per-boot kernel boot_id; cross-boot observations remain a separate dimension"
+    },
+    {
+      "method": "memory_covariate_capture",
+      "status": "IMPLEMENTED_JAVA_AWARE_AND_CONTROLLER_PHYSICAL_TOKEN_VAZIO",
+      "mechanism": "PSS/native heap plus bounded system meminfo/PSI are covariates, not causal claims"
+    },
+    {
+      "method": "concurrent_writer_serialization",
+      "status": "IMPLEMENTED_HOSTED",
+      "artifact": "tools/runtime_stability_storage.py",
+      "falsifier": "stale predecessor must be rejected before append publication"
+    }
+  ]
+}
