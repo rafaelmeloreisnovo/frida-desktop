@@ -114,14 +114,47 @@ def validate_directory_integrity(out_dir: Path) -> None:
             + ",".join(item.name for item in missing_sidecars)
         )
 
+    previous_digest = "GENESIS"
     for dump in dumps:
-        digest = hashlib.sha256(dump.read_bytes()).hexdigest()
+        raw = dump.read_bytes()
+        digest = hashlib.sha256(raw).hexdigest()
         sidecar = Path(str(dump) + ".sha256")
         line = sidecar.read_text(encoding="ascii").strip().split()
         if len(line) != 2 or line[0] != digest or line[1] != dump.name:
             raise RuntimeError(
                 f"dump integrity verification failed for {dump.name}"
             )
+
+        try:
+            parsed = json.loads(raw.decode("utf-8"))
+        except Exception as exc:
+            raise RuntimeError(
+                f"dump JSON verification failed for {dump.name}: {type(exc).__name__}"
+            ) from exc
+        if not isinstance(parsed, dict):
+            raise RuntimeError(f"dump JSON root must be object for {dump.name}")
+
+        provenance = parsed.get("capture_provenance")
+        if isinstance(provenance, dict) and "previous_dump_sha256" in provenance:
+            observed_previous = provenance.get("previous_dump_sha256")
+            if observed_previous != previous_digest:
+                raise RuntimeError(
+                    f"dump chain mismatch for {dump.name}: "
+                    f"observed={observed_previous} expected={previous_digest}"
+                )
+        previous_digest = digest
+
+
+
+
+def latest_dump_sha256(out_dir: Path) -> str:
+    """Return the latest verified dump digest, or GENESIS for an empty directory."""
+    out_dir.mkdir(parents=True, exist_ok=True)
+    validate_directory_integrity(out_dir)
+    dumps = sorted(out_dir.glob("runtime-stability-*.json"))
+    if not dumps:
+        return "GENESIS"
+    return hashlib.sha256(dumps[-1].read_bytes()).hexdigest()
 
 
 def retention_preflight(
