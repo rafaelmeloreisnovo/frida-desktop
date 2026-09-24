@@ -144,6 +144,30 @@ PY
 python3 tools/runtime-stability-baseline.py build   "$BUILD_DIR/robust-1.json" "$BUILD_DIR/robust-2.json" "$BUILD_DIR/robust-3.json"   --out "$BUILD_DIR/robust-baseline.json"
 python3 tools/runtime-stability-baseline.py assess   "$BUILD_DIR/robust-baseline.json" "$BUILD_DIR/robust-candidate.json"   --out "$BUILD_DIR/robust-assessment.json"
 
+set +e
+python3 tools/runtime-stability-baseline.py build   "$BUILD_DIR/robust-1.json" "$BUILD_DIR/robust-1.json" "$BUILD_DIR/robust-2.json"   --out "$BUILD_DIR/duplicate-baseline.json"
+DUPLICATE_BASELINE_RC=$?
+set -e
+[[ "$DUPLICATE_BASELINE_RC" -ne 0 ]] || rafaelia_die "duplicate baseline evidence was accepted"
+
+python3 - <<'PY'
+import json
+from pathlib import Path
+root = Path('build/android-runtime-stability-dump')
+a = json.loads((root/'robust-1.json').read_text())
+b = json.loads((root/'robust-2.json').read_text())
+c = json.loads((root/'robust-3.json').read_text())
+c['stable_identity']['arch'] = 'arm64'
+c['platform_key'] = 'different-platform'
+(root/'identity-mismatch-3.json').write_text(json.dumps(c))
+PY
+
+set +e
+python3 tools/runtime-stability-baseline.py build   "$BUILD_DIR/robust-1.json" "$BUILD_DIR/robust-2.json" "$BUILD_DIR/identity-mismatch-3.json"   --out "$BUILD_DIR/identity-mismatch-baseline.json"
+IDENTITY_BASELINE_RC=$?
+set -e
+[[ "$IDENTITY_BASELINE_RC" -eq 2 ]] || rafaelia_die "identity-inconsistent baseline did not fail closed"
+
 cat > "$BUILD_DIR/repeated-packet.json" <<'JSON'
 {
   "schema": "rafaelia.runtime-stability.falsifiability-packet/v1",
@@ -152,7 +176,7 @@ cat > "$BUILD_DIR/repeated-packet.json" <<'JSON'
   "requested_level": "REPEATED",
   "falsifiers": ["repeat under same stable identity and fail if deviation disappears"],
   "observations": [{"id":1},{"id":2},{"id":3}],
-  "evidence": [{"source_type":"frida_runtime_dump","ref":"dump://1"}],
+  "evidence": [{"source_type":"frida_runtime_dump","independence_group":"frida-agent","ref":"dump://1"}],
   "falsifier_attempted": true,
   "temporal_precedence": false,
   "intervention_or_reversal": false,
@@ -170,12 +194,32 @@ cat > "$BUILD_DIR/causal-pass-packet.json" <<'JSON'
   "falsifiers": ["remove the controlled fault and require the outcome to disappear"],
   "observations": [{"id":1},{"id":2},{"id":3}],
   "evidence": [
-    {"source_type":"frida_runtime_dump","ref":"dump://a"},
-    {"source_type":"tombstone","ref":"tombstone://a"}
+    {"source_type":"frida_runtime_dump","independence_group":"frida-agent","ref":"dump://a"},
+    {"source_type":"tombstone","independence_group":"android-tombstoned","ref":"tombstone://a"}
   ],
   "falsifier_attempted": true,
   "temporal_precedence": true,
   "intervention_or_reversal": true,
+  "alternative_explanations_checked": true,
+  "contradictory_evidence": []
+}
+JSON
+
+cat > "$BUILD_DIR/false-independence-packet.json" <<'JSON'
+{
+  "schema": "rafaelia.runtime-stability.falsifiability-packet/v1",
+  "hypothesis_id": "H-FALSE-INDEPENDENCE",
+  "hypothesis": "two labels from one collection channel count as independent evidence",
+  "requested_level": "ASSOCIATED",
+  "falsifiers": ["require independent acquisition groups"],
+  "observations": [{"id":1},{"id":2},{"id":3}],
+  "evidence": [
+    {"source_type":"frida_runtime_dump","independence_group":"same-channel","ref":"dump://a"},
+    {"source_type":"tombstone","independence_group":"same-channel","ref":"derived://a"}
+  ],
+  "falsifier_attempted": true,
+  "temporal_precedence": false,
+  "intervention_or_reversal": false,
   "alternative_explanations_checked": true,
   "contradictory_evidence": []
 }
@@ -189,7 +233,7 @@ cat > "$BUILD_DIR/causal-fail-packet.json" <<'JSON'
   "requested_level": "CAUSAL_SUPPORTED",
   "falsifiers": ["repeat without the drift"],
   "observations": [{"id":1}],
-  "evidence": [{"source_type":"frida_runtime_dump","ref":"dump://only"}],
+  "evidence": [{"source_type":"frida_runtime_dump","independence_group":"frida-agent","ref":"dump://only"}],
   "falsifier_attempted": false,
   "temporal_precedence": false,
   "intervention_or_reversal": false,
@@ -200,6 +244,12 @@ JSON
 
 python3 tools/runtime-stability-evidence-gate.py   "$BUILD_DIR/repeated-packet.json" --out "$BUILD_DIR/repeated-result.json"
 python3 tools/runtime-stability-evidence-gate.py   "$BUILD_DIR/causal-pass-packet.json" --out "$BUILD_DIR/causal-pass-result.json"
+
+set +e
+python3 tools/runtime-stability-evidence-gate.py   "$BUILD_DIR/false-independence-packet.json" --out "$BUILD_DIR/false-independence-result.json"
+FALSE_INDEPENDENCE_RC=$?
+set -e
+[[ "$FALSE_INDEPENDENCE_RC" -eq 2 ]] || rafaelia_die "false independence was accepted"
 
 set +e
 python3 tools/runtime-stability-evidence-gate.py   "$BUILD_DIR/causal-fail-packet.json" --out "$BUILD_DIR/causal-fail-result.json"
@@ -221,6 +271,7 @@ assert json.loads((root/'aslr-only.json.out').read_text())['classification'] == 
 robust = json.loads((root/'robust-baseline.json').read_text())
 assert robust['baseline_gate'] == 'PASS'
 assert robust['sample_count'] == 3
+assert robust['baseline_strength'] == 'MINIMAL'
 assessment = json.loads((root/'robust-assessment.json').read_text())
 assert assessment['classification'] == 'RUNTIME_OUTLIER_OBSERVED'
 assert assessment['causality'] == 'NOT_INFERRED'
@@ -231,6 +282,9 @@ causal_pass = json.loads((root/'causal-pass-result.json').read_text())
 assert causal_pass['gate'] == 'PASS'
 assert causal_pass['highest_supported_level'] == 'CAUSAL_SUPPORTED'
 assert causal_pass['causal_claim_allowed'] is True
+false_independence = json.loads((root/'false-independence-result.json').read_text())
+assert false_independence['gate'] == 'FAIL'
+assert false_independence['causal_claim_allowed'] is False
 causal_fail = json.loads((root/'causal-fail-result.json').read_text())
 assert causal_fail['gate'] == 'FAIL'
 assert causal_fail['causal_claim_allowed'] is False
@@ -263,6 +317,10 @@ receipt = {
     'falsifiability_repeated_gate': 'PASS',
     'falsifiability_causal_supported_gate': 'PASS',
     'unsupported_causal_claim_fail_closed': 'PASS',
+    'duplicate_baseline_rejected': 'PASS',
+    'identity_inconsistent_baseline_rejected': 'PASS',
+    'false_independence_rejected': 'PASS',
+    'atomic_publication_contract_static': 'PASS',
     'frida_device_execution': 'TOKEN_VAZIO',
     'physical_stability': 'TOKEN_VAZIO',
     'causal_attribution': 'TOKEN_VAZIO',
