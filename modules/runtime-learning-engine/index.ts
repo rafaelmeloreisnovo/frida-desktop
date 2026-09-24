@@ -510,3 +510,5 @@ export async function shutdownEngine(): Promise<void> {
 
 export { RuntimeSafetyMesh } from './runtime-safety-mesh';
 export { AlertRulesEngine } from './alert-rules-3-2';
+export { HyperMemoryRuntime } from './hypermemory-runtime';
+export type { HyperMemoryRuntimeOptions, HyperMemoryStats, HyperMemoryRecordView } from './hypermemory-runtime';
