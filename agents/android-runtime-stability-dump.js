@@ -216,6 +216,7 @@ function collectJavaRuntime() {
         const Version = Java.use('android.os.Build$VERSION');
         const Runtime = Java.use('java.lang.Runtime');
         const Debug = Java.use('android.os.Debug');
+        const AndroidProcess = Java.use('android.os.Process');
         const SystemClock = Java.use('android.os.SystemClock');
         const System = Java.use('java.lang.System');
         const runtime = Runtime.getRuntime();
@@ -248,12 +249,25 @@ function collectJavaRuntime() {
           }, null)
         };
 
+        const elapsedMs = longNumber(SystemClock.elapsedRealtime());
+        const processStartElapsedMs = longNumber(
+            AndroidProcess.getStartElapsedRealtime());
         out.runtime = {
-          device_elapsed_ms: longNumber(SystemClock.elapsedRealtime()),
+          device_elapsed_ms: elapsedMs,
+          process_start_elapsed_ms: processStartElapsedMs,
+          process_age_ms:
+              typeof elapsedMs === 'number' &&
+              typeof processStartElapsedMs === 'number'
+              ? Math.max(0, elapsedMs - processStartElapsedMs)
+              : 'TOKEN_VAZIO',
+          process_elapsed_cpu_ms: longNumber(AndroidProcess.getElapsedCpuTime()),
           java_heap_total_bytes: longNumber(runtime.totalMemory()),
           java_heap_free_bytes: longNumber(runtime.freeMemory()),
           java_heap_max_bytes: longNumber(runtime.maxMemory()),
-          native_heap_allocated_bytes: longNumber(Debug.getNativeHeapAllocatedSize())
+          native_heap_size_bytes: longNumber(Debug.getNativeHeapSize()),
+          native_heap_allocated_bytes: longNumber(Debug.getNativeHeapAllocatedSize()),
+          native_heap_free_bytes: longNumber(Debug.getNativeHeapFreeSize()),
+          pss_kb: longNumber(Debug.getPss())
         };
       } catch (error) {
         out.token_vazio.push('JAVA_RUNTIME_PARTIAL');
@@ -357,6 +371,10 @@ async function collectSnapshot(reason) {
         'thread_states',
         'memory_range_summary',
         'heap_counters',
+        'pss_kb',
+        'process_start_elapsed_ms',
+        'process_age_ms',
+        'process_elapsed_cpu_ms',
         'device_elapsed_ms'
       ],
       invariant:
