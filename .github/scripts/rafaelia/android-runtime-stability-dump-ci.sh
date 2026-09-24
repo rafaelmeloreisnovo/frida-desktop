@@ -36,6 +36,10 @@ assert 'recognition_surface' in profile['semantic_layers']
 method = json.loads(Path('profiles/runtime-stability-methodology.v1.json').read_text())
 assert method['claim_allowed'] is False
 assert method['baseline']['minimum_independent_snapshots'] == 3
+assert method['baseline']['minimum_distinct_captures'] == 3
+assert method['baseline']['capture_independence_claim'] is False
+assert method['epistemic_claim_boundary']['causal_claim_allowed_by_gate'] is False
+assert profile['file_contract']['previous_dump_sha256'] is True
 assert method['baseline']['numeric_center'] == 'median'
 assert method['baseline']['numeric_dispersion'] == 'median_absolute_deviation'
 assert 'drift != instability' in method['falsifiability_invariants']
@@ -53,6 +57,13 @@ if grep -En 'Build\.SERIAL|ANDROID_ID|TelephonyManager|SubscriberId|SimSerial|Cl
   rafaelia_die 'forbidden privacy/content surface detected'
 fi
 
+grep -Fq "Process.enumerateRanges({ protection: '---', coalesce: false })" agents/android-runtime-stability-dump.js || rafaelia_die 'single exact range enumeration missing'
+if grep -Fq "Process.enumerateRanges(protection)" agents/android-runtime-stability-dump.js; then
+  rafaelia_die 'overlapping protection-filter enumeration returned'
+fi
+grep -Fq "FRIDA_CLOAK_AWARE" agents/android-runtime-stability-dump.js || rafaelia_die 'observer visibility boundary missing'
+grep -Fq "module_surface_stable_during_capture" agents/android-runtime-stability-dump.js || rafaelia_die 'capture consistency fence missing'
+
 mkdir -p "$BUILD_DIR/storage-pure-tests"
 PYTHONPATH="$ROOT/tools" python3 - <<'PY'
 import math
@@ -60,6 +71,7 @@ import tempfile
 from pathlib import Path
 
 from runtime_stability_storage import (
+    latest_dump_sha256,
     strong_fingerprints,
     validate_directory_integrity,
     write_append_only,
@@ -127,6 +139,47 @@ with tempfile.TemporaryDirectory() as td:
 
 with tempfile.TemporaryDirectory() as td:
     root = Path(td)
+    first = sample("0x1000")
+    first["capture_provenance"] = {"previous_dump_sha256": "GENESIS"}
+    _, first_digest = write_append_only(
+        root,
+        first,
+        max_dumps=4,
+        max_dir_bytes=1024 * 1024,
+        min_free_bytes=0,
+    )
+    assert latest_dump_sha256(root) == first_digest
+
+    second = sample("0x2000")
+    second["capture_provenance"] = {"previous_dump_sha256": first_digest}
+    _, second_digest = write_append_only(
+        root,
+        second,
+        max_dumps=4,
+        max_dir_bytes=1024 * 1024,
+        min_free_bytes=0,
+    )
+    assert latest_dump_sha256(root) == second_digest
+    validate_directory_integrity(root)
+
+    bad = sample("0x3000")
+    bad["capture_provenance"] = {"previous_dump_sha256": "not-the-predecessor"}
+    write_append_only(
+        root,
+        bad,
+        max_dumps=4,
+        max_dir_bytes=1024 * 1024,
+        min_free_bytes=0,
+    )
+    try:
+        validate_directory_integrity(root)
+    except RuntimeError:
+        pass
+    else:
+        raise AssertionError("broken dump hash-chain was accepted")
+
+with tempfile.TemporaryDirectory() as td:
+    root = Path(td)
     try:
         write_append_only(
             root,
@@ -154,7 +207,19 @@ cat > "$BUILD_DIR/baseline.json" <<'JSON'
   "platform_key": "plat1111",
   "module_surface_key": "mod11111",
   "recognition_key": "rec11111",
-  "observer": {"agent_schema":"rafaelia.android.runtime-stability/v1","frida_version":"17.0.0","instrumentation_present":true,"capture_wall_duration_ms":2},
+  "observer": {
+    "agent_schema":"rafaelia.android.runtime-stability/v1",
+    "frida_version":"17.0.0",
+    "instrumentation_present":true,
+    "introspection_visibility":"FRIDA_CLOAK_AWARE",
+    "memory_range_semantics":"SINGLE_ENUMERATION_EXACT_RETURNED_PROTECTION",
+    "capture_wall_duration_ms":2
+  },
+  "consistency": {
+    "snapshot_atomic": false,
+    "module_surface_stable_during_capture": true,
+    "recognition_surface_authoritative": true
+  },
   "capture_provenance": {"agent_sha256":"agent-a","controller_sha256":"controller-a","frida_python_version":"17.0.0","controller_run_id":"fixture-base-run"},
   "runtime_state": {
     "debugger_attached": true,
@@ -170,6 +235,7 @@ cat > "$BUILD_DIR/baseline.json" <<'JSON'
     },
     "threads": {"state": "OBSERVED", "count": 4, "states": {"waiting": 4}},
     "memory_ranges": {
+      "_meta": {"state":"OBSERVED","semantics":"SINGLE_ENUMERATION_EXACT_RETURNED_PROTECTION","total_count":7,"total_bytes":28672,"overlap_by_construction":false},
       "---": {"state": "OBSERVED", "count": 0, "bytes": 0},
       "--x": {"state": "OBSERVED", "count": 0, "bytes": 0},
       "-w-": {"state": "OBSERVED", "count": 0, "bytes": 0},
@@ -179,7 +245,7 @@ cat > "$BUILD_DIR/baseline.json" <<'JSON'
       "rw-": {"state": "OBSERVED", "count": 2, "bytes": 8192},
       "rwx": {"state": "OBSERVED", "count": 0, "bytes": 0}
     },
-    "java_runtime": {"java_heap_total_bytes": 100}
+    "java_runtime": {"java_heap_total_bytes": 100, "device_elapsed_ms": 1000}
   }
 }
 JSON
@@ -238,6 +304,23 @@ collector_fail['runtime_state']['modules']['count'] = 'TOKEN_VAZIO'
 collector_fail['runtime_state']['modules']['stable_set_fingerprint'] = 'TOKEN_VAZIO'
 collector_fail['runtime_state']['modules']['modules'] = 'TOKEN_VAZIO'
 (root/'collector-fail.json').write_text(json.dumps(collector_fail))
+
+both_missing_a = json.loads(json.dumps(base))
+both_missing_b = json.loads(json.dumps(base))
+for row in (both_missing_a, both_missing_b):
+    row['runtime_state']['modules']['state'] = 'TOKEN_VAZIO'
+    row['runtime_state']['modules']['modules'] = 'TOKEN_VAZIO'
+(root/'both-missing-a.json').write_text(json.dumps(both_missing_a))
+(root/'both-missing-b.json').write_text(json.dumps(both_missing_b))
+
+capture_race = json.loads(json.dumps(base))
+capture_race['consistency']['module_surface_stable_during_capture'] = False
+capture_race['consistency']['recognition_surface_authoritative'] = False
+(root/'capture-race.json').write_text(json.dumps(capture_race))
+
+elapsed_only = json.loads(json.dumps(base))
+elapsed_only['runtime_state']['java_runtime']['device_elapsed_ms'] = 2000
+(root/'elapsed-only.json').write_text(json.dumps(elapsed_only))
 PY
 
 python3 tools/runtime-stability-diff.py   "$BUILD_DIR/baseline.json" "$BUILD_DIR/runtime.json"   --out "$BUILD_DIR/runtime-drift.json"
@@ -248,6 +331,9 @@ python3 tools/runtime-stability-diff.py   "$BUILD_DIR/baseline.json" "$BUILD_DIR
 python3 tools/runtime-stability-diff.py   "$BUILD_DIR/baseline.json" "$BUILD_DIR/hint-only.json"   --out "$BUILD_DIR/hint-only.out.json"
 python3 tools/runtime-stability-diff.py   "$BUILD_DIR/baseline.json" "$BUILD_DIR/observer.json"   --out "$BUILD_DIR/observer-drift.json"
 python3 tools/runtime-stability-diff.py   "$BUILD_DIR/baseline.json" "$BUILD_DIR/collector-fail.json"   --out "$BUILD_DIR/collector-fail.out.json"
+python3 tools/runtime-stability-diff.py   "$BUILD_DIR/both-missing-a.json" "$BUILD_DIR/both-missing-b.json"   --out "$BUILD_DIR/both-missing.out.json"
+python3 tools/runtime-stability-diff.py   "$BUILD_DIR/baseline.json" "$BUILD_DIR/capture-race.json"   --out "$BUILD_DIR/capture-race.out.json"
+python3 tools/runtime-stability-diff.py   "$BUILD_DIR/baseline.json" "$BUILD_DIR/elapsed-only.json"   --out "$BUILD_DIR/elapsed-only.out.json"
 
 python3 - <<'PY'
 import json
@@ -309,6 +395,9 @@ cat > "$BUILD_DIR/repeated-packet.json" <<'JSON'
   "observations": [{"id":1},{"id":2},{"id":3}],
   "evidence": [{"source_type":"frida_runtime_dump","independence_group":"frida-agent","ref":"dump://1"}],
   "falsifier_attempted": true,
+  "falsifier_results": [
+    {"falsifier":"repeat under same stable identity and fail if deviation disappears","result":"SURVIVED_REPETITION"}
+  ],
   "temporal_precedence": false,
   "intervention_or_reversal": false,
   "alternative_explanations_checked": false,
@@ -331,9 +420,22 @@ cat > "$BUILD_DIR/causal-pass-packet.json" <<'JSON'
     {"source_type":"tombstone","independence_group":"android-tombstoned","ref":"tombstone://a"}
   ],
   "falsifier_attempted": true,
+  "falsifier_results": [
+    {"falsifier":"remove controlled fault","result":"OUTCOME_DISAPPEARED_ON_REVERSAL"}
+  ],
   "temporal_precedence": true,
+  "temporal_order_evidence": [
+    {"source":"frida-agent+tombstoned","result":"fault_precedes_outcome"}
+  ],
   "intervention_or_reversal": true,
+  "interventions": [
+    {"kind":"controlled_reversal","result":"outcome_removed"}
+  ],
   "alternative_explanations_checked": true,
+  "alternative_explanations": [
+    {"name":"lazy_module_loading","status":"REJECTED_BY_EVIDENCE"},
+    {"name":"observer_effect","status":"BOUNDED_NOT_EXPLANATORY"}
+  ],
   "contradictory_evidence": []
 }
 JSON
@@ -418,6 +520,26 @@ cat > "$BUILD_DIR/false-independence-packet.json" <<'JSON'
 }
 JSON
 
+cat > "$BUILD_DIR/boolean-only-causal-packet.json" <<'JSON'
+{
+  "schema": "rafaelia.runtime-stability.falsifiability-packet/v1",
+  "hypothesis_id": "H-BOOLEAN-ONLY",
+  "hypothesis": "booleans alone prove causality",
+  "requested_level": "CAUSAL_SUPPORTED",
+  "falsifiers": ["remove condition"],
+  "observations": [{"id":1},{"id":2},{"id":3}],
+  "evidence": [
+    {"source_type":"frida_runtime_dump","independence_group":"a","ref":"dump://a"},
+    {"source_type":"tombstone","independence_group":"b","ref":"tombstone://b"}
+  ],
+  "falsifier_attempted": true,
+  "temporal_precedence": true,
+  "intervention_or_reversal": true,
+  "alternative_explanations_checked": true,
+  "contradictory_evidence": []
+}
+JSON
+
 cat > "$BUILD_DIR/causal-fail-packet.json" <<'JSON'
 {
   "schema": "rafaelia.runtime-stability.falsifiability-packet/v1",
@@ -459,6 +581,12 @@ set -e
 [[ "$FALSE_INDEPENDENCE_RC" -eq 2 ]] || rafaelia_die "false independence was accepted"
 
 set +e
+python3 tools/runtime-stability-evidence-gate.py   "$BUILD_DIR/boolean-only-causal-packet.json" --out "$BUILD_DIR/boolean-only-causal-result.json"
+BOOLEAN_CAUSAL_RC=$?
+set -e
+[[ "$BOOLEAN_CAUSAL_RC" -eq 2 ]] || rafaelia_die "boolean-only causal packet was accepted"
+
+set +e
 python3 tools/runtime-stability-evidence-gate.py   "$BUILD_DIR/causal-fail-packet.json" --out "$BUILD_DIR/causal-fail-result.json"
 CAUSAL_FAIL_RC=$?
 set -e
@@ -483,6 +611,11 @@ assert json.loads((root/'observer-drift.json').read_text())['classification'] ==
 collector_fail = json.loads((root/'collector-fail.out.json').read_text())
 assert collector_fail['classification'] == 'INSUFFICIENT_OBSERVATION'
 assert 'runtime_state.modules.state' in collector_fail['candidate_observation_gaps']
+both_missing = json.loads((root/'both-missing.out.json').read_text())
+assert both_missing['classification'] == 'INSUFFICIENT_OBSERVATION'
+assert both_missing['comparison_status'] == 'FAIL_CLOSED'
+assert json.loads((root/'capture-race.out.json').read_text())['classification'] == 'INCOMPARABLE_CAPTURE_RACE'
+assert json.loads((root/'elapsed-only.out.json').read_text())['classification'] == 'NO_OBSERVED_DRIFT'
 robust = json.loads((root/'robust-baseline.json').read_text())
 assert robust['baseline_gate'] == 'PASS'
 assert robust['sample_count'] == 3
@@ -563,6 +696,14 @@ receipt = {
     'compact_hint_non_authority': 'PASS',
     'observer_drift_separated': 'PASS',
     'collector_failure_is_token_vazio_not_zero': 'PASS',
+    'both_missing_is_not_equality': 'PASS',
+    'capture_race_incomparable': 'PASS',
+    'elapsed_clock_progression_not_drift': 'PASS',
+    'single_exact_memory_range_enumeration_static': 'PASS',
+    'frida_cloak_visibility_declared': 'PASS',
+    'boolean_only_causal_promotion_rejected': 'PASS',
+    'causal_structure_never_auto_allows_claim': 'PASS',
+    'local_dump_hash_chain_tested': 'PASS',
     'atomic_publication_contract_static': 'PASS',
     'storage_atomic_publish_executed': 'PASS',
     'storage_tamper_detection_executed': 'PASS',
