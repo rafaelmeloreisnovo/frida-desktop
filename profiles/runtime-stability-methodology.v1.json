@@ -89,13 +89,19 @@
     "structural methodology gate != scientific truth",
     "causal-support-ready structure != permission to publish a causal claim",
     "local hash-chain order != causality",
-    "observer-visible process state != complete physical process state"
+    "observer-visible process state != complete physical process state",
+    "distinct label != distinct evidence reference",
+    "distinct observation id != distinct observation evidence",
+    "non-empty array != valid structured evidence record"
   ],
   "evidence_independence": {
     "rule": "independent evidence requires distinct independence_group values, not merely distinct labels/source_type strings",
     "observation_identity": "observations must have unique ids",
     "fail_closed": true,
-    "baseline_note": "repeated baseline captures may share one instrumentation channel; source independence must be established separately"
+    "baseline_note": "repeated baseline captures may share one instrumentation channel; source independence must be established separately",
+    "observation_repetition": "REPEATED and higher require unique observation ids and unique non-empty observation fingerprints",
+    "evidence_reference_rule": "association/causal levels require distinct non-empty evidence refs in addition to distinct source_type and independence_group",
+    "structured_record_rule": "falsifier, temporal-order, intervention and alternative-explanation records must contain required non-empty semantic fields; empty objects never satisfy a gate"
   },
   "hyperMemory_chain": {
     "eviction_rule": "if the predecessor cannot be observed after ring eviction, emit TOKEN_VAZIO_EVICTED_PREDECESSOR instead of GENESIS",
