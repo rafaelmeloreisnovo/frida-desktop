@@ -61,6 +61,9 @@ REQUIRED_PATHS = [
     "observer.agent_schema",
     "observer.frida_version",
     "observer.instrumentation_present",
+    "observer.introspection_visibility",
+    "observer.memory_range_semantics",
+    "consistency.module_surface_stable_during_capture",
     "capture_provenance.agent_sha256",
     "capture_provenance.controller_sha256",
     "capture_provenance.frida_python_version",
@@ -173,6 +176,12 @@ def observer_projection(dump: dict[str, Any]) -> dict[str, Any]:
         "instrumentation_present": get_path(
             dump, "observer.instrumentation_present"
         ),
+        "introspection_visibility": get_path(
+            dump, "observer.introspection_visibility"
+        ),
+        "memory_range_semantics": get_path(
+            dump, "observer.memory_range_semantics"
+        ),
         "agent_sha256": get_path(dump, "capture_provenance.agent_sha256"),
         "controller_sha256": get_path(
             dump, "capture_provenance.controller_sha256"
@@ -240,6 +249,10 @@ def build_baseline(paths: list[Path]) -> dict[str, Any]:
 
     quality = [completeness(d) for d in dumps]
     min_quality = min(item["ratio"] for item in quality)
+    capture_consistent = all(
+        get_path(d, "consistency.module_surface_stable_during_capture") is True
+        for d in dumps
+    )
 
     baseline_strength = (
         "MINIMAL" if len(dumps) < 5
@@ -250,6 +263,7 @@ def build_baseline(paths: list[Path]) -> dict[str, Any]:
     valid = (
         identity_consistent
         and observer_consistent
+        and capture_consistent
         and min_quality == 1.0
     )
 
@@ -257,6 +271,8 @@ def build_baseline(paths: list[Path]) -> dict[str, Any]:
         "schema": BASELINE_SCHEMA,
         "sample_count": len(dumps),
         "baseline_strength": baseline_strength,
+        "baseline_strength_semantics": "SAMPLE_DEPTH_ONLY_NOT_EVIDENCE_STRENGTH",
+        "sampling_depth": baseline_strength,
         "independent_snapshot_sha256": source_sha256,
         "independent_controller_run_ids": run_ids,
         "independence_claim": "DISTINCT_ACQUISITIONS_NOT_STATISTICAL_INDEPENDENCE",
@@ -265,6 +281,7 @@ def build_baseline(paths: list[Path]) -> dict[str, Any]:
         "baseline_gate": "PASS" if valid else "FAIL",
         "stable_identity_consistent": identity_consistent,
         "observer_consistent": observer_consistent,
+        "capture_consistent": capture_consistent,
         "observer_identity": observer_reference if observer_consistent else TOKEN_VAZIO,
         "platform_key_hint_consistent": platform_key_hint_consistent,
         "stable_identity": identity_reference if identity_consistent else TOKEN_VAZIO,
@@ -290,8 +307,9 @@ def build_baseline(paths: list[Path]) -> dict[str, Any]:
             "observer identity/source binding differs across baseline snapshots",
             "compact platform hints may differ without invalidating the baseline; full stable identity is authoritative",
             "any required observation is missing",
-            "fewer than 3 independent snapshots",
+            "fewer than 3 distinct captures",
             "controller_run_id is missing or repeated",
+            "module surface changed during a non-atomic capture",
         ],
         "claim_allowed": False,
     }
@@ -306,6 +324,10 @@ def assess_candidate(baseline: dict[str, Any], candidate: dict[str, Any]) -> dic
         raise ValueError("unsupported candidate dump schema")
 
     candidate_quality = completeness(candidate)
+    candidate_capture_consistent = (
+        get_path(candidate, "consistency.module_surface_stable_during_capture")
+        is True
+    )
     identity_match = stable_identity_projection(candidate) == baseline["stable_identity"]
     observer_match = observer_projection(candidate) == baseline["observer_identity"]
     platform_key_hint_match = get_path(candidate, "platform_key") == baseline["platform_key_hint"]
@@ -381,7 +403,11 @@ def assess_candidate(baseline: dict[str, Any], candidate: dict[str, Any]) -> dic
             "baseline": summary,
         })
 
-    if not identity_match:
+    if not candidate_capture_consistent:
+        classification = "INCOMPARABLE_CAPTURE_RACE"
+    elif candidate_quality["ratio"] < 1.0:
+        classification = "INSUFFICIENT_OBSERVATION"
+    elif not identity_match:
         classification = "IDENTITY_DRIFT"
     elif not observer_match:
         classification = "OBSERVER_DRIFT"
@@ -389,7 +415,7 @@ def assess_candidate(baseline: dict[str, Any], candidate: dict[str, Any]) -> dic
         classification = "MODULE_SURFACE_OUTSIDE_BASELINE"
     elif outlier_count:
         classification = "RUNTIME_OUTLIER_OBSERVED"
-    elif token_vazio_count or candidate_quality["ratio"] < 1.0:
+    elif token_vazio_count:
         classification = "INSUFFICIENT_OBSERVATION"
     else:
         classification = "WITHIN_OBSERVED_BASELINE"
@@ -399,6 +425,7 @@ def assess_candidate(baseline: dict[str, Any], candidate: dict[str, Any]) -> dic
         "classification": classification,
         "stable_identity_match": identity_match,
         "observer_match": observer_match,
+        "capture_consistent": candidate_capture_consistent,
         "platform_key_hint_match": platform_key_hint_match,
         "compact_fingerprints_authoritative": False,
         "candidate_quality": candidate_quality,
