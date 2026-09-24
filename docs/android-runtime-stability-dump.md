@@ -59,7 +59,7 @@ The combined `recognition_key` is useful for exact surface matching, but a
 module-only mismatch is classified as `MODULE_SURFACE_DRIFT`, not
 `IDENTITY_DRIFT`.
 
-ASLR module bases are never included in recognition hashes.
+ASLR module bases are never included in recognition hashes. The compact FNV-1a 32-bit fingerprints are convenience hints only; comparison of the authoritative module surface uses the full `name + size` projection so a hash collision cannot hide module drift.
 
 ### Volatile runtime state
 
@@ -97,7 +97,7 @@ The agent does not collect:
 - credentials;
 - module paths.
 
-The process name, when available, is reduced to a short non-reversible tag.
+The process name is not collected.
 
 ## Frida use
 
