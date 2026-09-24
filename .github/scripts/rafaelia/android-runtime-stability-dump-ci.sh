@@ -67,6 +67,7 @@ grep -Fq "module_surface_stable_during_capture" agents/android-runtime-stability
 mkdir -p "$BUILD_DIR/storage-pure-tests"
 PYTHONPATH="$ROOT/tools" python3 - <<'PY'
 import math
+import os
 import tempfile
 from pathlib import Path
 
@@ -159,6 +160,16 @@ with tempfile.TemporaryDirectory() as td:
         max_dir_bytes=1024 * 1024,
         min_free_bytes=0,
     )
+    assert latest_dump_sha256(root) == second_digest
+    validate_directory_integrity(root)
+
+    # Wall-clock/filesystem timestamp order is not chain authority.
+    first_paths = sorted(root.glob("runtime-stability-*.json"))
+    assert len(first_paths) == 2
+    for index, item in enumerate(first_paths):
+        # Intentionally invert mtimes; SHA predecessor must still identify head.
+        stamp = 200 if index == 0 else 100
+        os.utime(item, ns=(stamp, stamp))
     assert latest_dump_sha256(root) == second_digest
     validate_directory_integrity(root)
 
@@ -435,11 +446,11 @@ cat > "$BUILD_DIR/repeated-packet.json" <<'JSON'
   "hypothesis": "thread-count deviation repeats under comparable conditions",
   "requested_level": "REPEATED",
   "falsifiers": ["repeat under same stable identity and fail if deviation disappears"],
-  "observations": [{"id":1,"fingerprint":"obs-a"},{"id":2,"fingerprint":"obs-b"},{"id":3,"fingerprint":"obs-c"}],
+  "observations": [{"id":1,"fingerprint":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"},{"id":2,"fingerprint":"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"},{"id":3,"fingerprint":"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"}],
   "evidence": [{"source_type":"frida_runtime_dump","independence_group":"frida-agent","ref":"dump://1"}],
   "falsifier_attempted": true,
   "falsifier_results": [
-    {"falsifier":"repeat under same stable identity and fail if deviation disappears","result":"SURVIVED_REPETITION"}
+    {"falsifier":"repeat under same stable identity and fail if deviation disappears","result":"SURVIVED_REPETITION","evidence_ref":"dump://1"}
   ],
   "temporal_precedence": false,
   "intervention_or_reversal": false,
@@ -457,27 +468,27 @@ cat > "$BUILD_DIR/causal-pass-packet.json" <<'JSON'
   "study_mode": "CONFIRMATORY",
   "hypothesis_registered_before_test": true,
   "falsifiers": ["remove the controlled fault and require the outcome to disappear"],
-  "observations": [{"id":1,"fingerprint":"obs-a"},{"id":2,"fingerprint":"obs-b"},{"id":3,"fingerprint":"obs-c"}],
+  "observations": [{"id":1,"fingerprint":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"},{"id":2,"fingerprint":"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"},{"id":3,"fingerprint":"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"}],
   "evidence": [
     {"source_type":"frida_runtime_dump","independence_group":"frida-agent","ref":"dump://a"},
     {"source_type":"tombstone","independence_group":"android-tombstoned","ref":"tombstone://a"}
   ],
   "falsifier_attempted": true,
   "falsifier_results": [
-    {"falsifier":"remove controlled fault","result":"OUTCOME_DISAPPEARED_ON_REVERSAL"}
+    {"falsifier":"remove controlled fault","result":"OUTCOME_DISAPPEARED_ON_REVERSAL","evidence_ref":"tombstone://a"}
   ],
   "temporal_precedence": true,
   "temporal_order_evidence": [
-    {"source":"frida-agent+tombstoned","result":"fault_precedes_outcome"}
+    {"source":"frida-agent+tombstoned","result":"fault_precedes_outcome","evidence_ref":"tombstone://a"}
   ],
   "intervention_or_reversal": true,
   "interventions": [
-    {"kind":"controlled_reversal","result":"outcome_removed"}
+    {"kind":"controlled_reversal","result":"outcome_removed","evidence_ref":"tombstone://a"}
   ],
   "alternative_explanations_checked": true,
   "alternative_explanations": [
-    {"name":"lazy_module_loading","status":"REJECTED_BY_EVIDENCE"},
-    {"name":"observer_effect","status":"BOUNDED_NOT_EXPLANATORY"}
+    {"name":"lazy_module_loading","status":"REJECTED_BY_EVIDENCE","evidence_ref":"dump://a"},
+    {"name":"observer_effect","status":"BOUNDED_NOT_EXPLANATORY","evidence_ref":"dump://a"}
   ],
   "contradictory_evidence": []
 }
@@ -492,19 +503,19 @@ cat > "$BUILD_DIR/contradiction-packet.json" <<'JSON'
   "study_mode": "CONFIRMATORY",
   "hypothesis_registered_before_test": true,
   "falsifiers": ["contradictory independent evidence must block promotion"],
-  "observations": [{"id":1,"fingerprint":"obs-a"},{"id":2,"fingerprint":"obs-b"},{"id":3,"fingerprint":"obs-c"}],
+  "observations": [{"id":1,"fingerprint":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"},{"id":2,"fingerprint":"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"},{"id":3,"fingerprint":"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"}],
   "evidence": [
     {"source_type":"frida_runtime_dump","independence_group":"frida-agent","ref":"dump://a"},
     {"source_type":"tombstone","independence_group":"android-tombstoned","ref":"tombstone://a"}
   ],
   "falsifier_attempted": true,
-  "falsifier_results": [{"falsifier":"contradictory independent evidence must block promotion","result":"CONTRADICTION_PRESENT"}],
+  "falsifier_results": [{"falsifier":"contradictory independent evidence must block promotion","result":"CONTRADICTION_PRESENT","evidence_ref":"control://negative"}],
   "temporal_precedence": true,
-  "temporal_order_evidence": [{"source":"cross-source-order","result":"candidate_precedes_outcome"}],
+  "temporal_order_evidence": [{"source":"cross-source-order","result":"candidate_precedes_outcome","evidence_ref":"tombstone://a"}],
   "intervention_or_reversal": true,
-  "interventions": [{"kind":"controlled_reversal","result":"outcome_changed"}],
+  "interventions": [{"kind":"controlled_reversal","result":"outcome_changed","evidence_ref":"tombstone://a"}],
   "alternative_explanations_checked": true,
-  "alternative_explanations": [{"name":"observer_effect","status":"BOUNDED_NOT_EXPLANATORY"}],
+  "alternative_explanations": [{"name":"observer_effect","status":"BOUNDED_NOT_EXPLANATORY","evidence_ref":"dump://a"}],
   "contradictory_evidence": [
     {"ref":"control://negative","resolved":false}
   ]
@@ -520,19 +531,19 @@ cat > "$BUILD_DIR/exploratory-causal-packet.json" <<'JSON'
   "study_mode": "EXPLORATORY",
   "hypothesis_registered_before_test": false,
   "falsifiers": ["remove intervention and require outcome to disappear"],
-  "observations": [{"id":1,"fingerprint":"obs-a"},{"id":2,"fingerprint":"obs-b"},{"id":3,"fingerprint":"obs-c"}],
+  "observations": [{"id":1,"fingerprint":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"},{"id":2,"fingerprint":"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"},{"id":3,"fingerprint":"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"}],
   "evidence": [
     {"source_type":"frida_runtime_dump","independence_group":"frida-agent","ref":"dump://a"},
     {"source_type":"tombstone","independence_group":"android-tombstoned","ref":"tombstone://a"}
   ],
   "falsifier_attempted": true,
-  "falsifier_results": [{"falsifier":"remove intervention","result":"OUTCOME_CHANGED"}],
+  "falsifier_results": [{"falsifier":"remove intervention","result":"OUTCOME_CHANGED","evidence_ref":"tombstone://a"}],
   "temporal_precedence": true,
-  "temporal_order_evidence": [{"source":"cross-source-order","result":"candidate_precedes_outcome"}],
+  "temporal_order_evidence": [{"source":"cross-source-order","result":"candidate_precedes_outcome","evidence_ref":"tombstone://a"}],
   "intervention_or_reversal": true,
-  "interventions": [{"kind":"controlled_reversal","result":"outcome_changed"}],
+  "interventions": [{"kind":"controlled_reversal","result":"outcome_changed","evidence_ref":"tombstone://a"}],
   "alternative_explanations_checked": true,
-  "alternative_explanations": [{"name":"observer_effect","status":"BOUNDED_NOT_EXPLANATORY"}],
+  "alternative_explanations": [{"name":"observer_effect","status":"BOUNDED_NOT_EXPLANATORY","evidence_ref":"dump://a"}],
   "contradictory_evidence": []
 }
 JSON
@@ -544,7 +555,7 @@ cat > "$BUILD_DIR/duplicate-observation-packet.json" <<'JSON'
   "hypothesis": "duplicating one observation counts as repetition",
   "requested_level": "REPEATED",
   "falsifiers": ["require unique observation ids"],
-  "observations": [{"id":"same","fingerprint":"same"},{"id":"same","fingerprint":"same"},{"id":"same","fingerprint":"same"}],
+  "observations": [{"id":"same","fingerprint":"eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"},{"id":"same","fingerprint":"eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"},{"id":"same","fingerprint":"eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"}],
   "evidence": [{"source_type":"frida_runtime_dump","independence_group":"frida-agent","ref":"dump://same"}],
   "falsifier_attempted": true,
   "contradictory_evidence": []
@@ -558,7 +569,7 @@ cat > "$BUILD_DIR/false-independence-packet.json" <<'JSON'
   "hypothesis": "two labels from one collection channel count as independent evidence",
   "requested_level": "ASSOCIATED",
   "falsifiers": ["require independent acquisition groups"],
-  "observations": [{"id":1,"fingerprint":"obs-a"},{"id":2,"fingerprint":"obs-b"},{"id":3,"fingerprint":"obs-c"}],
+  "observations": [{"id":1,"fingerprint":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"},{"id":2,"fingerprint":"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"},{"id":3,"fingerprint":"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"}],
   "evidence": [
     {"source_type":"frida_runtime_dump","independence_group":"same-channel","ref":"dump://a"},
     {"source_type":"tombstone","independence_group":"same-channel","ref":"derived://a"}
@@ -578,7 +589,7 @@ cat > "$BUILD_DIR/boolean-only-causal-packet.json" <<'JSON'
   "hypothesis": "booleans alone prove causality",
   "requested_level": "CAUSAL_SUPPORTED",
   "falsifiers": ["remove condition"],
-  "observations": [{"id":1,"fingerprint":"obs-a"},{"id":2,"fingerprint":"obs-b"},{"id":3,"fingerprint":"obs-c"}],
+  "observations": [{"id":1,"fingerprint":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"},{"id":2,"fingerprint":"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"},{"id":3,"fingerprint":"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"}],
   "evidence": [
     {"source_type":"frida_runtime_dump","independence_group":"a","ref":"dump://a"},
     {"source_type":"tombstone","independence_group":"b","ref":"tombstone://b"}
@@ -598,15 +609,15 @@ cat > "$BUILD_DIR/duplicate-ref-packet.json" <<'JSON'
   "hypothesis": "two labels over one evidence reference are independent",
   "requested_level": "ASSOCIATED",
   "falsifiers": ["require distinct physical/acquisition references"],
-  "observations": [{"id":1,"fingerprint":"obs-a"},{"id":2,"fingerprint":"obs-b"},{"id":3,"fingerprint":"obs-c"}],
+  "observations": [{"id":1,"fingerprint":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"},{"id":2,"fingerprint":"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"},{"id":3,"fingerprint":"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"}],
   "evidence": [
     {"source_type":"frida_runtime_dump","independence_group":"channel-a","ref":"same://evidence"},
     {"source_type":"tombstone","independence_group":"channel-b","ref":"same://evidence"}
   ],
   "falsifier_attempted": true,
-  "falsifier_results": [{"falsifier":"require distinct physical/acquisition references","result":"DUPLICATE_REF_FOUND"}],
+  "falsifier_results": [{"falsifier":"require distinct physical/acquisition references","result":"DUPLICATE_REF_FOUND","evidence_ref":"same://evidence"}],
   "alternative_explanations_checked": true,
-  "alternative_explanations": [{"name":"derived_duplicate","status":"BOUNDED_NOT_EXPLANATORY"}],
+  "alternative_explanations": [{"name":"derived_duplicate","status":"BOUNDED_NOT_EXPLANATORY","evidence_ref":"same://evidence"}],
   "contradictory_evidence": []
 }
 JSON
@@ -618,7 +629,7 @@ cat > "$BUILD_DIR/empty-structured-packet.json" <<'JSON'
   "hypothesis": "empty dictionaries satisfy causal evidence records",
   "requested_level": "CAUSAL_SUPPORTED",
   "falsifiers": ["empty records must fail"],
-  "observations": [{"id":1,"fingerprint":"obs-a"},{"id":2,"fingerprint":"obs-b"},{"id":3,"fingerprint":"obs-c"}],
+  "observations": [{"id":1,"fingerprint":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"},{"id":2,"fingerprint":"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"},{"id":3,"fingerprint":"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"}],
   "evidence": [
     {"source_type":"frida_runtime_dump","independence_group":"a","ref":"dump://a"},
     {"source_type":"tombstone","independence_group":"b","ref":"tomb://b"}
@@ -642,7 +653,7 @@ cat > "$BUILD_DIR/causal-fail-packet.json" <<'JSON'
   "hypothesis": "one drift observation caused the crash",
   "requested_level": "CAUSAL_SUPPORTED",
   "falsifiers": ["repeat without the drift"],
-  "observations": [{"id":1,"fingerprint":"obs-only"}],
+  "observations": [{"id":1,"fingerprint":"dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"}],
   "evidence": [{"source_type":"frida_runtime_dump","independence_group":"frida-agent","ref":"dump://only"}],
   "falsifier_attempted": false,
   "temporal_precedence": false,
@@ -829,6 +840,9 @@ receipt = {
     'process_instance_drift_separated': 'PASS',
     'boot_session_drift_separated': 'PASS',
     'stale_predecessor_rejected_before_publish': 'PASS',
+    'hash_chain_independent_of_wall_clock_order': 'PASS',
+    'repetition_fingerprint_sha256_enforced': 'PASS',
+    'structured_method_records_reference_evidence': 'PASS',
     'atomic_publication_contract_static': 'PASS',
     'storage_atomic_publish_executed': 'PASS',
     'storage_tamper_detection_executed': 'PASS',
