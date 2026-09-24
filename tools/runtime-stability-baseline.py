@@ -23,7 +23,7 @@ from typing import Any, Iterable
 
 
 TOKEN_VAZIO = "TOKEN_VAZIO"
-DUMP_SCHEMA = "rafaelia.android.runtime-stability/v1"
+DUMP_SCHEMA = "rafaelia.android.runtime-stability/v2"
 BASELINE_SCHEMA = "rafaelia.android.runtime-stability-baseline/v1"
 ASSESSMENT_SCHEMA = "rafaelia.android.runtime-stability-assessment/v1"
 
