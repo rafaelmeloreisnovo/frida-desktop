@@ -1,0 +1,54 @@
+{
+  "schema": "rafaelia.frida.runtime-uncertainty-family/v1",
+  "status": "IMPLEMENTED_UNTESTED",
+  "claim_allowed": false,
+  "source_base": "rafaelmeloreisnovo/frida-desktop@73a4f536fcde0368c8f3c89b0db8264ab01de5d3",
+  "two_cycle_model": ["ALPHA_INTERNAL_FALSIFIERS", "OMEGA_CROSS_SOURCE_RECONCILIATION"],
+  "families": [
+    {
+      "id": "U-ACTIONABILITY-HEURISTIC",
+      "risk": "P0_IF_MUTATION_ALLOWED",
+      "state": "HOTFIXED_PENDING_EXACT_HEAD_CI",
+      "invariant": "heuristic signal != diagnosis != mutation authority",
+      "falsifier": "A heuristic Runtime.gc/ANR/Throwable/LockSupport observation reaches AutoFixer without an explicit later promotion."
+    },
+    {
+      "id": "U-OPTIMIZER-DIRECTION",
+      "risk": "P1",
+      "state": "HOTFIXED_PENDING_EXACT_HEAD_CI",
+      "invariant": "higher rollback or lower success cannot automatically relax actuation thresholds",
+      "falsifier": "Any automatic optimization decreases confidence threshold or minimum support under worsening outcomes."
+    },
+    {
+      "id": "U-INTEGRITY-HASH-SEMANTICS",
+      "risk": "P1",
+      "state": "HOTFIXED_PENDING_EXACT_HEAD_CI",
+      "invariant": "fast routing hash != evidence integrity hash",
+      "falsifier": "IntegrityVerifier emits non-SHA-256 evidence hash for monitored files."
+    },
+    {
+      "id": "U-PHYSICAL-HYPERMEMORY",
+      "risk": "P0_EVIDENCE",
+      "state": "TOKEN_VAZIO",
+      "invariant": "hosted PASS != physical restart/reattach/restore PASS",
+      "falsifier": "Exact-device receipt demonstrates SharedMemory handoff, target restart, Frida reattach and state restore with bound hashes."
+    },
+    {
+      "id": "U-UPSTREAM-DRIFT",
+      "risk": "P1_COMPATIBILITY",
+      "state": "OPEN",
+      "invariant": "custom layer compatibility must be tested against current upstream subproject pins",
+      "falsifier": "Staged core->gum->bindings reconciliation passes exact-head hosted gates and physical ARM32 smoke without losing RAFAELIA invariants."
+    },
+    {
+      "id": "U-CAUSALITY",
+      "risk": "P0_EPISTEMIC_IF_PROMOTED",
+      "state": "CONTROLLED_TOKEN_VAZIO",
+      "invariant": "drift != instability; association != causality",
+      "falsifier": "Independent repeated evidence plus temporal precedence, alternative-explanation review and controlled intervention/reversal support the scoped causal hypothesis."
+    }
+  ],
+  "aggregation": "vector_preserving_no_magic_scalar",
+  "unknown_is_zero": false,
+  "f_next": "exact-head CI -> cross-source Mapa/Drive receipt -> physical ARM32 HyperMemory restart/reattach/restore gate -> staged upstream reconciliation"
+}
