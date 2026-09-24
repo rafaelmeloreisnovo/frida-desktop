@@ -34,7 +34,8 @@
       "pointer size",
       "page size",
       "platform",
-      "Android/ART build identity when Java is available"
+      "Android/ART build identity when Java is available",
+      "allowlisted Android platform contract: zygote/ABI, VNDK, build/boot security, FBE, memfd/memcg/LMKD tuning"
     ],
     "instrumentation_identity": [
       "Frida version",
@@ -47,7 +48,9 @@
       "thread count/state summary",
       "exact-protection memory range summary",
       "managed/native heap counters",
-      "debugger/code-signing state"
+      "debugger/code-signing state",
+      "allowlisted Android service state: lmkd, ashmemd, hidl_memory, tombstoned, traced",
+      "process PSS and native heap size/free/allocated counters"
     ],
     "process_instance": [
       "pid",
@@ -123,7 +126,20 @@
       "unknown caller reason text"
     ],
     "caller_reason": "allowlist-or-CALLER_DEFINED",
-    "target_selector_persisted": false
+    "target_selector_persisted": false,
+    "safe_property_policy": {
+      "mode": "ALLOWLIST_ONLY",
+      "includes": [
+        "non-unique ABI/runtime/build/boot-security/memory-policy properties",
+        "selected init service states"
+      ],
+      "excludes": [
+        "serial/PSN",
+        "SIM/ICCID/IMSI/subscriber fields",
+        "operator/carrier identity",
+        "radio provisioning payloads"
+      ]
+    }
   },
   "file_contract": {
     "default_directory": "~/.local/state/rafaelia/frida-runtime-stability",
