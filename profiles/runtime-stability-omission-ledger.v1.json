@@ -7,7 +7,8 @@
     "DEFERRED_WITH_GATE",
     "EXTERNAL_EVIDENCE_REQUIRED",
     "SENSITIVE_EXCLUDED",
-    "REJECTED_WITH_REASON"
+    "REJECTED_WITH_REASON",
+    "UNAVAILABLE_ON_TARGET"
   ],
   "entries": [
     {
@@ -316,6 +317,208 @@
       "rationale": "Can create self-interference and volume without evidence that cadence is informative.",
       "falsifier": "A physical experiment shows event-driven/on-demand capture misses a required transient that a bounded cadence catches with acceptable overhead.",
       "next_gate": "If needed, introduce adaptive bounded polling with measured observer cost, never silent default polling."
+    },
+    {
+      "id": "O21_APPLICATION_EXIT_INFO",
+      "surface": [
+        "android.app.ApplicationExitInfo",
+        "ActivityManager historical exit reasons"
+      ],
+      "disposition": "UNAVAILABLE_ON_TARGET",
+      "active_projection": [],
+      "rationale": "ApplicationExitInfo process-death reason APIs start at Android API 30; the physical target is API 29.",
+      "falsifier": "Target API level is upgraded to >=30 and the API becomes available with usable history.",
+      "next_gate": "On API29 use independent lmkd/kernel/tombstone/log evidence; add ApplicationExitInfo only on a separately typed API30+ target."
+    },
+    {
+      "id": "O22_FRIDA_CLOAK",
+      "surface": [
+        "Frida Cloak",
+        "Process.enumerateThreads",
+        "Process.enumerateRanges"
+      ],
+      "disposition": "IMPLEMENTED",
+      "active_projection": [
+        "Frida heap size",
+        "capture duration",
+        "instrumentation identity"
+      ],
+      "rationale": "Frida-created resources may be cloaked from introspection, so target thread/range census cannot be treated as a complete measurement of observer overhead.",
+      "falsifier": "Instrumentation overhead is claimed zero or fully represented by target census alone.",
+      "next_gate": "Measure external process PSS/duration and compare instrumented vs control runs on device."
+    },
+    {
+      "id": "O23_THREAD_REGISTER_CONTEXT",
+      "surface": [
+        "Thread.context",
+        "PC",
+        "SP",
+        "LR",
+        "ARM registers"
+      ],
+      "disposition": "DEFERRED_WITH_GATE",
+      "active_projection": [],
+      "rationale": "Register snapshots are high-value near a fault but noisy and timing-sensitive for neutral periodic stability capture.",
+      "falsifier": "A reproducible native failure cannot be localized without register state at the causal boundary.",
+      "next_gate": "Add opt-in PRE_CRASH/POST_CRASH register-tail capture with strict event budget and thread selection."
+    },
+    {
+      "id": "O24_STALKER_CONTROL_FLOW",
+      "surface": [
+        "Frida Stalker call/ret/exec tracing"
+      ],
+      "disposition": "DEFERRED_WITH_GATE",
+      "active_projection": [],
+      "rationale": "Instruction/call tracing can reconstruct causal paths but has substantially higher observer cost than the neutral dump.",
+      "falsifier": "Snapshot + event observers fail to distinguish competing control-flow hypotheses.",
+      "next_gate": "Opt-in bounded Stalker window around a pre-registered function/thread with measured overhead and exclusion ranges."
+    },
+    {
+      "id": "O25_BREAKPOINT_WATCHPOINT",
+      "surface": [
+        "hardware/software breakpoint",
+        "watchpoint",
+        "single-step"
+      ],
+      "disposition": "DEFERRED_WITH_GATE",
+      "active_projection": [],
+      "rationale": "Precise for targeted hypotheses but changes timing and is unsuitable as always-on baseline telemetry.",
+      "falsifier": "A specific address/state transition remains ambiguous after passive observation.",
+      "next_gate": "Use targeted authorized lab breakpoint/watchpoint with instrumentation-effect receipt."
+    },
+    {
+      "id": "O26_DEX_ART_METHOD_MAPPING",
+      "surface": [
+        "DEX method/register bytecode",
+        "ART compiled method",
+        "JIT/AOT address"
+      ],
+      "disposition": "DEFERRED_WITH_GATE",
+      "active_projection": [
+        "ART/VM identity"
+      ],
+      "rationale": "Logical-to-native method mapping is required for cross-layer causal debugging but is a separate symbolization/indexing problem.",
+      "falsifier": "A Java-visible failure cannot be reconciled with its native/JIT location.",
+      "next_gate": "Create correlation IDs DEX method -> ART method -> native code range using authorized app symbols/build artifacts."
+    },
+    {
+      "id": "O27_JNI_BOUNDARY",
+      "surface": [
+        "JNI calls",
+        "local/global refs",
+        "native exceptions"
+      ],
+      "disposition": "DEFERRED_WITH_GATE",
+      "active_projection": [],
+      "rationale": "JNI is a key causal bridge but broad hooking would add noise and overhead.",
+      "falsifier": "A failure crosses managed/native boundary and causal order cannot be reconstructed.",
+      "next_gate": "Opt-in JNI boundary profile for pre-registered methods/classes with timestamp/thread correlation."
+    },
+    {
+      "id": "O28_ELF_BUILD_ID_SYMBOL_IDENTITY",
+      "surface": [
+        "ELF build-id",
+        "symbol table",
+        "file hash",
+        "relocations"
+      ],
+      "disposition": "EXTERNAL_EVIDENCE_REQUIRED",
+      "active_projection": [
+        "loaded module name+size only"
+      ],
+      "rationale": "Module name+size recognizes a surface but does not establish binary identity.",
+      "falsifier": "Two distinct ELF binaries share name+size or a module change requires exact artifact provenance.",
+      "next_gate": "Bind module to build-id/SHA-256 from authorized artifact or on-device file metadata where permission allows."
+    },
+    {
+      "id": "O29_JAVA_EXCEPTION_STREAM",
+      "surface": [
+        "Java exceptions",
+        "RuntimeException",
+        "uncaught handler"
+      ],
+      "disposition": "DEFERRED_WITH_GATE",
+      "active_projection": [],
+      "rationale": "Exception streams are valuable causal events but can be extremely high-volume and may contain application text.",
+      "falsifier": "A managed failure cannot be related to runtime state without exception type/timing.",
+      "next_gate": "Capture exception class + thread + sanitized stack hash only for an opt-in causal-tail profile."
+    },
+    {
+      "id": "O30_NATIVE_EXCEPTION_HANDLER",
+      "surface": [
+        "Process.setExceptionHandler",
+        "native signals",
+        "fault address"
+      ],
+      "disposition": "DEFERRED_WITH_GATE",
+      "active_projection": [],
+      "rationale": "A process exception handler may affect fault propagation if misused; neutral stability sensing must not swallow or alter crashes.",
+      "falsifier": "Native crash correlation requires pre-tombstone fault metadata unavailable elsewhere.",
+      "next_gate": "If added, observe-and-forward only; never suppress the original fault; verify tombstone behavior remains unchanged."
+    },
+    {
+      "id": "O31_MEMORY_VALUE_SCANNING",
+      "surface": [
+        "Cheat-Engine-like value scans",
+        "Memory.scan"
+      ],
+      "disposition": "REJECTED_WITH_REASON",
+      "active_projection": [],
+      "rationale": "Broad value scanning is not a general stability signal and increases privacy/observer cost; useful only for a specific authorized hypothesis.",
+      "falsifier": "A pre-registered lab hypothesis is explicitly about locating a known synthetic sentinel/value.",
+      "next_gate": "Use narrow bounded scan in owned lab memory only, outside the default stability collector."
+    },
+    {
+      "id": "O32_BITFLIP_FAULT_INJECTION",
+      "surface": [
+        "controlled bit flip",
+        "register/memory fault injection"
+      ],
+      "disposition": "DEFERRED_WITH_GATE",
+      "active_projection": [],
+      "rationale": "Fault injection is useful to test recovery invariants but is an active perturbation, not observation.",
+      "falsifier": "Recovery behavior cannot be falsified without a controlled corruption stimulus.",
+      "next_gate": "Separate destructive lab mode with known target byte, pre/post hashes, rollback and no production-data target."
+    },
+    {
+      "id": "O33_HEX_PATCH_RUNTIME_PATCH",
+      "surface": [
+        "hex patch",
+        "Memory.patchCode",
+        "ELF patch"
+      ],
+      "disposition": "REJECTED_WITH_REASON",
+      "active_projection": [],
+      "rationale": "Patching changes the system under test and would invalidate neutral stability evidence if mixed into the baseline mode.",
+      "falsifier": "A separately authorized remediation experiment explicitly tests one reversible patch.",
+      "next_gate": "Keep patching in a separate mutation lane with before/after artifact hashes and rollback receipt."
+    },
+    {
+      "id": "O34_NUMA",
+      "surface": [
+        "NUMA topology",
+        "node-local allocation"
+      ],
+      "disposition": "REJECTED_WITH_REASON",
+      "active_projection": [],
+      "rationale": "No evidence in the current Android/MTK target establishes a meaningful NUMA topology for this app-runtime investigation.",
+      "falsifier": "Kernel/device evidence exposes multiple NUMA nodes affecting allocation/latency.",
+      "next_gate": "Do not add NUMA complexity until physical topology evidence exists."
+    },
+    {
+      "id": "O35_FIFO_QUEUE_DYNAMICS",
+      "surface": [
+        "FIFO/ring buffers",
+        "producer-consumer queues",
+        "event backlog"
+      ],
+      "disposition": "DEFERRED_WITH_GATE",
+      "active_projection": [
+        "HyperMemory bounded ring occupancy/evictions"
+      ],
+      "rationale": "Queue saturation can cause latency/loss but generic queue introspection is subsystem-specific.",
+      "falsifier": "A failure correlates with backlog/overflow and the relevant queue has an observable bounded interface.",
+      "next_gate": "Add queue depth/drop counters only to the subsystem-specific profile that owns the queue."
     }
   ]
 }
