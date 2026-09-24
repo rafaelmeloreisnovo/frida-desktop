@@ -182,11 +182,15 @@ export class RuntimeStabilityHyperMemoryBridge {
       .filter(record => record.kind === 'runtime-causal-event.v1')
       .slice(-1)[0];
 
+    const stats = this.hyperMemory.getStats();
+    const predecessor = previous?.sha256 ??
+      (stats.evictions > 0 ? 'TOKEN_VAZIO_EVICTED_PREDECESSOR' : 'GENESIS');
+
     const envelope: BridgeEnvelope = {
       schema: BRIDGE_SCHEMA,
       event_kind: eventKind,
       observed_at: Date.now(),
-      previous_payload_sha256: previous?.sha256 ?? 'GENESIS',
+      previous_payload_sha256: predecessor,
       payload,
       claim_allowed: false
     };
