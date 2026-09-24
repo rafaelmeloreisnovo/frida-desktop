@@ -9,6 +9,7 @@ import hashlib
 import json
 import os
 from pathlib import Path
+import secrets
 import shutil
 from contextlib import contextmanager
 from typing import Any, Iterator
@@ -107,6 +108,94 @@ def publish_exclusive(path: Path, data: bytes) -> None:
             pass
 
 
+def _verified_dump_records(out_dir: Path) -> dict[str, dict[str, Any]]:
+    dumps = list(out_dir.glob("runtime-stability-*.json"))
+    records: dict[str, dict[str, Any]] = {}
+    for dump in dumps:
+        raw = dump.read_bytes()
+        digest = hashlib.sha256(raw).hexdigest()
+        sidecar = Path(str(dump) + ".sha256")
+        line = sidecar.read_text(encoding="ascii").strip().split()
+        if len(line) != 2 or line[0] != digest or line[1] != dump.name:
+            raise RuntimeError(
+                f"dump integrity verification failed for {dump.name}"
+            )
+        try:
+            parsed = json.loads(raw.decode("utf-8"))
+        except Exception as exc:
+            raise RuntimeError(
+                f"dump JSON verification failed for {dump.name}: "
+                f"{type(exc).__name__}"
+            ) from exc
+        if not isinstance(parsed, dict):
+            raise RuntimeError(f"dump JSON root must be object for {dump.name}")
+        provenance = parsed.get("capture_provenance")
+        previous = (
+            provenance.get("previous_dump_sha256")
+            if isinstance(provenance, dict)
+            else None
+        )
+        records[digest] = {
+            "path": dump,
+            "previous": previous,
+        }
+    return records
+
+
+def _chain_head(records: dict[str, dict[str, Any]]) -> str | None:
+    chained = {
+        digest: row
+        for digest, row in records.items()
+        if isinstance(row.get("previous"), str)
+    }
+    if not chained:
+        return None
+
+    successor_by_previous: dict[str, str] = {}
+    for digest, row in chained.items():
+        previous = str(row["previous"])
+        if previous != "GENESIS" and previous not in records:
+            raise RuntimeError(
+                f"dump chain predecessor missing: {previous}"
+            )
+        if previous in successor_by_previous:
+            raise RuntimeError(
+                "dump chain fork detected at predecessor "
+                + previous
+            )
+        successor_by_previous[previous] = digest
+
+    chained_digests = set(chained)
+    referenced_as_previous = {
+        previous
+        for previous in successor_by_previous
+        if previous in chained_digests
+    }
+    heads = sorted(chained_digests - referenced_as_previous)
+    if len(heads) != 1:
+        raise RuntimeError(
+            f"dump chain must have exactly one head, observed={len(heads)}"
+        )
+
+    head = heads[0]
+    visited: set[str] = set()
+    current = head
+    while current in chained:
+        if current in visited:
+            raise RuntimeError("dump chain cycle detected")
+        visited.add(current)
+        previous = str(chained[current]["previous"])
+        if previous == "GENESIS" or previous not in chained:
+            break
+        current = previous
+
+    if visited != chained_digests:
+        raise RuntimeError(
+            "dump chain contains disconnected/forked chained records"
+        )
+    return head
+
+
 def validate_directory_integrity(out_dir: Path) -> None:
     temp_artifacts = list(out_dir.glob(".runtime-stability-*.tmp.*"))
     if temp_artifacts:
@@ -115,8 +204,8 @@ def validate_directory_integrity(out_dir: Path) -> None:
             + ", ".join(item.name for item in temp_artifacts)
         )
 
-    dumps = sorted(out_dir.glob("runtime-stability-*.json"))
-    sidecars = sorted(out_dir.glob("runtime-stability-*.json.sha256"))
+    dumps = list(out_dir.glob("runtime-stability-*.json"))
+    sidecars = list(out_dir.glob("runtime-stability-*.json.sha256"))
 
     expected_sidecars = {Path(str(item) + ".sha256") for item in dumps}
     orphan_sidecars = [item for item in sidecars if Path(str(item)[:-7]) not in dumps]
@@ -130,47 +219,32 @@ def validate_directory_integrity(out_dir: Path) -> None:
             + ",".join(item.name for item in missing_sidecars)
         )
 
-    previous_digest = "GENESIS"
-    for dump in dumps:
-        raw = dump.read_bytes()
-        digest = hashlib.sha256(raw).hexdigest()
-        sidecar = Path(str(dump) + ".sha256")
-        line = sidecar.read_text(encoding="ascii").strip().split()
-        if len(line) != 2 or line[0] != digest or line[1] != dump.name:
-            raise RuntimeError(
-                f"dump integrity verification failed for {dump.name}"
-            )
-
-        try:
-            parsed = json.loads(raw.decode("utf-8"))
-        except Exception as exc:
-            raise RuntimeError(
-                f"dump JSON verification failed for {dump.name}: {type(exc).__name__}"
-            ) from exc
-        if not isinstance(parsed, dict):
-            raise RuntimeError(f"dump JSON root must be object for {dump.name}")
-
-        provenance = parsed.get("capture_provenance")
-        if isinstance(provenance, dict) and "previous_dump_sha256" in provenance:
-            observed_previous = provenance.get("previous_dump_sha256")
-            if observed_previous != previous_digest:
-                raise RuntimeError(
-                    f"dump chain mismatch for {dump.name}: "
-                    f"observed={observed_previous} expected={previous_digest}"
-                )
-        previous_digest = digest
-
-
+    records = _verified_dump_records(out_dir)
+    _chain_head(records)
 
 
 def latest_dump_sha256(out_dir: Path) -> str:
-    """Return the latest verified dump digest, or GENESIS for an empty directory."""
+    """Return chain head digest; wall-clock filename order is never authority."""
     out_dir.mkdir(parents=True, exist_ok=True)
     validate_directory_integrity(out_dir)
-    dumps = sorted(out_dir.glob("runtime-stability-*.json"))
-    if not dumps:
+    records = _verified_dump_records(out_dir)
+    if not records:
         return "GENESIS"
-    return hashlib.sha256(dumps[-1].read_bytes()).hexdigest()
+
+    head = _chain_head(records)
+    if head is not None:
+        return head
+
+    # Legacy unchained directory: choose newest filesystem timestamp only as a
+    # compatibility bridge. Once chaining starts, predecessor SHA is authority.
+    latest = max(
+        records.items(),
+        key=lambda item: (
+            item[1]["path"].stat().st_mtime_ns,
+            item[1]["path"].name,
+        ),
+    )
+    return latest[0]
 
 
 def retention_preflight(
@@ -229,6 +303,7 @@ def write_append_only(
         pass
 
     stamp = dt.datetime.now(dt.timezone.utc).strftime("%Y%m%dT%H%M%S.%fZ")
+    unique_suffix = secrets.token_hex(4)
     encoded = (
         json.dumps(
             dump,
@@ -241,7 +316,7 @@ def write_append_only(
     ).encode("utf-8")
     digest = hashlib.sha256(encoded).hexdigest()
 
-    path = out_dir / f"runtime-stability-{stamp}.json"
+    path = out_dir / f"runtime-stability-{stamp}-{unique_suffix}.json"
     sha_path = Path(str(path) + ".sha256")
     sha_line = f"{digest}  {path.name}\n".encode("ascii")
 
@@ -257,12 +332,7 @@ def write_append_only(
         provenance = dump.get("capture_provenance")
         if isinstance(provenance, dict) and "previous_dump_sha256" in provenance:
             observed_previous = provenance.get("previous_dump_sha256")
-            dumps = sorted(out_dir.glob("runtime-stability-*.json"))
-            expected_previous = (
-                "GENESIS"
-                if not dumps
-                else hashlib.sha256(dumps[-1].read_bytes()).hexdigest()
-            )
+            expected_previous = latest_dump_sha256(out_dir)
             if observed_previous != expected_previous:
                 raise RuntimeError(
                     "stale/concurrent predecessor: "
