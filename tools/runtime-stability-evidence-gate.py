@@ -208,6 +208,16 @@ def gate(packet: dict[str, Any]) -> dict[str, Any]:
                 break
         gate_state = "FAIL"
 
+    study_mode = packet.get("study_mode", "EXPLORATORY")
+    hypothesis_registered_before_test = (
+        packet.get("hypothesis_registered_before_test") is True
+    )
+    confirmatory_ready = (
+        passed
+        and study_mode == "CONFIRMATORY"
+        and hypothesis_registered_before_test
+    )
+
     return {
         "schema": RESULT_SCHEMA,
         "hypothesis_id": packet.get("hypothesis_id", "TOKEN_VAZIO"),
@@ -219,6 +229,12 @@ def gate(packet: dict[str, Any]) -> dict[str, Any]:
         "independence_groups": sorted(groups),
         "contradictory_evidence_count": len(contradictions),
         "causal_claim_allowed": promoted_level == "CAUSAL_SUPPORTED",
+        "study_mode": study_mode,
+        "hypothesis_registered_before_test": hypothesis_registered_before_test,
+        "confirmatory_ready": confirmatory_ready,
+        "publication_grade_causal_support": (
+            promoted_level == "CAUSAL_SUPPORTED" and confirmatory_ready
+        ),
         "claim_allowed": promoted_level != "TOKEN_VAZIO",
         "invariant": (
             "observation != repetition != association != causal candidate != causal support"
