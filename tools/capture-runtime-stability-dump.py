@@ -15,13 +15,18 @@ import json
 import os
 from pathlib import Path
 import shutil
+import subprocess
 import threading
 from typing import Any
 import uuid
 
 import frida
 
-from runtime_stability_storage import strong_fingerprints, write_append_only
+from runtime_stability_storage import (
+    latest_dump_sha256,
+    strong_fingerprints,
+    write_append_only,
+)
 
 
 SCHEMA = "rafaelia.android.runtime-stability/v1"
@@ -36,6 +41,11 @@ def parse_args() -> argparse.Namespace:
     transport = parser.add_mutually_exclusive_group()
     transport.add_argument("--endpoint", default="127.0.0.1:27042")
     transport.add_argument("--usb", action="store_true")
+    parser.add_argument(
+        "--allow-remote-endpoint",
+        action="store_true",
+        help="explicitly permit a non-loopback Frida endpoint",
+    )
     parser.add_argument(
         "--agent",
         type=Path,
@@ -59,11 +69,138 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
+def is_loopback_endpoint(endpoint: str) -> bool:
+    value = endpoint.strip().lower()
+    if value.startswith("["):
+        host = value[1:value.find("]")] if "]" in value else value
+    else:
+        host = value.rsplit(":", 1)[0] if ":" in value else value
+    return host in {"127.0.0.1", "localhost", "::1"}
+
+
 def resolve_device(args: argparse.Namespace):
     if args.usb:
         return frida.get_usb_device(timeout=int(args.timeout_seconds * 1000))
+    if not is_loopback_endpoint(args.endpoint) and not args.allow_remote_endpoint:
+        raise ValueError(
+            "non-loopback Frida endpoint requires --allow-remote-endpoint"
+        )
     manager = frida.get_device_manager()
     return manager.add_remote_device(args.endpoint)
+
+
+
+SAFE_GETPROP_KEYS = [
+    "sys.use_memfd",
+    "init.svc.ashmemd",
+    "init.svc.hidl_memory",
+    "init.svc.lmkd",
+    "init.svc.tombstoned",
+    "init.svc.traced",
+    "init.svc.traced_probes",
+    "init.svc.aee_aed",
+    "ro.config.per_app_memcg",
+    "ro.lmk.downgrade_pressure",
+    "ro.zygote",
+    "ro.product.cpu.abilist64",
+    "ro.boot.verifiedbootstate",
+    "ro.boot.veritymode",
+    "ro.crypto.state",
+    "ro.crypto.type",
+    "ro.build.ab_update",
+    "ro.boot.dynamic_partitions",
+    "ro.boot.slot_suffix",
+    "ro.debuggable",
+    "ro.secure",
+    "ro.vendor.mediatek.platform",
+    "ro.boot.hardware",
+    "ro.board.platform",
+]
+
+MEMINFO_KEYS = {
+    "MemTotal",
+    "MemFree",
+    "MemAvailable",
+    "Buffers",
+    "Cached",
+    "SwapTotal",
+    "SwapFree",
+    "Dirty",
+    "SReclaimable",
+    "Shmem",
+}
+
+
+def collect_local_android_context() -> dict[str, Any]:
+    getprop = "/system/bin/getprop"
+    if not Path(getprop).exists():
+        candidate = shutil.which("getprop")
+        if candidate is None:
+            return {
+                "scope": "TOKEN_VAZIO_NOT_LOCAL_ANDROID",
+                "causal_role": "CONTEXT_ONLY",
+            }
+        getprop = candidate
+
+    properties: dict[str, str] = {}
+    for key in SAFE_GETPROP_KEYS:
+        try:
+            value = subprocess.check_output(
+                [getprop, key],
+                stderr=subprocess.DEVNULL,
+                text=True,
+                timeout=1.0,
+            ).rstrip("\n")
+            properties[key] = value
+        except Exception:
+            properties[key] = "TOKEN_VAZIO"
+
+    memory: dict[str, int] = {}
+    try:
+        for line in Path("/proc/meminfo").read_text(encoding="utf-8").splitlines():
+            key, _, rest = line.partition(":")
+            if key not in MEMINFO_KEYS:
+                continue
+            token = rest.strip().split()[0]
+            memory[f"{key}_kb"] = int(token)
+    except Exception:
+        memory = {}
+
+    pressure: dict[str, dict[str, float | int | str]] = {}
+    pressure_path = Path("/proc/pressure/memory")
+    if pressure_path.exists():
+        try:
+            for line in pressure_path.read_text(encoding="utf-8").splitlines():
+                parts = line.split()
+                if not parts:
+                    continue
+                row: dict[str, float | int | str] = {}
+                for item in parts[1:]:
+                    key, _, raw = item.partition("=")
+                    if not key:
+                        continue
+                    try:
+                        row[key] = int(raw) if key == "total" else float(raw)
+                    except ValueError:
+                        row[key] = raw
+                pressure[parts[0]] = row
+        except Exception:
+            pressure = {}
+
+    uname = os.uname()
+    return {
+        "scope": "CONTROLLER_LOCAL_ANDROID",
+        "causal_role": "CONTEXT_ONLY",
+        "properties": properties,
+        "memory": memory if memory else "TOKEN_VAZIO",
+        "psi_memory": pressure if pressure else "TOKEN_VAZIO",
+        "kernel": {
+            "sysname": uname.sysname,
+            "release": uname.release,
+            "machine": uname.machine,
+        },
+        "privacy": "ALLOWLISTED_STRUCTURAL_AND_RESOURCE_METRICS_ONLY",
+    }
 
 
 def resolve_pid(device: Any, args: argparse.Namespace) -> int:
@@ -83,6 +220,7 @@ def main() -> int:
     controller_path = Path(__file__).resolve()
     controller_sha256 = hashlib.sha256(controller_path.read_bytes()).hexdigest()
     controller_run_id = str(uuid.uuid4())
+    previous_dump_sha256 = latest_dump_sha256(args.out_dir)
 
     device = resolve_device(args)
     pid = resolve_pid(device, args)
@@ -130,6 +268,7 @@ def main() -> int:
             raise RuntimeError("agent returned no stability dump")
 
         dump["strong_fingerprints"] = strong_fingerprints(dump)
+        dump["platform_context"] = collect_local_android_context()
         dump["capture_provenance"] = {
             "agent_sha256": agent_sha256,
             "controller_sha256": controller_sha256,
@@ -138,6 +277,8 @@ def main() -> int:
             "target_selector_persisted": False,
             "source_binding": "LOCAL_FILE_SHA256",
             "controller_run_id": controller_run_id,
+            "previous_dump_sha256": previous_dump_sha256,
+            "chain_semantics": "LOCAL_APPEND_ORDER_INTEGRITY_NOT_CAUSALITY",
         }
 
         path, digest = write_append_only(
@@ -156,6 +297,7 @@ def main() -> int:
         print(f"agent_sha256={agent_sha256}")
         print(f"controller_sha256={controller_sha256}")
         print(f"controller_run_id={controller_run_id}")
+        print(f"previous_dump_sha256={previous_dump_sha256}")
         print(f"max_dumps={args.max_dumps}")
         print(f"max_dir_bytes={args.max_dir_bytes}")
         print(f"min_free_bytes={args.min_free_bytes}")
