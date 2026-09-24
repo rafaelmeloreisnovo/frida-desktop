@@ -518,7 +518,6 @@ export {
   RUNTIME_STABILITY_HYPERMEMORY_BRIDGE_SCHEMA
 } from './runtime-stability-hypermemory-bridge';
 export type {
-  RuntimeStabilityDumpLike,
-  RuntimeStabilityDiffLike,
+  RuntimeStabilityBridgeOptions,
   RuntimeOutcomeEvent
 } from './runtime-stability-hypermemory-bridge';
