@@ -14,6 +14,7 @@ import hashlib
 import json
 import os
 from pathlib import Path
+import shutil
 import threading
 from typing import Any
 
@@ -49,6 +50,9 @@ def parse_args() -> argparse.Namespace:
         / "frida-runtime-stability",
     )
     parser.add_argument("--timeout-seconds", type=float, default=10.0)
+    parser.add_argument("--max-dumps", type=int, default=256)
+    parser.add_argument("--max-dir-bytes", type=int, default=64 * 1024 * 1024)
+    parser.add_argument("--min-free-bytes", type=int, default=16 * 1024 * 1024)
     return parser.parse_args()
 
 
@@ -69,7 +73,81 @@ def resolve_pid(device: Any, args: argparse.Namespace) -> int:
     raise RuntimeError("authorized target process was not found")
 
 
-def write_append_only(out_dir: Path, dump: dict[str, Any]) -> tuple[Path, str]:
+def _fsync_directory(path: Path) -> None:
+    flags = os.O_RDONLY
+    if hasattr(os, "O_DIRECTORY"):
+        flags |= os.O_DIRECTORY
+    fd = os.open(path, flags)
+    try:
+        os.fsync(fd)
+    finally:
+        os.close(fd)
+
+
+def _publish_exclusive(path: Path, data: bytes) -> None:
+    temp = path.parent / f".{path.name}.tmp.{os.getpid()}"
+    fd = os.open(temp, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+    try:
+        with os.fdopen(fd, "wb", closefd=True) as handle:
+            handle.write(data)
+            handle.flush()
+            os.fsync(handle.fileno())
+        if path.exists():
+            raise FileExistsError(path)
+        os.link(temp, path)
+        _fsync_directory(path.parent)
+    finally:
+        try:
+            temp.unlink()
+        except FileNotFoundError:
+            pass
+
+
+def _retention_preflight(
+    out_dir: Path,
+    encoded_bytes: int,
+    max_dumps: int,
+    max_dir_bytes: int,
+    min_free_bytes: int,
+) -> None:
+    if max_dumps < 1 or max_dir_bytes < 1 or min_free_bytes < 0:
+        raise ValueError("retention limits must be positive (min_free_bytes may be zero)")
+
+    dumps = list(out_dir.glob("runtime-stability-*.json"))
+    if len(dumps) >= max_dumps:
+        raise RuntimeError(
+            f"dump retention limit reached: {len(dumps)} >= {max_dumps}; "
+            "no evidence was deleted automatically"
+        )
+
+    total_bytes = sum(
+        item.stat().st_size
+        for item in out_dir.iterdir()
+        if item.is_file()
+    )
+    if total_bytes + encoded_bytes > max_dir_bytes:
+        raise RuntimeError(
+            f"dump directory byte limit would be exceeded: "
+            f"{total_bytes + encoded_bytes} > {max_dir_bytes}; "
+            "no evidence was deleted automatically"
+        )
+
+    free_bytes = shutil.disk_usage(out_dir).free
+    if free_bytes - encoded_bytes < min_free_bytes:
+        raise RuntimeError(
+            f"insufficient free-space reserve: free={free_bytes} "
+            f"encoded={encoded_bytes} reserve={min_free_bytes}"
+        )
+
+
+def write_append_only(
+    out_dir: Path,
+    dump: dict[str, Any],
+    *,
+    max_dumps: int,
+    max_dir_bytes: int,
+    min_free_bytes: int,
+) -> tuple[Path, str]:
     out_dir.mkdir(parents=True, exist_ok=True)
     try:
         os.chmod(out_dir, 0o700)
@@ -78,25 +156,31 @@ def write_append_only(out_dir: Path, dump: dict[str, Any]) -> tuple[Path, str]:
 
     stamp = dt.datetime.now(dt.timezone.utc).strftime("%Y%m%dT%H%M%S.%fZ")
     encoded = (
-        json.dumps(dump, ensure_ascii=False, indent=2, sort_keys=True) + "\n"
+        json.dumps(
+            dump,
+            ensure_ascii=False,
+            indent=2,
+            sort_keys=True,
+            allow_nan=False,
+        )
+        + "\n"
     ).encode("utf-8")
     digest = hashlib.sha256(encoded).hexdigest()
 
-    path = out_dir / f"runtime-stability-{stamp}.json"
-    fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
-    with os.fdopen(fd, "wb") as handle:
-        handle.write(encoded)
-        handle.flush()
-        os.fsync(handle.fileno())
+    _retention_preflight(
+        out_dir,
+        len(encoded),
+        max_dumps,
+        max_dir_bytes,
+        min_free_bytes,
+    )
 
+    path = out_dir / f"runtime-stability-{stamp}.json"
     sha_path = Path(str(path) + ".sha256")
     sha_line = f"{digest}  {path.name}\n".encode("ascii")
-    fd = os.open(sha_path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
-    with os.fdopen(fd, "wb") as handle:
-        handle.write(sha_line)
-        handle.flush()
-        os.fsync(handle.fileno())
 
+    _publish_exclusive(path, encoded)
+    _publish_exclusive(sha_path, sha_line)
     return path, digest
 
 
@@ -161,7 +245,13 @@ def main() -> int:
             "source_binding": "LOCAL_FILE_SHA256",
         }
 
-        path, digest = write_append_only(args.out_dir, dump)
+        path, digest = write_append_only(
+            args.out_dir,
+            dump,
+            max_dumps=args.max_dumps,
+            max_dir_bytes=args.max_dir_bytes,
+            min_free_bytes=args.min_free_bytes,
+        )
         print("RAFAELIA_RUNTIME_STABILITY_DUMP_PASS")
         print(f"receipt={path}")
         print(f"sha256={digest}")
@@ -170,6 +260,9 @@ def main() -> int:
         print("pid_in_dump=YES_VOLATILE_RUNTIME_STATE")
         print(f"agent_sha256={agent_sha256}")
         print(f"controller_sha256={controller_sha256}")
+        print(f"max_dumps={args.max_dumps}")
+        print(f"max_dir_bytes={args.max_dir_bytes}")
+        print(f"min_free_bytes={args.min_free_bytes}")
         print("claim_allowed=false")
         return 0
     finally:
