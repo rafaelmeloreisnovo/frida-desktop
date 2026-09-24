@@ -26,6 +26,43 @@ const REASON_ALLOWLIST = new Set([
   'MANUAL'
 ]);
 
+const SAFE_SYSTEM_PROPERTIES = [
+  'ro.zygote',
+  'ro.product.cpu.abilist',
+  'ro.product.cpu.abilist32',
+  'ro.product.cpu.abilist64',
+  'dalvik.vm.isa.arm.variant',
+  'dalvik.vm.isa.arm.features',
+  'ro.vndk.version',
+  'ro.product.first_api_level',
+  'ro.board.platform',
+  'ro.boot.hardware',
+  'ro.vendor.mediatek.platform',
+  'ro.build.type',
+  'ro.debuggable',
+  'ro.secure',
+  'ro.crypto.state',
+  'ro.crypto.type',
+  'ro.build.ab_update',
+  'ro.boot.dynamic_partitions',
+  'ro.boot.verifiedbootstate',
+  'ro.boot.veritymode',
+  'ro.boot.flash.locked',
+  'ro.boot.slot_suffix',
+  'sys.use_memfd',
+  'ro.config.per_app_memcg',
+  'ro.lmk.downgrade_pressure'
+];
+
+const SAFE_SERVICE_PROPERTIES = [
+  'init.svc.lmkd',
+  'init.svc.ashmemd',
+  'init.svc.hidl_memory',
+  'init.svc.tombstoned',
+  'init.svc.traced',
+  'init.svc.traced_probes'
+];
+
 let captureSequence = 0;
 let eventSequence = 0;
 let moduleObserver = null;
@@ -219,6 +256,18 @@ function readAndroidClock() {
   });
 }
 
+function collectAllowlistedProperties(SystemProperties, keys) {
+  const out = Object.create(null);
+  keys.forEach(function (key) {
+    out[key] = safe(function () {
+      const value = SystemProperties.get(key, '');
+      const text = value === null ? '' : value.toString();
+      return text === '' ? 'TOKEN_VAZIO' : text;
+    }, 'TOKEN_VAZIO');
+  });
+  return out;
+}
+
 function collectJavaRuntime() {
   if (!Java.available) {
     return Promise.resolve({
@@ -242,6 +291,7 @@ function collectJavaRuntime() {
         const Runtime = Java.use('java.lang.Runtime');
         const Debug = Java.use('android.os.Debug');
         const System = Java.use('java.lang.System');
+        const SystemProperties = Java.use('android.os.SystemProperties');
         const runtime = Runtime.getRuntime();
 
         const abis = [];
@@ -252,6 +302,11 @@ function collectJavaRuntime() {
         } catch (_) {
           out.token_vazio.push('SUPPORTED_ABIS_UNAVAILABLE');
         }
+
+        out.platform_contract = collectAllowlistedProperties(
+          SystemProperties, SAFE_SYSTEM_PROPERTIES);
+        out.service_state = collectAllowlistedProperties(
+          SystemProperties, SAFE_SERVICE_PROPERTIES);
 
         out.identity = {
           sdk: Number(Version.SDK_INT.value),
@@ -277,7 +332,15 @@ function collectJavaRuntime() {
           java_heap_free_bytes: scalarNumberOrText(runtime.freeMemory()),
           java_heap_max_bytes: scalarNumberOrText(runtime.maxMemory()),
           native_heap_allocated_bytes:
-              scalarNumberOrText(Debug.getNativeHeapAllocatedSize())
+              scalarNumberOrText(Debug.getNativeHeapAllocatedSize()),
+          native_heap_size_bytes:
+              scalarNumberOrText(Debug.getNativeHeapSize()),
+          native_heap_free_bytes:
+              scalarNumberOrText(Debug.getNativeHeapFreeSize()),
+          process_pss_kb:
+              scalarNumberOrText(Debug.getPss()),
+          loaded_class_count:
+              scalarNumberOrText(Debug.getLoadedClassCount())
         };
       } catch (error) {
         out.status = 'TOKEN_VAZIO';
@@ -338,7 +401,8 @@ async function collectSnapshot(reason) {
     pointer_size: Process.pointerSize,
     page_size: Process.pageSize,
     platform: Process.platform,
-    java_identity: java.identity || 'TOKEN_VAZIO'
+    java_identity: java.identity || 'TOKEN_VAZIO',
+    platform_contract: java.platform_contract || 'TOKEN_VAZIO'
   };
 
   const platformKeyHint = fnv1a32Text(JSON.stringify(stableIdentity));
@@ -399,7 +463,8 @@ async function collectSnapshot(reason) {
       modules: modules,
       threads: threads,
       memory_ranges: ranges,
-      java_runtime: java.runtime || 'TOKEN_VAZIO'
+      java_runtime: java.runtime || 'TOKEN_VAZIO',
+      android_services: java.service_state || 'TOKEN_VAZIO'
     },
 
     semantics: {
