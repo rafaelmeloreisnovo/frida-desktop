@@ -1,63 +1,11 @@
 import { HyperMemoryRuntime } from './hypermemory-runtime';
 
-const DUMP_SCHEMA = 'rafaelia.android.runtime-stability/v1';
-const DIFF_SCHEMAS = new Set([
-  'rafaelia.android.runtime-stability-diff/v1',
-  'rafaelia.android.runtime-stability-diff/v2'
-]);
-const BRIDGE_SCHEMA = 'rafaelia.runtime-stability-hypermemory-bridge/v1';
+const DUMP_SCHEMA = 'rafaelia.android.runtime-stability/v2';
+const DIFF_SCHEMA = 'rafaelia.android.runtime-stability-diff/v2';
+const BRIDGE_SCHEMA = 'rafaelia.runtime-stability-hypermemory-bridge/v2';
 
-export interface RuntimeStabilityDumpLike {
-  schema: string;
-  capture_seq?: number;
-  reason?: string;
-  captured_epoch_ms?: number;
-  capture_provenance?: {
-    condition_id?: string;
-  };
-  platform_key?: string;
-  module_surface_key?: string;
-  recognition_key?: string;
-  stable_identity?: {
-    arch?: string;
-    pointer_size?: number;
-    page_size?: number;
-    platform?: string;
-  };
-  runtime_state?: {
-    pid?: number;
-    current_tid?: number;
-    debugger_attached?: boolean | string;
-    modules?: { count?: number };
-    threads?: { count?: number };
-    java_runtime?: {
-      process_start_elapsed_ms?: number | string;
-      process_age_ms?: number | string;
-      pss_kb?: number | string;
-    };
-  };
-  gaps?: Record<string, unknown>;
-}
-
-export interface RuntimeStabilityDiffLike {
-  schema: string;
-  classification?: string;
-  comparison_status?: string;
-  condition_id?: string;
-  condition_match?: boolean;
-  condition_control?: string;
-  boot_session_match?: boolean | string;
-  process_instance_match?: boolean | string;
-  platform_identity_match?: boolean | string;
-  module_surface_match?: boolean | string;
-  recognition_match?: boolean | string;
-  identity_changes?: Array<{ path?: string }>;
-  observer_changes?: Array<{ path?: string }>;
-  module_surface_changes?: Array<{ path?: string }>;
-  runtime_changes?: Array<{ path?: string }>;
-  hint_changes?: Array<{ path?: string }>;
-  baseline_observation_gaps?: string[];
-  candidate_observation_gaps?: string[];
+export interface RuntimeStabilityBridgeOptions {
+  sourceSha256?: string;
 }
 
 export interface RuntimeOutcomeEvent {
@@ -84,13 +32,35 @@ interface BridgeEnvelope {
   schema: typeof BRIDGE_SCHEMA;
   event_kind: 'STABILITY_DUMP' | 'STABILITY_DIFF' | 'OUTCOME';
   observed_at: number;
-  previous_payload_sha256: string | 'GENESIS';
+  previous_payload_sha256:
+    | string
+    | 'GENESIS'
+    | 'TOKEN_VAZIO_EVICTED_PREDECESSOR';
+  source_sha256: string;
   payload: Record<string, unknown>;
   claim_allowed: false;
 }
 
-function safeText(value: unknown, fallback = 'TOKEN_VAZIO'): string {
-  return typeof value === 'string' && value.length > 0 ? value : fallback;
+function asObject(value: unknown, label: string): Record<string, any> {
+  if (value === null || typeof value !== 'object' || Array.isArray(value)) {
+    throw new Error(`${label} must be a JSON object`);
+  }
+  return value as Record<string, any>;
+}
+
+function validateClaimBoundary(value: Record<string, any>): void {
+  if (value.claim_allowed !== false) {
+    throw new Error('runtime stability evidence must keep claim_allowed=false');
+  }
+}
+
+function normalizeSourceSha256(value?: string): string {
+  if (!value || value.trim() === '') return 'TOKEN_VAZIO';
+  const normalized = value.trim().toLowerCase();
+  if (!/^[0-9a-f]{64}$/.test(normalized)) {
+    throw new Error('sourceSha256 must contain exactly 64 hex characters');
+  }
+  return normalized;
 }
 
 function pathsOnly(value: unknown): string[] {
@@ -105,94 +75,157 @@ function pathsOnly(value: unknown): string[] {
     .sort();
 }
 
+function tokenGapKeys(value: unknown): string[] {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return [];
+  return Object.entries(value as Record<string, unknown>)
+    .filter(([, nested]) =>
+      typeof nested === 'string' && nested.startsWith('TOKEN_VAZIO'))
+    .map(([key]) => key)
+    .sort();
+}
+
 export class RuntimeStabilityHyperMemoryBridge {
   constructor(private readonly hyperMemory: HyperMemoryRuntime) {}
 
-  appendDump(dump: RuntimeStabilityDumpLike): number {
+  appendDump(
+    rawDump: unknown,
+    options: RuntimeStabilityBridgeOptions = {}
+  ): number {
+    const dump = asObject(rawDump, 'dump');
     if (dump.schema !== DUMP_SCHEMA) {
-      throw new Error('unsupported runtime stability dump schema: ' + dump.schema);
+      throw new Error(
+        `unsupported runtime stability dump schema: ${String(dump.schema)}`
+      );
     }
+    validateClaimBoundary(dump);
+
+    const runtime = asObject(dump.runtime_state ?? {}, 'runtime_state');
+    const modules = asObject(runtime.modules ?? {}, 'runtime_state.modules');
+    const threads = asObject(runtime.threads ?? {}, 'runtime_state.threads');
+    const javaRuntime =
+      runtime.java_runtime && typeof runtime.java_runtime === 'object'
+        ? runtime.java_runtime as Record<string, unknown>
+        : {};
+    const stable =
+      dump.stable_identity && typeof dump.stable_identity === 'object'
+        ? dump.stable_identity as Record<string, unknown>
+        : {};
+    const provenance =
+      dump.capture_provenance && typeof dump.capture_provenance === 'object'
+        ? dump.capture_provenance as Record<string, unknown>
+        : {};
+    const context =
+      dump.platform_context && typeof dump.platform_context === 'object'
+        ? dump.platform_context as Record<string, unknown>
+        : {};
+    const consistency =
+      dump.consistency && typeof dump.consistency === 'object'
+        ? dump.consistency as Record<string, unknown>
+        : {};
 
     const payload: Record<string, unknown> = {
       capture_seq: dump.capture_seq ?? 'TOKEN_VAZIO',
-      reason: safeText(dump.reason),
-      captured_epoch_ms: dump.captured_epoch_ms ?? 'TOKEN_VAZIO',
-      condition_id: safeText(dump.capture_provenance?.condition_id),
-      platform_key_hint: safeText(dump.platform_key),
-      module_surface_key_hint: safeText(dump.module_surface_key),
-      recognition_key_hint: safeText(dump.recognition_key),
-      compact_fingerprint_role: 'HINT_ONLY',
-      stable_identity: {
-        arch: dump.stable_identity?.arch ?? 'TOKEN_VAZIO',
-        pointer_size: dump.stable_identity?.pointer_size ?? 'TOKEN_VAZIO',
-        page_size: dump.stable_identity?.page_size ?? 'TOKEN_VAZIO',
-        platform: dump.stable_identity?.platform ?? 'TOKEN_VAZIO'
+      reason: dump.reason ?? 'TOKEN_VAZIO',
+      condition_id: provenance.condition_id ?? 'UNSPECIFIED',
+      instrumentation_identity:
+        dump.instrumentation_identity ?? 'TOKEN_VAZIO',
+      stable_identity_minimal: {
+        arch: stable.arch ?? 'TOKEN_VAZIO',
+        pointer_size: stable.pointer_size ?? 'TOKEN_VAZIO',
+        page_size: stable.page_size ?? 'TOKEN_VAZIO',
+        platform: stable.platform ?? 'TOKEN_VAZIO',
+        java_available: stable.java_available ?? 'TOKEN_VAZIO'
       },
-      runtime_state: {
-        pid: dump.runtime_state?.pid ?? 'TOKEN_VAZIO',
-        current_tid: dump.runtime_state?.current_tid ?? 'TOKEN_VAZIO',
-        debugger_attached:
-          dump.runtime_state?.debugger_attached ?? 'TOKEN_VAZIO',
-        module_count: dump.runtime_state?.modules?.count ?? 'TOKEN_VAZIO',
-        thread_count: dump.runtime_state?.threads?.count ?? 'TOKEN_VAZIO',
+      visibility: dump.visibility ?? 'TOKEN_VAZIO',
+      consistency: {
+        module_surface_stable_during_capture:
+          consistency.module_surface_stable_during_capture ?? 'TOKEN_VAZIO',
+        snapshot_atomic: consistency.snapshot_atomic ?? false
+      },
+      recognition: {
+        platform_key_hint: dump.platform_key_hint ?? 'TOKEN_VAZIO',
+        module_surface_key_hint:
+          dump.module_surface_key_hint ?? 'TOKEN_VAZIO',
+        recognition_key_hint: dump.recognition_key_hint ?? 'TOKEN_VAZIO',
+        compact_fingerprint_role: 'HINT_ONLY',
+        module_count: modules.count ?? 'TOKEN_VAZIO'
+      },
+      process_instance: {
+        pid: runtime.pid ?? 'TOKEN_VAZIO',
+        current_tid: runtime.current_tid ?? 'TOKEN_VAZIO',
         process_start_elapsed_ms:
-          dump.runtime_state?.java_runtime?.process_start_elapsed_ms ??
-          'TOKEN_VAZIO',
-        process_age_ms:
-          dump.runtime_state?.java_runtime?.process_age_ms ?? 'TOKEN_VAZIO',
-        pss_kb:
-          dump.runtime_state?.java_runtime?.pss_kb ?? 'TOKEN_VAZIO'
+          javaRuntime.process_start_elapsed_ms ?? 'TOKEN_VAZIO',
+        process_age_ms: javaRuntime.process_age_ms ?? 'TOKEN_VAZIO'
       },
-      unresolved_gap_keys: dump.gaps
-        ? Object.entries(dump.gaps)
-            .filter(([, value]) =>
-              typeof value === 'string' && value.startsWith('TOKEN_VAZIO')
-            )
-            .map(([key]) => key)
-            .sort()
-        : []
-    };
-
-    return this.appendEnvelope('STABILITY_DUMP', payload);
-  }
-
-  appendDiff(diff: RuntimeStabilityDiffLike): number {
-    if (!DIFF_SCHEMAS.has(diff.schema)) {
-      throw new Error('unsupported runtime stability diff schema: ' + diff.schema);
-    }
-
-    const payload: Record<string, unknown> = {
-      diff_schema: diff.schema,
-      classification: safeText(diff.classification),
-      comparison_status: safeText(diff.comparison_status),
-      condition_id: safeText(diff.condition_id),
-      condition_match: diff.condition_match ?? 'TOKEN_VAZIO',
-      condition_control: safeText(diff.condition_control),
-      boot_session_match: diff.boot_session_match ?? 'TOKEN_VAZIO',
-      process_instance_match:
-        diff.process_instance_match ?? 'TOKEN_VAZIO',
-      platform_identity_match:
-        diff.platform_identity_match ?? 'TOKEN_VAZIO',
-      module_surface_match: diff.module_surface_match ?? 'TOKEN_VAZIO',
-      recognition_match: diff.recognition_match ?? 'TOKEN_VAZIO',
-      identity_change_paths: pathsOnly(diff.identity_changes),
-      observer_change_paths: pathsOnly(diff.observer_changes),
-      module_surface_change_paths: pathsOnly(diff.module_surface_changes),
-      runtime_change_paths: pathsOnly(diff.runtime_changes),
-      hint_change_paths: pathsOnly(diff.hint_changes),
-      baseline_observation_gaps:
-        Array.isArray(diff.baseline_observation_gaps)
-          ? [...diff.baseline_observation_gaps].sort()
-          : [],
-      candidate_observation_gaps:
-        Array.isArray(diff.candidate_observation_gaps)
-          ? [...diff.candidate_observation_gaps].sort()
-          : [],
+      runtime_summary: {
+        debugger_attached: runtime.debugger_attached ?? 'TOKEN_VAZIO',
+        thread_count: threads.count ?? 'TOKEN_VAZIO',
+        process_pss_kb: javaRuntime.process_pss_kb ?? 'TOKEN_VAZIO',
+        native_heap_allocated_bytes:
+          javaRuntime.native_heap_allocated_bytes ?? 'TOKEN_VAZIO'
+      },
+      boot_session_sha256:
+        context.boot_session_sha256 ?? 'TOKEN_VAZIO',
+      unresolved_gap_keys: tokenGapKeys(dump.gaps),
+      raw_module_list_embedded: false,
+      java_build_identity_embedded: false,
       causality: 'NOT_INFERRED',
       stability_claim: 'NOT_PROMOTED'
     };
 
-    return this.appendEnvelope('STABILITY_DIFF', payload);
+    return this.appendEnvelope(
+      'STABILITY_DUMP',
+      payload,
+      normalizeSourceSha256(options.sourceSha256)
+    );
+  }
+
+  appendDiff(
+    rawDiff: unknown,
+    options: RuntimeStabilityBridgeOptions = {}
+  ): number {
+    const diff = asObject(rawDiff, 'diff');
+    if (diff.schema !== DIFF_SCHEMA) {
+      throw new Error(
+        `unsupported runtime stability diff schema: ${String(diff.schema)}`
+      );
+    }
+    validateClaimBoundary(diff);
+
+    const payload: Record<string, unknown> = {
+      classification: diff.classification ?? 'TOKEN_VAZIO',
+      comparison_status: diff.comparison_status ??
+        (diff.comparable === true ? 'COMPARABLE' : 'TOKEN_VAZIO'),
+      comparable: diff.comparable ?? 'TOKEN_VAZIO',
+      condition_id: diff.condition_id ?? 'UNSPECIFIED',
+      boot_session_match: diff.boot_session_match ?? 'TOKEN_VAZIO',
+      process_instance_match: diff.process_instance_match ?? 'TOKEN_VAZIO',
+      platform_identity_match:
+        diff.platform_identity_match ?? 'TOKEN_VAZIO',
+      instrumentation_match:
+        diff.instrumentation_match ?? 'TOKEN_VAZIO',
+      module_surface_match: diff.module_surface_match ?? 'TOKEN_VAZIO',
+      recognition_match: diff.recognition_match ?? 'TOKEN_VAZIO',
+      change_paths: {
+        visibility: pathsOnly(diff.visibility_changes),
+        instrumentation: pathsOnly(diff.instrumentation_changes),
+        identity: pathsOnly(diff.identity_changes),
+        modules: pathsOnly(diff.module_surface_changes),
+        runtime: pathsOnly(diff.runtime_changes),
+        process_instance: pathsOnly(diff.process_instance_changes),
+        observer_effect: pathsOnly(diff.observer_effect_changes),
+        compact_hints: pathsOnly(diff.compact_hint_changes)
+      },
+      causality: 'NOT_INFERRED',
+      stability_claim: 'NOT_PROMOTED',
+      before_after_values_embedded: false
+    };
+
+    return this.appendEnvelope(
+      'STABILITY_DIFF',
+      payload,
+      normalizeSourceSha256(options.sourceSha256)
+    );
   }
 
   appendOutcome(event: RuntimeOutcomeEvent): number {
@@ -206,45 +239,53 @@ export class RuntimeStabilityHyperMemoryBridge {
       throw new Error('outcome source is required');
     }
 
-    const payload: Record<string, unknown> = {
-      timestamp: event.timestamp,
-      layer: event.layer,
-      event_type: event.event_type.trim(),
-      source: event.source.trim(),
-      process_generation: event.process_generation ?? 'TOKEN_VAZIO',
-      thread_id: event.thread_id ?? 'TOKEN_VAZIO',
-      evidence_ref: event.evidence_ref ?? 'TOKEN_VAZIO',
-      outcome: event.outcome ?? 'OBSERVED',
-      causal_role: 'OBSERVATION_ONLY'
-    };
-
-    return this.appendEnvelope('OUTCOME', payload);
+    return this.appendEnvelope(
+      'OUTCOME',
+      {
+        timestamp: event.timestamp,
+        layer: event.layer,
+        event_type: event.event_type.trim(),
+        source: event.source.trim(),
+        process_generation: event.process_generation ?? 'TOKEN_VAZIO',
+        thread_id: event.thread_id ?? 'TOKEN_VAZIO',
+        evidence_ref: event.evidence_ref ?? 'TOKEN_VAZIO',
+        outcome: event.outcome ?? 'OBSERVED',
+        causal_role: 'OBSERVATION_ONLY'
+      },
+      'TOKEN_VAZIO'
+    );
   }
 
   private appendEnvelope(
     eventKind: BridgeEnvelope['event_kind'],
-    payload: Record<string, unknown>
+    payload: Record<string, unknown>,
+    sourceSha256: string
   ): number {
     const previous = this.hyperMemory
       .readRecords()
-      .filter(record => record.kind === 'runtime-causal-event.v1')
+      .filter(record => record.kind === 'runtime-causal-event.v2')
       .slice(-1)[0];
 
     const stats = this.hyperMemory.getStats();
     const predecessor = previous?.sha256 ??
-      (stats.evictions > 0 ? 'TOKEN_VAZIO_EVICTED_PREDECESSOR' : 'GENESIS');
+      (stats.evictions > 0
+        ? 'TOKEN_VAZIO_EVICTED_PREDECESSOR'
+        : 'GENESIS');
 
     const envelope: BridgeEnvelope = {
       schema: BRIDGE_SCHEMA,
       event_kind: eventKind,
       observed_at: Date.now(),
       previous_payload_sha256: predecessor,
+      source_sha256: sourceSha256,
       payload,
       claim_allowed: false
     };
 
-    return this.hyperMemory.appendJson('runtime-causal-event.v1', envelope);
+    return this.hyperMemory.appendJson('runtime-causal-event.v2', envelope);
   }
 }
 
-export { BRIDGE_SCHEMA as RUNTIME_STABILITY_HYPERMEMORY_BRIDGE_SCHEMA };
+export {
+  BRIDGE_SCHEMA as RUNTIME_STABILITY_HYPERMEMORY_BRIDGE_SCHEMA
+};
