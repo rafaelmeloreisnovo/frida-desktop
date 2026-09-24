@@ -49,6 +49,27 @@ def compare_paths(
     return changes
 
 
+
+def module_surface(data: dict[str, Any]) -> Any:
+    """Return the authoritative module recognition surface without ASLR bases."""
+    modules = get_path(data, "runtime_state.modules.modules")
+    if modules == "TOKEN_VAZIO":
+        return "TOKEN_VAZIO"
+    if not isinstance(modules, list):
+        return "TOKEN_VAZIO"
+
+    surface: list[dict[str, Any]] = []
+    for row in modules:
+        if not isinstance(row, dict):
+            return "TOKEN_VAZIO"
+        surface.append({
+            "name": row.get("name", "TOKEN_VAZIO"),
+            "size": row.get("size", "TOKEN_VAZIO"),
+        })
+
+    return sorted(surface, key=lambda row: (str(row["name"]), str(row["size"])))
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("baseline", type=Path)
@@ -85,6 +106,14 @@ def main() -> int:
 
     identity_changes = compare_paths(baseline, candidate, identity_paths)
     module_changes = compare_paths(baseline, candidate, module_paths)
+    baseline_module_surface = module_surface(baseline)
+    candidate_module_surface = module_surface(candidate)
+    if baseline_module_surface != candidate_module_surface:
+        module_changes.append({
+            "path": "runtime_state.modules.modules[name,size]",
+            "before": baseline_module_surface,
+            "after": candidate_module_surface,
+        })
     runtime_changes = compare_paths(baseline, candidate, runtime_paths)
 
     if identity_changes:
