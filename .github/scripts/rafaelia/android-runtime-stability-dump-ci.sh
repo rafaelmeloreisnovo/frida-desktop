@@ -31,6 +31,7 @@ assert profile['capture_mode']['periodic_polling'] is False
 assert profile['capture_mode']['active_mutation'] is False
 assert 'ASLR module bases' in profile['recognition']['excludes']
 assert profile['privacy']['module_paths'] == 'not collected'
+assert 'recognition_surface' in profile['semantic_layers']
 PY
 
 if grep -En 'Build\.SERIAL|ANDROID_ID|TelephonyManager|SubscriberId|SimSerial|ClipboardManager|getText\(|readUtf8String|readByteArray|Memory\.read|enumerateClasses|module\.path'     agents/android-runtime-stability-dump.js; then
@@ -44,14 +45,15 @@ cat > "$BUILD_DIR/baseline.json" <<'JSON'
     "pointer_size": 4,
     "page_size": 4096,
     "platform": "linux",
-    "module_set_fingerprint": "aaaa1111",
     "java_identity": {"sdk": 29}
   },
-  "recognition_key": "bbbb2222",
+  "platform_key": "plat1111",
+  "module_surface_key": "mod11111",
+  "recognition_key": "rec11111",
   "runtime_state": {
     "debugger_attached": true,
     "code_signing_policy": "optional",
-    "modules": {"count": 10},
+    "modules": {"count": 10, "stable_set_fingerprint": "mod11111"},
     "threads": {"count": 4, "states": {"waiting": 4}},
     "memory_ranges": {"rw-": {"count": 2, "bytes": 8192}},
     "java_runtime": {"java_heap_total_bytes": 100}
@@ -66,20 +68,27 @@ python3 - <<'PY'
 import json
 from pathlib import Path
 
-base = json.loads(Path('build/android-runtime-stability-dump/baseline.json').read_text())
+root = Path('build/android-runtime-stability-dump')
+base = json.loads((root/'baseline.json').read_text())
+
 runtime = json.loads(json.dumps(base))
 runtime['runtime_state']['threads']['count'] = 5
-Path('build/android-runtime-stability-dump/runtime.json').write_text(
-    json.dumps(runtime)
-)
+(root/'runtime.json').write_text(json.dumps(runtime))
+
+modules = json.loads(json.dumps(base))
+modules['module_surface_key'] = 'mod22222'
+modules['runtime_state']['modules']['count'] = 11
+modules['runtime_state']['modules']['stable_set_fingerprint'] = 'mod22222'
+(root/'modules.json').write_text(json.dumps(modules))
+
 identity = json.loads(json.dumps(base))
-identity['recognition_key'] = 'cccc3333'
-Path('build/android-runtime-stability-dump/identity.json').write_text(
-    json.dumps(identity)
-)
+identity['platform_key'] = 'plat2222'
+identity['stable_identity']['arch'] = 'arm64'
+(root/'identity.json').write_text(json.dumps(identity))
 PY
 
 python3 tools/runtime-stability-diff.py   "$BUILD_DIR/baseline.json" "$BUILD_DIR/runtime.json"   --out "$BUILD_DIR/runtime-drift.json"
+python3 tools/runtime-stability-diff.py   "$BUILD_DIR/baseline.json" "$BUILD_DIR/modules.json"   --out "$BUILD_DIR/module-drift.json"
 python3 tools/runtime-stability-diff.py   "$BUILD_DIR/baseline.json" "$BUILD_DIR/identity.json"   --out "$BUILD_DIR/identity-drift.json"
 
 python3 - <<'PY'
@@ -89,6 +98,7 @@ from pathlib import Path
 root = Path('build/android-runtime-stability-dump')
 assert json.loads((root/'no-drift.json').read_text())['classification'] == 'NO_OBSERVED_DRIFT'
 assert json.loads((root/'runtime-drift.json').read_text())['classification'] == 'RUNTIME_DRIFT'
+assert json.loads((root/'module-drift.json').read_text())['classification'] == 'MODULE_SURFACE_DRIFT'
 assert json.loads((root/'identity-drift.json').read_text())['classification'] == 'IDENTITY_DRIFT'
 PY
 
@@ -109,6 +119,7 @@ receipt = {
     'privacy_guard': 'PASS',
     'diff_no_drift': 'PASS',
     'diff_runtime_drift': 'PASS',
+    'diff_module_surface_drift': 'PASS',
     'diff_identity_drift': 'PASS',
     'frida_device_execution': 'TOKEN_VAZIO',
     'physical_stability': 'TOKEN_VAZIO',
