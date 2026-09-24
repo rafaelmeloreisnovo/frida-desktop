@@ -85,6 +85,28 @@ The dump explicitly refuses to infer:
 
 Those require independent sources.
 
+## Observer and clock context
+
+The observer is part of the evidence surface. Each agent snapshot records:
+
+- approximate wall-clock capture duration;
+- Frida version when exposed by the runtime;
+- instrumentation presence;
+- explicit `POSSIBLE_NOT_QUANTIFIED` observer effect.
+
+When Java is available, the dump also carries device elapsed time and an
+approximate boot epoch derived as `wall_epoch - elapsed_time`. This is useful
+for cohorting snapshots across reboot boundaries, but it is not a trusted clock
+authority.
+
+Memory-range summaries cover all eight protection combinations from `---`
+through `rwx`. Rare states are observations only; they are not automatically
+classified as defects.
+
+When the append-only controller writes the dump, it adds SHA-256 bindings for
+the agent and controller source files so an analysis can distinguish target
+drift from observer-version drift.
+
 ## Privacy boundary
 
 The agent does not collect:
@@ -162,6 +184,36 @@ Possible classifications:
 - `IDENTITY_DRIFT`
 
 None of these establishes root cause.
+
+## Repeated baseline and falsifiability
+
+For stability analysis beyond pairwise diff, use at least three comparable
+snapshots:
+
+```sh
+python3 tools/runtime-stability-baseline.py build \
+  dump-1.json dump-2.json dump-3.json \
+  --out baseline.json
+
+python3 tools/runtime-stability-baseline.py assess \
+  baseline.json candidate.json \
+  --out assessment.json
+```
+
+Numeric metrics use median and MAD. A robust outlier remains an observation,
+not a causal claim.
+
+Evidence promotion is validated separately:
+
+```sh
+python3 tools/runtime-stability-evidence-gate.py packet.json --out result.json
+```
+
+The monotonic ladder is:
+`OBSERVED -> REPEATED -> ASSOCIATED -> CAUSAL_CANDIDATE -> CAUSAL_SUPPORTED`.
+
+See `docs/runtime-stability-falsifiability.md` for falsifiers and threats to
+validity.
 
 ## HyperMemory bridge
 
