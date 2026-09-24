@@ -118,6 +118,34 @@ snapshot(reason)
 Periodic polling is deliberately not built into V1; the controller decides
 when a new observation is materially useful.
 
+
+## Append-only dump file
+
+For a local Gadget endpoint in Termux, the controller can capture the initial
+sanitized agent snapshot directly into an append-only file:
+
+```sh
+python3 tools/capture-runtime-stability-dump.py \
+  --endpoint 127.0.0.1:27042 \
+  --process Gadget
+```
+
+The default destination is:
+
+```text
+~/.local/state/rafaelia/frida-runtime-stability/
+  runtime-stability-<UTC>.json
+  runtime-stability-<UTC>.json.sha256
+```
+
+Files are created with mode `0600`, never overwritten, flushed with `fsync`,
+and accompanied by SHA-256. The process name or PID supplied only to locate the
+authorized target is not persisted by the controller as identity metadata.
+
+The file is intentionally a neutral observation packet. It can be attached to
+a crash, performance, compatibility or HyperMemory investigation without
+claiming that any observed drift caused a failure.
+
 ## Comparison
 
 Save two emitted dump objects as JSON and run:
