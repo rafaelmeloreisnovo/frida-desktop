@@ -125,6 +125,13 @@
       "gate": "STATIC_CONTRACT+PHYSICAL_RECEIPT"
     },
     {
+      "id": "H17_FRIDA_CLOAK_ACCOUNTING",
+      "claim": "Frida process introspection is not treated as a complete measure of instrumentation overhead because cloaked Frida resources may be excluded.",
+      "positive_control": "Dump records Frida heap size and collection duration separately and declares Cloak semantics.",
+      "falsifier": "Thread/range census is used to claim zero or complete observer overhead.",
+      "gate": "STATIC_CONTRACT+PHYSICAL_CONTROL_RUN"
+    },
+    {
       "id": "H18_OPTIONAL_SOURCE_ISOLATION",
       "claim": "Failure to access optional Android SystemProperties must not invalidate independent Java/ART heap and build observations.",
       "positive_control": "SystemProperties unavailable is represented by TOKEN_VAZIO while the rest of the Java collector remains typed independently.",
