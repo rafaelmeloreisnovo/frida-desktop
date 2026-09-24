@@ -26,7 +26,8 @@
     "wall_clock_recorded": true,
     "monotonic_clock_recorded_when_java_available": true,
     "observer_duration_recorded": true,
-    "observer_effect": "MEASURED_NOT_ASSUMED_ZERO"
+    "observer_effect": "MEASURED_NOT_ASSUMED_ZERO",
+    "frida_cloak_semantics": "Process introspection may exclude Frida-cloaked runtime resources; observer cost is therefore tracked separately."
   },
   "semantic_layers": {
     "stable_identity": [
@@ -177,6 +178,11 @@
       "status": "IMPLEMENTED_HOSTED_BRIDGE",
       "rationale": "V2 dump/diff evidence is projected into bounded HyperMemory context events without embedding the full module list or promoting causality",
       "physical_bridge": "TOKEN_VAZIO_NOT_EXECUTED"
+    },
+    "application_exit_info": {
+      "status": "UNAVAILABLE_ON_CURRENT_TARGET",
+      "rationale": "Android historical exit-reason API starts at API30; current physical target is API29.",
+      "current_fallback": "independent lmkd/kernel/tombstone/log evidence"
     }
   },
   "token_vazio": [
