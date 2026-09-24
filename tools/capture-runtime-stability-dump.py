@@ -14,8 +14,6 @@ from pathlib import Path
 import threading
 from typing import Any
 
-import frida
-
 SCHEMA = "rafaelia.android.runtime-stability/v2"
 CHANNEL = "rafaelia.android.runtime.stability"
 DEFAULT_MAX_BYTES = 8 * 1024 * 1024
