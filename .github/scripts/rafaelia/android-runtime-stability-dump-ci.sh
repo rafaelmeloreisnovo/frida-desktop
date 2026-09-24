@@ -17,7 +17,7 @@ rafaelia_need_cmd node
 rafaelia_need_cmd python3
 
 node --check agents/android-runtime-stability-dump.js
-python3 -m py_compile tools/runtime-stability-diff.py tools/capture-runtime-stability-dump.py tools/runtime-stability-baseline.py tools/runtime-stability-evidence-gate.py
+python3 -m py_compile tools/runtime-stability-diff.py tools/capture-runtime-stability-dump.py tools/runtime_stability_storage.py tools/runtime-stability-baseline.py tools/runtime-stability-evidence-gate.py
 
 python3 - <<'PY'
 import json
@@ -44,6 +44,94 @@ PY
 if grep -En 'Build\.SERIAL|ANDROID_ID|TelephonyManager|SubscriberId|SimSerial|ClipboardManager|getText\(|readUtf8String|readByteArray|Memory\.read|enumerateClasses|module\.path'     agents/android-runtime-stability-dump.js; then
   rafaelia_die 'forbidden privacy/content surface detected'
 fi
+
+mkdir -p "$BUILD_DIR/storage-pure-tests"
+PYTHONPATH="$ROOT/tools" python3 - <<'PY'
+import math
+import tempfile
+from pathlib import Path
+
+from runtime_stability_storage import (
+    strong_fingerprints,
+    validate_directory_integrity,
+    write_append_only,
+)
+
+def sample(base):
+    return {
+        "stable_identity": {"arch": "arm", "pointer_size": 4},
+        "runtime_state": {
+            "modules": {
+                "modules": [
+                    {"name": "liba.so", "size": 4096, "base": base},
+                    {"name": "libb.so", "size": 8192, "base": "0x2000"},
+                ]
+            }
+        },
+    }
+
+a = strong_fingerprints(sample("0x1000"))
+b = strong_fingerprints(sample("0x9000"))
+assert a["module_surface_sha256"] == b["module_surface_sha256"]
+assert a["stable_identity_sha256"] == b["stable_identity_sha256"]
+
+with tempfile.TemporaryDirectory() as td:
+    root = Path(td)
+    path, digest = write_append_only(
+        root,
+        sample("0x1000"),
+        max_dumps=4,
+        max_dir_bytes=1024 * 1024,
+        min_free_bytes=0,
+    )
+    assert path.exists()
+    assert Path(str(path) + ".sha256").exists()
+    validate_directory_integrity(root)
+    path.write_text('{"tampered":true}\n', encoding="utf-8")
+    try:
+        validate_directory_integrity(root)
+    except RuntimeError:
+        pass
+    else:
+        raise AssertionError("tampered dump was accepted")
+
+with tempfile.TemporaryDirectory() as td:
+    root = Path(td)
+    write_append_only(
+        root,
+        sample("0x1000"),
+        max_dumps=1,
+        max_dir_bytes=1024 * 1024,
+        min_free_bytes=0,
+    )
+    try:
+        write_append_only(
+            root,
+            sample("0x1000"),
+            max_dumps=1,
+            max_dir_bytes=1024 * 1024,
+            min_free_bytes=0,
+        )
+    except RuntimeError:
+        pass
+    else:
+        raise AssertionError("retention overflow was accepted")
+
+with tempfile.TemporaryDirectory() as td:
+    root = Path(td)
+    try:
+        write_append_only(
+            root,
+            {"bad": math.nan},
+            max_dumps=4,
+            max_dir_bytes=1024 * 1024,
+            min_free_bytes=0,
+        )
+    except ValueError:
+        pass
+    else:
+        raise AssertionError("NaN was serialized into strict JSON")
+PY
 
 cat > "$BUILD_DIR/baseline.json" <<'JSON'
 {
@@ -334,7 +422,7 @@ assert causal_fail['gate'] == 'FAIL'
 assert causal_fail['causal_claim_allowed'] is False
 PY
 
-rafaelia_write_sha256_manifest "$EVIDENCE_DIR/SOURCE_SHA256SUMS.txt"   agents/android-runtime-stability-dump.js   profiles/android-runtime-stability-dump.v1.json   profiles/runtime-stability-methodology.v1.json   tools/runtime-stability-diff.py   tools/capture-runtime-stability-dump.py   tools/runtime-stability-baseline.py   tools/runtime-stability-evidence-gate.py   docs/android-runtime-stability-dump.md   docs/runtime-stability-falsifiability.md
+rafaelia_write_sha256_manifest "$EVIDENCE_DIR/SOURCE_SHA256SUMS.txt"   agents/android-runtime-stability-dump.js   profiles/android-runtime-stability-dump.v1.json   profiles/runtime-stability-methodology.v1.json   tools/runtime-stability-diff.py   tools/capture-runtime-stability-dump.py   tools/runtime_stability_storage.py   tools/runtime-stability-baseline.py   tools/runtime-stability-evidence-gate.py   docs/android-runtime-stability-dump.md   docs/runtime-stability-falsifiability.md
 
 GITHUB_REPOSITORY="${GITHUB_REPOSITORY:-LOCAL}" GITHUB_RUN_ID="${GITHUB_RUN_ID:-0}" GITHUB_SHA="${GITHUB_SHA:-LOCAL}" python3 - <<'PY'
 import json
@@ -369,6 +457,11 @@ receipt = {
     'compact_hint_non_authority': 'PASS',
     'observer_drift_separated': 'PASS',
     'atomic_publication_contract_static': 'PASS',
+    'storage_atomic_publish_executed': 'PASS',
+    'storage_tamper_detection_executed': 'PASS',
+    'storage_retention_bound_executed': 'PASS',
+    'storage_strict_json_executed': 'PASS',
+    'strong_fingerprint_aslr_exclusion_executed': 'PASS',
     'frida_device_execution': 'TOKEN_VAZIO',
     'physical_stability': 'TOKEN_VAZIO',
     'causal_attribution': 'TOKEN_VAZIO',
