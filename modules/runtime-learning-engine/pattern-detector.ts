@@ -60,13 +60,15 @@ export class PatternDetectorImpl implements PatternDetector {
   }
 
   async shouldApplyFix(pattern: BugPattern): Promise<boolean> {
+    const actionability = pattern.actionability ?? 'AUTO_FIX_ELIGIBLE';
     const shouldApply =
+      actionability === 'AUTO_FIX_ELIGIBLE' &&
       pattern.confidence >= this.confidence_threshold &&
       pattern.occurrences >= this.min_occurrences;
 
     console.log(
       `[PatternDetector] Should apply fix for ${pattern.pattern_id}: ${shouldApply} ` +
-      `(confidence: ${pattern.confidence.toFixed(2)}, occurrences: ${pattern.occurrences})`
+      `(confidence: ${pattern.confidence.toFixed(2)}, occurrences: ${pattern.occurrences}, actionability: ${actionability})`
     );
 
     return shouldApply;
@@ -76,6 +78,9 @@ export class PatternDetectorImpl implements PatternDetector {
     const first = cluster[0];
     const timeSpan = cluster[cluster.length - 1].timestamp - cluster[0].timestamp;
     const confidence = calculateConfidence(cluster.length, timeSpan);
+    const actionability = cluster.some(event => event.actionability === 'OBSERVATION_ONLY')
+      ? 'OBSERVATION_ONLY'
+      : 'AUTO_FIX_ELIGIBLE';
 
     if (confidence < this.confidence_threshold) {
       return null;
@@ -91,6 +96,7 @@ export class PatternDetectorImpl implements PatternDetector {
       exception_type: first.exception_type,
       occurrences: cluster.length,
       confidence,
+      actionability,
       last_seen: cluster[cluster.length - 1].timestamp,
       suggested_fix: this.generateFixSuggestion(first),
       fix_strategy: strategy

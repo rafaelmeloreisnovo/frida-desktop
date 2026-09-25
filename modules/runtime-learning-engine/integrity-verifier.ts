@@ -1,11 +1,18 @@
 import * as fs from 'fs';
 import * as path from 'path';
-import { generateHash } from './utils';
+import * as crypto from 'crypto';
+
+const INTEGRITY_HASH_ALGORITHM = 'sha256' as const;
+
+function calculateIntegrityHash(data: string): string {
+  return crypto.createHash(INTEGRITY_HASH_ALGORITHM).update(data, 'utf8').digest('hex');
+}
 
 export interface IntegrityCheck {
   timestamp: number;
   file: string;
   hash: string;
+  hash_algorithm?: typeof INTEGRITY_HASH_ALGORITHM;
   size: number;
   status: 'valid' | 'invalid' | 'missing';
   error?: string;
@@ -76,6 +83,7 @@ export class IntegrityVerifier {
           timestamp: Date.now(),
           file: filename,
           hash: '',
+          hash_algorithm: INTEGRITY_HASH_ALGORITHM,
           size: 0,
           status: 'missing'
         };
@@ -83,7 +91,7 @@ export class IntegrityVerifier {
 
       const data = fs.readFileSync(filepath, 'utf-8');
       const size = data.length;
-      const hash = generateHash(data);
+      const hash = calculateIntegrityHash(data);
 
       const isValid = await this.validateFileFormat(filepath, data);
 
@@ -91,6 +99,7 @@ export class IntegrityVerifier {
         timestamp: Date.now(),
         file: filename,
         hash,
+        hash_algorithm: INTEGRITY_HASH_ALGORITHM,
         size,
         status: isValid ? 'valid' : 'invalid',
         error: isValid ? undefined : 'File format validation failed'
@@ -100,6 +109,7 @@ export class IntegrityVerifier {
         timestamp: Date.now(),
         file: filename,
         hash: '',
+        hash_algorithm: INTEGRITY_HASH_ALGORITHM,
         size: 0,
         status: 'invalid',
         error: String(e)
@@ -196,7 +206,7 @@ export class IntegrityVerifier {
       }
 
       const data = fs.readFileSync(filepath, 'utf-8');
-      const actual = generateHash(data);
+      const actual = calculateIntegrityHash(data);
 
       return {
         match: actual === expectedHash,

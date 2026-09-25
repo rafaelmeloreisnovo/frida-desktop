@@ -8,6 +8,45 @@ export interface OptimizationConfig {
   preferred_strategy: 'try_catch_with_fallback' | 'monkey_patch_from_journal' | 'component_restart';
 }
 
+export interface OptimizationSummaryLike {
+  success_rate: number;
+  rollback_rate: number;
+}
+
+export interface OptimizationRiskAdjustment {
+  confidence_delta: number;
+  min_occurrences_delta: number;
+  reasons: string[];
+}
+
+export function deriveOptimizationRiskAdjustment(
+  summary: OptimizationSummaryLike,
+  config: OptimizationConfig
+): OptimizationRiskAdjustment {
+  let confidenceDelta = 0;
+  let minOccurrencesDelta = 0;
+  const reasons: string[] = [];
+
+  if (summary.success_rate < 70) {
+    confidenceDelta = Math.max(confidenceDelta, 0.05);
+    reasons.push('LOW_SUCCESS_RATE_CONSERVATIVE_RATCHET');
+    if (summary.success_rate < 60) {
+      minOccurrencesDelta = Math.max(minOccurrencesDelta, 1);
+    }
+  } else if (summary.success_rate > 90) {
+    reasons.push('HIGH_SUCCESS_RATE_OBSERVED_NO_AUTOMATIC_RELAXATION');
+  }
+
+  if (summary.rollback_rate > 30) {
+    confidenceDelta = Math.max(confidenceDelta, 0.10);
+    minOccurrencesDelta = Math.max(minOccurrencesDelta, 1);
+    reasons.push('HIGH_ROLLBACK_RATE_CONSERVATIVE_RATCHET');
+  }
+
+  if (config.confidence_threshold >= 0.99) confidenceDelta = 0;
+  return { confidence_delta: confidenceDelta, min_occurrences_delta: minOccurrencesDelta, reasons };
+}
+
 export interface OptimizationLog {
   timestamp: number;
   type: 'threshold_adjustment' | 'min_occurrences_adjustment' | 'strategy_change';
@@ -71,20 +110,21 @@ export class AutoOptimizer {
 
     console.log('[AutoOptimizer] Evaluating metrics for optimization...');
 
-    if (summary.success_rate < 70) {
-      console.log('[AutoOptimizer] Low success rate detected, reducing confidence threshold');
-      await this.adjustConfidenceThreshold(-0.05);
-    } else if (summary.success_rate > 90) {
-      console.log('[AutoOptimizer] High success rate, increasing confidence threshold');
-      await this.adjustConfidenceThreshold(0.05);
+    const riskAdjustment = deriveOptimizationRiskAdjustment(summary, this.config);
+    if (riskAdjustment.confidence_delta > 0) {
+      console.warn(
+        '[AutoOptimizer] Uncertainty increased; raising confidence threshold instead of relaxing actuation'
+      );
+      await this.adjustConfidenceThreshold(
+        riskAdjustment.confidence_delta,
+        riskAdjustment.reasons.join('+')
+      );
     }
-
-    if (summary.success_rate < 60 && this.config.min_occurrences_before_fix > 1) {
-      console.log('[AutoOptimizer] Reducing min_occurrences to catch issues faster');
-      await this.adjustMinOccurrences(-1);
-    } else if (summary.success_rate > 95 && this.config.min_occurrences_before_fix < 2) {
-      console.log('[AutoOptimizer] Increasing min_occurrences for more confident patterns');
-      await this.adjustMinOccurrences(1);
+    if (riskAdjustment.min_occurrences_delta > 0) {
+      await this.adjustMinOccurrences(
+        riskAdjustment.min_occurrences_delta,
+        riskAdjustment.reasons.join('+')
+      );
     }
 
     const successful = this.feedbackCollector.getHighestSuccessPatterns(5);
@@ -92,15 +132,10 @@ export class AutoOptimizer {
       await this.optimizeStrategyForPatterns(successful);
     }
 
-    if (summary.rollback_rate > 30) {
-      console.warn('[AutoOptimizer] High rollback rate detected, reducing confidence threshold');
-      await this.adjustConfidenceThreshold(-0.1);
-    }
-
     return { ...this.config };
   }
 
-  private async adjustConfidenceThreshold(delta: number): Promise<void> {
+  private async adjustConfidenceThreshold(delta: number, reason?: string): Promise<void> {
     const oldThreshold = this.config.confidence_threshold;
     const newThreshold = Math.max(0.1, Math.min(0.99, oldThreshold + delta));
 
@@ -112,7 +147,7 @@ export class AutoOptimizer {
         type: 'threshold_adjustment',
         previous_value: oldThreshold,
         new_value: newThreshold,
-        reason: delta > 0 ? 'Success rate high' : 'Success rate low',
+        reason: reason ?? (delta > 0 ? 'Conservative uncertainty ratchet' : 'Manual threshold relaxation'),
         metrics: this.feedbackCollector.getEngineMetrics()
       };
 
@@ -125,7 +160,7 @@ export class AutoOptimizer {
     }
   }
 
-  private async adjustMinOccurrences(delta: number): Promise<void> {
+  private async adjustMinOccurrences(delta: number, reason?: string): Promise<void> {
     const oldMin = this.config.min_occurrences_before_fix;
     const newMin = Math.max(1, oldMin + delta);
 
@@ -137,7 +172,7 @@ export class AutoOptimizer {
         type: 'min_occurrences_adjustment',
         previous_value: oldMin,
         new_value: newMin,
-        reason: delta > 0 ? 'High confidence' : 'Need faster detection',
+        reason: reason ?? (delta > 0 ? 'Conservative uncertainty ratchet' : 'Manual occurrence relaxation'),
         metrics: this.feedbackCollector.getEngineMetrics()
       };
 

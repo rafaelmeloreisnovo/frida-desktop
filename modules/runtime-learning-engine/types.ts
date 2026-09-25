@@ -5,6 +5,7 @@ export type TestState = 'PASS' | 'FAIL' | 'SKIPPED';
 export type WatchdogState = 'STABLE' | 'OBSERVE' | 'DUMP' | 'FAILSAFE';
 export type Severity = 'critical' | 'high' | 'medium' | 'low' | 'info' | 'warning';
 export type RollbackCapability = 'hook_restore' | 'memory_journal' | 'non_reversible' | 'token_vazio';
+export type Actionability = 'AUTO_FIX_ELIGIBLE' | 'OBSERVATION_ONLY';
 
 export interface BugEvent {
   id: string;
@@ -15,6 +16,7 @@ export interface BugEvent {
   exception_type?: string;
   stack_hash: string;
   severity: Severity;
+  actionability?: Actionability;
   status: EventStatus;
   thread_id?: number;
   process_id?: number;
@@ -28,6 +30,7 @@ export interface BugPattern {
   exception_type?: string;
   occurrences: number;
   confidence: number;
+  actionability?: Actionability;
   last_seen: number;
   suggested_fix: string;
   fix_strategy: FixStrategy;

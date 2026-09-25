@@ -152,6 +152,7 @@ export class RuntimeLearningEngine {
       exception_type: event.exception_type,
       stack_hash: event.stack_hash || '',
       severity: event.severity || 'medium',
+      actionability: event.actionability ?? 'AUTO_FIX_ELIGIBLE',
       status: 'new',
       thread_id: event.thread_id,
       process_id: event.process_id
