@@ -51,7 +51,7 @@ public final class MainActivity extends Activity {
     private static final int LEARNING_FROZEN = 5;
 
     private static final String[] LEARNING_MODE_LABELS = new String[] {
-            "OFF — só leitura; não grava",
+            "OFF — mutações de learning desabilitadas",
             "OBSERVE — medir e gravar observações reais",
             "LEARN_SHADOW — aprender sem agir",
             "PREDICT_SHADOW — prever e continuar aprendendo",
@@ -114,6 +114,69 @@ public final class MainActivity extends Activity {
             return LEARNING_MODE_LABELS[mode];
         }
         return "TOKEN_VAZIO";
+    }
+
+    private static boolean snapshotHasNoTrainingSamples(String snapshot) {
+        return snapshot != null
+                && snapshot.contains("training observations: 0")
+                && snapshot.contains("training predictions: 0");
+    }
+
+    private static boolean snapshotHasNoValidationSamples(String snapshot) {
+        if (snapshot == null) return false;
+        int marker = snapshot.indexOf("VALIDATE_SHADOW");
+        if (marker < 0) return false;
+        String validation = snapshot.substring(marker);
+        return validation.contains("  observations: 0")
+                && validation.contains("  predictions: 0");
+    }
+
+    /**
+     * Evidence-preserving presentation layer.
+     *
+     * The native snapshot remains the source observation. This method only prevents
+     * undefined ratios/percentiles from being displayed as measured zero when the
+     * denominator/sample count is zero.
+     */
+    private static String normalizeSnapshotEvidence(String snapshot) {
+        if (snapshot == null) return "TOKEN_VAZIO";
+        String normalized = snapshot;
+
+        if (snapshotHasNoTrainingSamples(normalized)) {
+            normalized = normalized.replace(
+                    "  training error: 0 ppm",
+                    "  training error: TOKEN_VAZIO / NO_SAMPLES");
+            normalized = normalized.replace(
+                    "  learning overhead p50/p95/p99: 0 / 0 / 0 ns",
+                    "  learning overhead p50/p95/p99: TOKEN_VAZIO / NO_SAMPLES");
+        }
+
+        if (snapshotHasNoValidationSamples(normalized)) {
+            int marker = normalized.indexOf("VALIDATE_SHADOW");
+            String prefix = normalized.substring(0, marker);
+            String validation = normalized.substring(marker);
+            validation = validation.replace(
+                    "  model frozen: NO",
+                    "  model state: NO_MODEL\n  model frozen: TOKEN_VAZIO / NO_MODEL");
+            validation = validation.replace(
+                    "  error: 0 ppm",
+                    "  error: TOKEN_VAZIO / NO_SAMPLES");
+            normalized = prefix + validation;
+        }
+
+        return normalized;
+    }
+
+    private static String learningEvidenceState(String snapshot) {
+        return snapshotHasNoTrainingSamples(snapshot)
+                ? "NOT_RUN"
+                : "OBSERVED_UNPROMOTED";
+    }
+
+    private static String validationEvidenceState(String snapshot) {
+        return snapshotHasNoValidationSamples(snapshot)
+                ? "NOT_RUN"
+                : "OBSERVED_UNPROMOTED";
     }
 
     private String gateText() {
@@ -220,9 +283,14 @@ public final class MainActivity extends Activity {
     }
 
     private String buildOperatorReceipt(String snapshot, String diagnosticState) {
+        String evidenceSnapshot = normalizeSnapshotEvidence(snapshot);
         StringBuilder out = new StringBuilder();
         out.append("RAFAELIA_FRIDA_LAB_RECEIPT_V1\n");
+        out.append("receipt_schema=1.1\n");
         out.append("diagnostic_state=").append(diagnosticState).append('\n');
+        out.append("runtime_state=").append(diagnosticState).append('\n');
+        out.append("learning_state=").append(learningEvidenceState(snapshot)).append('\n');
+        out.append("validation_state=").append(validationEvidenceState(snapshot)).append('\n');
         out.append("pid=").append(Process.myPid()).append('\n');
         out.append("package=").append(getPackageName()).append('\n');
         out.append("sdk=").append(Build.VERSION.SDK_INT).append('\n');
@@ -233,12 +301,19 @@ public final class MainActivity extends Activity {
         out.append("probe=").append(oneLine(probeStatus)).append('\n');
         out.append("gadget=").append(oneLine(gadgetStatus)).append('\n');
         out.append("learning_mode=").append(modeName(learningMode)).append('\n');
+        out.append("learning_mutations=")
+                .append((learningMode == LEARNING_OFF || learningMode == LEARNING_FROZEN)
+                        ? "DISABLED" : "MODE_SCOPED")
+                .append('\n');
         out.append("store=").append(
                 learningStorePath == null ? "TOKEN_VAZIO" : learningStorePath).append('\n');
+        out.append("filesystem_write_claim=TOKEN_VAZIO\n");
         out.append("automatic_active=DISABLED\n");
         out.append("claim_allowed=false\n");
+        out.append("measurement_semantics=TOKEN_VAZIO_ON_ZERO_DENOMINATOR\n");
+        out.append("rfl_recovery_required=TOKEN_VAZIO\n");
         out.append("--- METRICS ---\n");
-        out.append(snapshot == null ? "TOKEN_VAZIO" : snapshot).append('\n');
+        out.append(evidenceSnapshot).append('\n');
         return out.toString();
     }
 
@@ -384,7 +459,7 @@ public final class MainActivity extends Activity {
         if (learningStatusView == null) return;
         StringBuilder text = new StringBuilder();
         text.append("\nMÉTRICAS RFL / NEON4096\n");
-        text.append(safeLearningSnapshot(verboseMode)).append("\n");
+        text.append(normalizeSnapshotEvidence(safeLearningSnapshot(verboseMode))).append("\n");
         text.append("Store: ").append(
                 learningStorePath == null ? "TOKEN_VAZIO" : learningStorePath).append("\n");
         text.append("VALIDATE_SHADOW: modelo congelado; validação não treina.\n");
