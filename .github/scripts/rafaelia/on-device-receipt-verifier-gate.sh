@@ -52,6 +52,13 @@ require_token "$VERIFIER" 'store_mutated_by_smoke": False'
 require_token "$VERIFIER" 'learningSnapshotForInstrumentation(true)'
 require_token "$ACTIVITY" 'public static String learningSnapshotForInstrumentation(boolean verbose)'
 require_token "$ACTIVITY" 'return nativeLearningSnapshot(verbose);'
+require_token "$ACTIVITY" 'public static String learningEvidenceSnapshotForInstrumentation(boolean verbose)'
+require_token "$ACTIVITY" 'return normalizeSnapshotEvidence(nativeLearningSnapshot(verbose));'
+require_token "$VERIFIER" 'learningEvidenceSnapshotForInstrumentation(true)'
+require_token "$VERIFIER" 'zero_sample_token_vazio_semantics'
+require_token "$ACTIVITY" 'training error: TOKEN_VAZIO / NO_SAMPLES'
+require_token "$ACTIVITY" 'learning overhead p50/p95/p99: TOKEN_VAZIO / NO_SAMPLES'
+require_token "$ACTIVITY" 'model state: NO_MODEL'
 
 # Runtime strings consumed by the physical verifier must still be produced by
 # the current JNI snapshot implementation; source drift fails closed here.

@@ -1,0 +1,72 @@
+RAFAELIA_FRIDA_LAB_PHYSICAL_RECEIPT_20260926
+source_kind=user-provided physical-device receipt + Android bugreport
+raw_bugreport_committed=false
+raw_bugreport_reason=privacy/data-minimization
+bugreport_zip_sha256=9d3961800db6a927710c468840af5cd6b51109e731ad6c644c12a59eab92d255
+bugreport_zip_bytes=9073543
+screenshot_sha256=c284ec101bb6eb5cba0fa587c52812e1d8314943a93fe60e872b43304a0b02c4
+screenshot_bytes=159133
+
+device_scope=Android 10 / SDK 29 / armeabi-v7a
+package=io.rafaelia.fridalab
+current_receipt_pid=24155
+prior_bugreport_pid=15632
+process_identity_changed=true
+restart_cause=TOKEN_VAZIO
+debuggable=true
+gadget_endpoint=127.0.0.1:27042
+probe=Source-built ELF probe: LOADED
+gadget=Frida Gadget ELF: LOADED
+
+diagnostic_state=PASS
+runtime_physical_armv7=PASS
+source_elf_load=PASS
+frida_gadget_load=PASS
+frida_runtime_thread=PASS_FROM_PRIOR_BUGREPORT
+loopback_listener_27042=PASS_FROM_PRIOR_BUGREPORT
+
+learning_mode=OFF
+learning_execution=NOT_RUN
+training_observations=0
+training_predictions=0
+training_error=TOKEN_VAZIO_NO_SAMPLES
+training_confidence=INSUFFICIENT_EVIDENCE
+predictor_entries=0/1024
+rfl_committed_records=0
+rfl_slab=0/64
+rfl_store_bytes=64
+filesystem_write_claim=TOKEN_VAZIO
+
+validation_state=NOT_RUN
+validation_observations=0
+validation_predictions=0
+validation_error=TOKEN_VAZIO_NO_SAMPLES
+validation_confidence=INSUFFICIENT_EVIDENCE
+validation_persistence=TOKEN_VAZIO
+automatic_active=DISABLED
+
+neon4096_contract=4096 B = 64 B control + 3 x 1344 B
+alternate_partition=8 x 512 B
+cache_geometry=64 x 64 B lines; 21 lines/region
+simd_geometry=256 x 128-bit vectors; 84 vectors/region
+observed_os_page=4096 B MATCH_4096
+compiled_backend=NEON128
+default_cpu_route=CPU_NEON
+crc32c_scope=HOT + BUFFER + STORAGE + PAGE
+simd_fold_selftest=PASS
+selftest_page_crc32c=0xed4a015e
+gpu_compute_backend=TOKEN_VAZIO
+gpu_promotion=BLOCKED_UNTIL_MEASURED_TOTAL_COST_EVIDENCE
+
+rfl_recovered_tail=NO
+rfl_recovery_required=TOKEN_VAZIO
+
+claim_allowed=false
+serial_number_committed=false
+volume_uuid_committed=false
+raw_store_absolute_path_committed=false
+store_sanitized=<app-internal>/files/frida-learning-v1.rfl
+
+F_ok=physical ARMv7 runtime + ELF/Gadget load + prior bugreport Frida thread/listener + NEON4096 selftest
+F_gap=zero-sample rates/percentiles semantics patched in code but not yet rebuilt on device; recovery-required semantics; independent runtime reproduction
+F_next=exact-head CI -> rebuild/install authorized debug APK -> generate V1.1 receipt -> compare -> keep ACTIVE disabled

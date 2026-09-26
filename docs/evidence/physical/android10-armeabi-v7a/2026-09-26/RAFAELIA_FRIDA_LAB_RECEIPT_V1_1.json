@@ -1,0 +1,88 @@
+{
+  "schema": "rafaelia.frida.physical-receipt/v1.1",
+  "date": "2026-09-26",
+  "repository": "rafaelmeloreisnovo/frida-desktop",
+  "branch": "delta/frida-receipt-v1-1-20260926",
+  "claim_allowed": false,
+  "privacy": {
+    "raw_bugreport_committed": false,
+    "serial_number_committed": false,
+    "volume_uuid_committed": false,
+    "raw_store_absolute_path_committed": false,
+    "reason": "data minimization; raw Android bugreport contains unrelated device/account/process metadata"
+  },
+  "source_evidence": {
+    "bugreport_zip": {
+      "sha256": "9d3961800db6a927710c468840af5cd6b51109e731ad6c644c12a59eab92d255",
+      "size_bytes": 9073543
+    },
+    "screenshot": {
+      "sha256": "c284ec101bb6eb5cba0fa587c52812e1d8314943a93fe60e872b43304a0b02c4",
+      "size_bytes": 159133
+    }
+  },
+  "device_scope": {
+    "android": "10",
+    "sdk": 29,
+    "abi": "armeabi-v7a",
+    "package": "io.rafaelia.fridalab",
+    "debuggable": true
+  },
+  "executions": {
+    "prior_bugreport_pid": 15632,
+    "current_receipt_pid": 24155,
+    "process_identity_changed": true,
+    "restart_cause": "TOKEN_VAZIO"
+  },
+  "runtime": {
+    "diagnostic_state": "PASS",
+    "source_elf_probe": "LOADED",
+    "frida_gadget_elf": "LOADED",
+    "endpoint": "127.0.0.1:27042",
+    "frida_thread": "PASS_FROM_PRIOR_BUGREPORT",
+    "loopback_listener": "PASS_FROM_PRIOR_BUGREPORT"
+  },
+  "learning": {
+    "mode": "OFF",
+    "state": "NOT_RUN",
+    "observations": 0,
+    "predictions": 0,
+    "error": "TOKEN_VAZIO_NO_SAMPLES",
+    "confidence": "INSUFFICIENT_EVIDENCE",
+    "predictor_entries": "0/1024",
+    "committed_records": 0,
+    "slab_records": "0/64",
+    "store_bytes": 64,
+    "filesystem_write_claim": "TOKEN_VAZIO"
+  },
+  "validation": {
+    "state": "NOT_RUN",
+    "observations": 0,
+    "predictions": 0,
+    "error": "TOKEN_VAZIO_NO_SAMPLES",
+    "confidence": "INSUFFICIENT_EVIDENCE",
+    "persistence": "TOKEN_VAZIO",
+    "automatic_active": "DISABLED"
+  },
+  "neon4096": {
+    "contract": "4096 B = 64 B control + 3 x 1344 B",
+    "alternate_partition": "8 x 512 B",
+    "cache_geometry": "64 x 64 B lines; 21 lines/region",
+    "simd_geometry": "256 x 128-bit vectors; 84 vectors/region",
+    "os_page": "4096 B MATCH_4096",
+    "backend": "NEON128",
+    "cpu_route": "CPU_NEON",
+    "simd_fold_selftest": "PASS",
+    "selftest_page_crc32c": "0xed4a015e",
+    "gpu_backend": "TOKEN_VAZIO"
+  },
+  "recovery": {
+    "recovered_tail": "NO",
+    "recovery_required": "TOKEN_VAZIO"
+  },
+  "r3": {
+    "F_ok": "physical ARMv7 runtime + ELF/Gadget load + prior bugreport Frida thread/listener + NEON4096 selftest",
+    "F_gap": "V1.1 semantic patch not yet rebuilt/run on physical device; recovery-required semantics; independent reproduction",
+    "F_next": "exact-head CI -> rebuild/install authorized debug APK -> V1.1 physical receipt -> compare; ACTIVE remains disabled"
+  }
+}

@@ -33,13 +33,16 @@ The v2 receipt is append-only and binds:
 - Android SDK/release/ABI/model/fingerprint;
 - local Gadget enumeration and Frida attach;
 - Java availability and `MainActivity` resolution;
-- the public read-only `learningSnapshotForInstrumentation(true)` bridge;
+- the public raw read-only `learningSnapshotForInstrumentation(true)` bridge;
+- the V1.1 read-only `learningEvidenceSnapshotForInstrumentation(true)` bridge;
+- separation of raw native observation from the evidence projection;
+- `zero_sample_token_vazio_semantics=PASS` whenever zero-sample denominators are present;
 - NEON4096 4096-byte page match;
 - SIMD fold self-test;
 - automatic ACTIVE policy remaining disabled;
 - GPU backend and validation persistence remaining explicitly unpromoted.
 
-A missing commit binding, dirty tracked tree, missing Gadget/Frida bridge, failed runtime gate, or missing snapshot invariant makes the receipt `FAIL`. A physical receipt never changes `claim_allowed=false` by itself.
+A missing commit binding, dirty tracked tree, missing Gadget/Frida bridge, failed runtime gate, missing snapshot invariant, or zero-sample evidence projected as measured zero makes the receipt `FAIL`. A physical receipt never changes `claim_allowed=false` by itself.
 
 Default receipt directory:
 
@@ -65,6 +68,14 @@ One checkbox reveals, on the same Activity:
 - volatile predictor reset.
 
 Reset remains restricted to `OFF` / `FROZEN`. Automatic ACTIVE promotion remains disabled.
+
+## Receipt V1.1 semantics
+
+The operator receipt now separates `runtime_state`, `learning_state`, and `validation_state`. When observations/predictions are both zero, rates and percentiles that require samples are represented as `TOKEN_VAZIO / NO_SAMPLES`, not as measured zero. With no validation samples, the evidence projection uses `NO_MODEL` / `TOKEN_VAZIO` instead of interpreting `model frozen: NO` as proof of an existing mutable model.
+
+The raw native snapshot remains available to the physical verifier. Normalization is a second, auditable view; it does not rewrite the source observation.
+
+`filesystem_write_claim=TOKEN_VAZIO` remains explicit: zero committed learning records is not promoted into a process-wide claim of zero filesystem writes.
 
 ## Evidence boundaries
 
