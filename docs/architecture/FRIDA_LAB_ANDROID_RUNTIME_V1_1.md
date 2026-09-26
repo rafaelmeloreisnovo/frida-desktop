@@ -1,8 +1,8 @@
 # RAFAELIA Frida Lab — Android Runtime Architecture V1.1
 
-Status: **IMPLEMENTED_UNTESTED for this branch until exact-head CI completes**  
-Producer authority: `rafaelmeloreisnovo/frida-desktop`  
-Base main observed before delta: `53193abfb0910f1adf7096a2802e9992899fa173`  
+Status: **IMPLEMENTED_UNTESTED for this branch until exact-head CI completes**
+Producer authority: `rafaelmeloreisnovo/frida-desktop`
+Base main observed before delta: `53193abfb0910f1adf7096a2802e9992899fa173`
 Invariant: `SOURCE != ARTIFACT != EXECUTION != EVIDENCE != CLAIM`; `TOKEN_VAZIO != 0`.
 
 ## 1. Current one-screen execution path
