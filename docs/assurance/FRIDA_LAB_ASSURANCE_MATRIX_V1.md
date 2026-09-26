@@ -28,3 +28,10 @@ This is an engineering crosswalk, **not a certification statement**.
 ## Current Delta
 
 The 2026-09-26 delta preserves the native runtime behavior and tightens receipt semantics in the Java presentation/audit layer. Exact-head CI and a new physical-device run are required before the code delta is promoted from IMPLEMENTED_UNTESTED.
+
+
+## Δ2 — verifier non-regression control
+
+The physical verifier now requires the read-only V1.1 evidence bridge and records the raw snapshot separately from the normalized evidence snapshot. For a zero-denominator state, `zero_sample_token_vazio_semantics` must PASS. This strengthens traceability without converting a hosted/static gate into physical-device evidence.
+
+`STATIC_CONTRACT_PASS != PHYSICAL_DEVICE_PASS`.
