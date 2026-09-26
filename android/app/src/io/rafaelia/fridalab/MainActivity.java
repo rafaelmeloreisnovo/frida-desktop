@@ -74,12 +74,27 @@ public final class MainActivity extends Activity {
             long memoryDelta,
             long auxHash);
 
-    /** Read-only bridge for optional Frida/on-device verification. */
+    /** Raw read-only bridge for source observation / forensic comparison. */
     public static String learningSnapshotForInstrumentation(boolean verbose) {
         try {
             return nativeLearningSnapshot(verbose);
         } catch (Throwable t) {
             return "Learning snapshot: FAILED — " + formatError(t);
+        }
+    }
+
+    /**
+     * Read-only evidence bridge used by the physical verifier.
+     *
+     * Keeps the raw native snapshot separately available while applying the same
+     * zero-denominator/TOKEN_VAZIO semantics shown by the one-screen V1.1 receipt.
+     * This method performs no learning observation and no RFL mutation.
+     */
+    public static String learningEvidenceSnapshotForInstrumentation(boolean verbose) {
+        try {
+            return normalizeSnapshotEvidence(nativeLearningSnapshot(verbose));
+        } catch (Throwable t) {
+            return "Learning evidence snapshot: FAILED — " + formatError(t);
         }
     }
 
