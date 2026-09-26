@@ -152,3 +152,19 @@ CODE_PRESENT
 Current policy remains `claim_allowed=false`.
 
 Next exact gate: build/test this branch, then run the new receipt on the authorized ARM32 Android 10 device and compare it with the 2026-09-26 physical evidence.
+
+
+## 8. Physical verifier binding — Δ2
+
+The on-device verifier now keeps **two views of the same read-only native state**:
+
+1. `learningSnapshotForInstrumentation(...)` = raw native source observation.
+2. `learningEvidenceSnapshotForInstrumentation(...)` = V1.1 evidence projection using the same `TOKEN_VAZIO` rules as the operator receipt.
+
+The verifier stores both in its append-only receipt and fails closed on the V1.1 evidence bridge when zero-sample conditions are present but are projected as measured zero.
+
+New required physical gate:
+
+`zero_sample_token_vazio_semantics=PASS`
+
+This does not train, inject observations, enable ACTIVE, or mutate the RFL store. The raw snapshot is retained separately so the normalization remains auditable rather than destructive.
