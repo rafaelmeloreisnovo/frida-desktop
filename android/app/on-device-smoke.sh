@@ -163,6 +163,8 @@ receipt = {
         "store_mutated_by_smoke": False,
         "snapshot": "TOKEN_VAZIO",
         "snapshot_bridge": "TOKEN_VAZIO",
+        "evidence_snapshot": "TOKEN_VAZIO",
+        "evidence_snapshot_bridge": "TOKEN_VAZIO",
     },
     "claim_allowed": False,
 }
@@ -195,6 +197,8 @@ try:
     main_activity_resolved: false,
     snapshot: 'TOKEN_VAZIO',
     snapshot_bridge: 'TOKEN_VAZIO',
+    evidence_snapshot: 'TOKEN_VAZIO',
+    evidence_snapshot_bridge: 'TOKEN_VAZIO',
     error: null
   };
 
@@ -211,7 +215,9 @@ try:
       result.main_activity_resolved = true;
       try {
         result.snapshot = String(Lab.learningSnapshotForInstrumentation(true));
-        result.snapshot_bridge = 'public_instrumentation_bridge';
+        result.snapshot_bridge = 'public_raw_instrumentation_bridge';
+        result.evidence_snapshot = String(Lab.learningEvidenceSnapshotForInstrumentation(true));
+        result.evidence_snapshot_bridge = 'public_v1_1_evidence_bridge';
       } catch (e) {
         result.error = 'public snapshot bridge: ' + e;
       }
@@ -246,14 +252,52 @@ try:
     activity_ok = bool(result_holder.get("main_activity_resolved"))
     snapshot = str(result_holder.get("snapshot") or "TOKEN_VAZIO")
     bridge = str(result_holder.get("snapshot_bridge") or "TOKEN_VAZIO")
+    evidence_snapshot = str(result_holder.get("evidence_snapshot") or "TOKEN_VAZIO")
+    evidence_bridge = str(result_holder.get("evidence_snapshot_bridge") or "TOKEN_VAZIO")
 
     receipt["checks"]["java_available"] = gate(java_ok)
     receipt["checks"]["main_activity_resolution"] = gate(activity_ok)
     receipt["learning"]["snapshot"] = snapshot
     receipt["learning"]["snapshot_bridge"] = bridge
+    receipt["learning"]["evidence_snapshot"] = evidence_snapshot
+    receipt["learning"]["evidence_snapshot_bridge"] = evidence_bridge
 
     snapshot_present = snapshot != "TOKEN_VAZIO"
+    evidence_snapshot_present = evidence_snapshot != "TOKEN_VAZIO"
     receipt["checks"]["learning_snapshot"] = gate(snapshot_present)
+    receipt["checks"]["learning_evidence_snapshot"] = gate(evidence_snapshot_present)
+
+    training_zero = (
+        "training observations: 0" in snapshot
+        and "training predictions: 0" in snapshot
+    )
+    validation_marker = snapshot.find("VALIDATE_SHADOW")
+    validation_raw = snapshot[validation_marker:] if validation_marker >= 0 else ""
+    validation_zero = (
+        "  observations: 0" in validation_raw
+        and "  predictions: 0" in validation_raw
+    )
+
+    training_semantics_ok = (
+        not training_zero
+        or (
+            "training error: TOKEN_VAZIO / NO_SAMPLES" in evidence_snapshot
+            and "learning overhead p50/p95/p99: TOKEN_VAZIO / NO_SAMPLES" in evidence_snapshot
+        )
+    )
+    validation_semantics_ok = (
+        not validation_zero
+        or (
+            "model state: NO_MODEL" in evidence_snapshot
+            and "model frozen: TOKEN_VAZIO / NO_MODEL" in evidence_snapshot
+            and "error: TOKEN_VAZIO / NO_SAMPLES" in evidence_snapshot[
+                evidence_snapshot.find("VALIDATE_SHADOW"):
+            ]
+        )
+    )
+    receipt["checks"]["zero_sample_token_vazio_semantics"] = gate(
+        training_semantics_ok and validation_semantics_ok
+    )
     receipt["checks"]["neon4096_page_4096"] = gate(
         "observed OS page: 4096 B (MATCH_4096)" in snapshot
     )
@@ -297,6 +341,8 @@ required = (
     "java_available",
     "main_activity_resolution",
     "learning_snapshot",
+    "learning_evidence_snapshot",
+    "zero_sample_token_vazio_semantics",
     "neon4096_page_4096",
     "simd_fold_selftest",
     "automatic_active_disabled",
