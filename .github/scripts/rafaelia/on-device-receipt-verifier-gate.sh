@@ -59,6 +59,12 @@ require_token "$VERIFIER" 'zero_sample_token_vazio_semantics'
 require_token "$ACTIVITY" 'training error: TOKEN_VAZIO / NO_SAMPLES'
 require_token "$ACTIVITY" 'learning overhead p50/p95/p99: TOKEN_VAZIO / NO_SAMPLES'
 require_token "$ACTIVITY" 'model state: NO_MODEL'
+require_token "$ACTIVITY" 'private static final int LEARNING_STATUS_ERR_STATE = -5;'
+require_token "$ACTIVITY" 'existingLearningCoreIsReadable()'
+require_token "$ACTIVITY" 'learningInitDisposition = "REUSED_EXISTING_CORE"'
+require_token "$ACTIVITY" 'detailed_runtime_dump_contract=rafaelia.android.runtime-stability/v2'
+require_token "$ACTIVITY" 'detailed_runtime_dump_role=OBSERVATION_ONLY'
+require_token "$ACTIVITY" 'detailed_runtime_dump_capture=TOKEN_VAZIO'
 
 # Runtime strings consumed by the physical verifier must still be produced by
 # the current JNI snapshot implementation; source drift fails closed here.
