@@ -168,3 +168,45 @@ New required physical gate:
 `zero_sample_token_vazio_semantics=PASS`
 
 This does not train, inject observations, enable ACTIVE, or mutate the RFL store. The raw snapshot is retained separately so the normalization remains auditable rather than destructive.
+
+
+## 9. Activity re-entry and Detailed Dump V2
+
+Physical receipt `rc=-5` is `RAFAELIA_LEARNING_STATUS_ERR_STATE`. The native
+runtime is process-global, while Android may recreate `MainActivity` inside the
+same process. A second `nativeLearningInit(...)` can therefore report
+`ERR_STATE` even though the already-initialized native core remains readable.
+
+The Java boundary now keeps the native initializer strict and recovers only when
+both conditions hold:
+
+1. init returns exactly `ERR_STATE (-5)`; and
+2. a read-only verbose native snapshot successfully begins with
+   `Learning runtime`.
+
+That successor state is exposed as
+`learning_init_disposition=REUSED_EXISTING_CORE`. Any other `-5` without the
+read-only proof remains a failure. This avoids changing the native lifecycle
+contract or silently accepting an unknown store.
+
+The detailed observation surface is the existing
+`agents/android-runtime-stability-dump.js` V2 contract
+(`rafaelia.android.runtime-stability/v2`). It remains a passive,
+privacy-bounded source for runtime/platform/module/visibility comparison. The
+operator receipt records its role as `OBSERVATION_ONLY` and keeps
+`detailed_runtime_dump_capture=TOKEN_VAZIO` until an actual capture is
+executed and bound to evidence.
+
+`VERBOSE UI != RUNTIME_STABILITY_DUMP != RFL mutation`.
+
+The intended composition is:
+
+```
+Verbose local snapshot
+  + Runtime Stability Dump V2 (passive structural observation)
+  -> compare / delta / hypothesis
+  -> explicitly selected RFL observation bridge, if separately authorized
+```
+
+No dump value is automatically converted into a learning mutation by this
+delta; `claim_allowed=false` remains invariant.
