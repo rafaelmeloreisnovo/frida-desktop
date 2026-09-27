@@ -85,3 +85,25 @@ The raw native snapshot remains available to the physical verifier. Normalizatio
 - UI and on-device receipts keep `claim_allowed=false`.
 
 The one-screen UI remains the normal operator path. `on-device-smoke.sh` is an evidence verifier, not a second UI or an autonomous control loop. Both reuse the existing JNI entry points and native RFL/NEON4096 implementation rather than adding a parallel runtime.
+
+
+## Detailed / verbose observation boundary
+
+The in-app **Mostrar diagnóstico detalhado** view is the operator-facing verbose
+projection of the local JNI/RFL/NEON4096 state. It is not the same artifact as
+the passive Frida Runtime Stability Dump V2.
+
+For structural comparison across captures, use the repository-owned V2 sensor:
+
+`agents/android-runtime-stability-dump.js`
+
+Its contract is `rafaelia.android.runtime-stability/v2`, and its role is
+`OBSERVATION_ONLY`. A receipt may name that contract while the capture itself
+remains `TOKEN_VAZIO` until executed.
+
+Android can recreate this Activity without recreating the native process. If a
+repeat init returns `rc=-5 / ERR_STATE`, the UI now reuses the process-global
+core only after a read-only detailed snapshot proves the existing runtime is
+readable. This state is receipted as
+`learning_init_disposition=REUSED_EXISTING_CORE`; it is not treated as a new
+initialization and does not weaken the native fail-closed lifecycle.
