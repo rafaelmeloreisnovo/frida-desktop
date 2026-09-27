@@ -42,6 +42,7 @@ public final class MainActivity extends Activity {
     private static final String PREF_VERBOSE = "verbose_mode";
     private static final String PREF_LEARNING_MODE = "learning_mode";
     private static final String ENDPOINT = "127.0.0.1:27042";
+    private static final int LEARNING_STATUS_ERR_STATE = -5;
 
     private static final int LEARNING_OFF = 0;
     private static final int LEARNING_OBSERVE = 1;
@@ -104,6 +105,7 @@ public final class MainActivity extends Activity {
     private boolean changingLearningMode;
     private int learningMode;
     private int learningInitRc;
+    private String learningInitDisposition = "TOKEN_VAZIO";
     private String learningStorePath;
     private String probeStatus;
     private String gadgetStatus;
@@ -316,6 +318,11 @@ public final class MainActivity extends Activity {
         out.append("probe=").append(oneLine(probeStatus)).append('\n');
         out.append("gadget=").append(oneLine(gadgetStatus)).append('\n');
         out.append("learning_mode=").append(modeName(learningMode)).append('\n');
+        out.append("learning_init_rc=").append(learningInitRc).append('\n');
+        out.append("learning_init_disposition=").append(learningInitDisposition).append('\n');
+        out.append("detailed_runtime_dump_contract=rafaelia.android.runtime-stability/v2\n");
+        out.append("detailed_runtime_dump_role=OBSERVATION_ONLY\n");
+        out.append("detailed_runtime_dump_capture=TOKEN_VAZIO\n");
         out.append("learning_mutations=")
                 .append((learningMode == LEARNING_OFF || learningMode == LEARNING_FROZEN)
                         ? "DISABLED" : "MODE_SCOPED")
@@ -512,6 +519,7 @@ public final class MainActivity extends Activity {
             status.append("C source → NDK clang → ELF → RFL/NEON4096\n");
             status.append("Java → javac → D8 → DEX → JNI → ELF\n");
             status.append("Frida/Termux externo: opcional para instrumentação/receipt.\n");
+            status.append("Detailed Dump V2: superfície passiva OBSERVATION_ONLY; captura=TOKEN_VAZIO até execução.\n");
         }
 
         statusView.setText(status.toString());
@@ -542,11 +550,39 @@ public final class MainActivity extends Activity {
         return button;
     }
 
+    private boolean existingLearningCoreIsReadable() {
+        try {
+            String snapshot = nativeLearningSnapshot(true);
+            return snapshot != null && snapshot.startsWith("Learning runtime\n");
+        } catch (Throwable t) {
+            Log.w(TAG, "Existing learning core probe failed", t);
+            return false;
+        }
+    }
+
     private void initializeLearning() {
         learningStorePath = new File(getFilesDir(), "frida-learning-v1.rfl").getAbsolutePath();
         try {
             learningInitRc = nativeLearningInit(learningStorePath);
-            learningInitialized = learningInitRc == 0;
+            if (learningInitRc == 0) {
+                learningInitialized = true;
+                learningInitDisposition = "FRESH_INIT";
+            } else if (learningInitRc == LEARNING_STATUS_ERR_STATE
+                    && existingLearningCoreIsReadable()) {
+                /*
+                 * Activity recreation does not recreate the process-global native
+                 * runtime. ERR_STATE is therefore accepted only after a read-only
+                 * native snapshot proves that the existing core is still readable.
+                 * The native init API itself remains strict/fail-closed.
+                 */
+                learningInitialized = true;
+                learningInitDisposition = "REUSED_EXISTING_CORE";
+                Log.i(TAG, "RFL native core already initialized; reusing readable state");
+            } else {
+                learningInitialized = false;
+                learningInitDisposition = "FAILED_RC_" + learningInitRc;
+            }
+
             if (learningInitialized) {
                 int rc = nativeLearningSetMode(learningMode);
                 if (rc != 0) {
@@ -558,6 +594,7 @@ public final class MainActivity extends Activity {
         } catch (Throwable t) {
             learningInitialized = false;
             learningInitRc = Integer.MIN_VALUE;
+            learningInitDisposition = "EXCEPTION";
             Log.e(TAG, "Learning initialization failed", t);
         }
     }
