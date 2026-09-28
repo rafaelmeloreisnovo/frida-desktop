@@ -44,6 +44,12 @@ The v2 receipt is append-only and binds:
 
 A missing commit binding, dirty tracked tree, missing Gadget/Frida bridge, failed runtime gate, missing snapshot invariant, or zero-sample evidence projected as measured zero makes the receipt `FAIL`. A physical receipt never changes `claim_allowed=false` by itself.
 
+Current custody boundary: `source_commit` binds the verifier checkout, not the
+installed application bytes by itself. The current v2 receipt does not yet bind
+the installed APK, `librafaelia-probe.so`, and `libfrida-gadget.so` SHA-256
+values to that same source commit. Until those byte identities are present in
+one physical receipt, `APK_TO_SOURCE_EXACT_BIND=TOKEN_VAZIO`.
+
 Default receipt directory:
 
 `$HOME/.local/state/rafaelia/frida-lab/receipts/`
