@@ -1,6 +1,7 @@
 # RAFAELIA — Frida Implementation Correction Map V1
 
 **Snapshot authority:** `rafaelmeloreisnovo/frida-desktop@27104496379491008ff56ce157ce9e7de1bdcce8`  
+**Lifecycle:** `HISTORICAL_SNAPSHOT` — do not use this 2026-08-24 map as current implementation status; see `../IMPLEMENTATION_SUMMARY.md`.  
 **Date:** 2026-08-24  
 **Scope:** `MAPPING_ONLY` — correction of implementation topology; no runtime mutation, build, attachment, or physical-device claim.  
 **Gate:** `claim_allowed=false`  
