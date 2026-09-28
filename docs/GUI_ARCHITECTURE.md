@@ -1,10 +1,27 @@
 # GUI Architecture: Test & Results Navigation System
 
 **Date:** 2026-08-22  
-**Status:** Design + Implementation Phase 1  
+**Status:** HISTORICAL_HYBRID_DESIGN / CURRENT_ANDROID_PATH_SUPERSEDES_PHASE_TIMELINE  
 **Audience:** Developers, DevOps, Researchers
 
 ---
+
+## Current-source note — 2026-09-28
+
+This document preserves the original hybrid Android/backend/web architecture as
+historical design context. It is **not** the canonical current-state ledger.
+
+The current normal Android operator path is the one-screen
+`MainActivity -> JNI -> native RFL/NEON4096` path documented in
+`android/app/ONE_SCREEN_OPERATOR_V1.md`. The native learning bridge is no
+longer a stub, `VALIDATE_SHADOW` exists, receipt schema 1.1 separates raw
+observation from evidence-normalized metrics, and automatic ACTIVE promotion
+remains disabled.
+
+Backend/React/harness sections below remain hosted auxiliary architecture. They
+must not be used as evidence that a physical Android execution occurred.
+
+Canonical current state: `../IMPLEMENTATION_SUMMARY.md`.
 
 ## Overview
 
@@ -444,18 +461,18 @@ frida-desktop/
 
 ## 9. Next Steps
 
-### Phase 1 (This week)
+### Historical Phase 1 plan (2026-08-22; superseded)
 - ✅ Design ontology (learning-semantic-tree.v1.json)
 - ✅ Implement test harness (test_runner.py)
 - 🔄 Expand MainActivity with Research Mode Panel
 - 🔄 Create Node.js backend skeleton
 
-### Phase 2 (Next week)
+### Historical Phase 2 plan (2026-08-22; superseded)
 - Create React dashboard
 - Integrate WebSocket for real-time updates
 - Implement scenario tests
 
-### Phase 3 (Final)
+### Historical Phase 3 plan (2026-08-22; superseded)
 - Physical device validation
 - Performance optimization
 - Production hardening
@@ -488,4 +505,4 @@ curl http://localhost:3000/api/metrics/latest
 
 **Responsible:** RFL Learning Engine Team  
 **Last Updated:** 2026-08-22  
-**Status:** Design Complete, Implementation In Progress
+**Status:** Historical architecture reference; use `../IMPLEMENTATION_SUMMARY.md` for current implementation state
