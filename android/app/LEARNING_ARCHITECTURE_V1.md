@@ -1,8 +1,8 @@
 # Frida Lab — Learning Architecture V1
 
-Status: DESIGN_CONTRACT / implementation pending
+Status: IMPLEMENTED_SHADOW_CORE / VALIDATION_IMPLEMENTED / GOVERNED_PROMOTION_DISABLED
 Scope: self-process Android Frida Gadget laboratory
-Claim gate: `claim_allowed=false` until implementation + CI + physical receipt
+Claim gate: `claim_allowed=false`; source/hosted CI and physical-device evidence remain separate gates
 
 ## 1. Goal
 
@@ -19,6 +19,34 @@ Turn the Frida Android Lab from a passive diagnostic page into a low-overhead le
 9. export/checkpoint evidence into ZIPRAF-compatible archival artifacts.
 
 This is not a claim that user-space code bypasses Android/Linux. `mmap`, file I/O and page cache remain kernel-managed. The intended optimization is removal of avoidable higher-level overhead: per-event JSON, SQLite row/object churn, Java allocation churn, repeated parsing, repeated mappings, and unbounded heap allocation.
+
+## 1.1 Current-source status — 2026-09-28
+
+The original version of this document was a design contract. The current source
+has since materialized the bounded shadow-learning core.
+
+Observed current implementation surfaces:
+
+- `learning_store.[ch]`: RFL V1 64-byte header/record ABI, 4096-byte slab,
+  fixed predictor table, CRC32C, append/replay and tail-recovery semantics;
+- `learning_runtime.[ch]`: logical mode adapter and validation-context layer;
+- `MainActivity.java`: one-screen operator, receipt schema 1.1, raw/evidence
+  snapshot split and zero-denominator normalization;
+- `on-device-smoke.sh`: append-only local physical verifier;
+- `neon4096_core.[ch]`: hosted 4096-byte page contract and CPU route;
+- dedicated hosted CI for Runtime Learning integration.
+
+Still not promoted:
+
+- automatic ACTIVE policy;
+- durable validation persistence;
+- RFL ZIPRAF checkpoint/segment-compaction closure;
+- GPU compute backend;
+- physical APK/probe/Gadget byte-to-source binding;
+- restart/reattach/restore and causal claims.
+
+This is a successor status note. The design rationale below remains useful where
+it does not conflict with current source.
 
 ## 2. Existing architecture to reuse
 
@@ -99,12 +127,13 @@ The UI and runtime must expose explicit states:
 - `OBSERVE`: collect measurements only;
 - `LEARN_SHADOW`: update model and produce predictions, but never apply them;
 - `PREDICT_SHADOW`: expose predictions and confidence to the operator/Frida agent, still without automatic mutation;
+- `VALIDATE_SHADOW`: freeze model updates and validate predictions in a separate bounded validation context;
 - `ELIGIBLE`: statistical and overhead gates passed for a specific context; this is not activation;
 - `ACTIVE`: future state, manual/governed promotion only;
 - `FROZEN`: read-only learned state for reproducibility;
 - `ROLLBACK`: discard active policy and return to previous frozen checkpoint.
 
-V1 must stop at `PREDICT_SHADOW` / `ELIGIBLE`. Automatic activation is out of scope until physical validation exists.
+The implemented runtime stops at shadow/validation semantics. `VALIDATE_SHADOW` exists, but automatic ACTIVE promotion remains disabled. `ELIGIBLE != ACTIVE`; physical validation and separate promotion governance are still required.
 
 ## 5. What is learned
 
@@ -279,7 +308,7 @@ Inside Developer Mode:
 
 ```text
 Learning
-  Mode: OFF | OBSERVE | LEARN_SHADOW | PREDICT_SHADOW | FROZEN
+  Mode: OFF | OBSERVE | LEARN_SHADOW | PREDICT_SHADOW | VALIDATE_SHADOW | FROZEN
   Verbose learning logs: on/off
   Store: RFL V1
   Observations: N
@@ -359,6 +388,19 @@ Learning must automatically fall back to OBSERVE/FROZEN if its own overhead exce
 
 ## 16. Implementation phases
 
+Current-source interpretation:
+
+- **Phase 0 — contract:** materialized.
+- **Phase 1 — shadow learning core:** materially implemented in current source;
+  scoped hosted CI exists.
+- **Phase 2 — memory/retention:** partial/adjacent work exists, but RFL segment
+  compaction + ZIPRAF checkpoint closure remain `TOKEN_VAZIO`.
+- **Phase 3 — governed promotion:** `VALIDATE_SHADOW` exists; automatic
+  `ACTIVE` remains disabled and physical/persistence gates remain open.
+
+The original phase definitions are preserved below as the design decomposition.
+
+
 ### Phase 0 — contract
 
 - this document;
@@ -374,7 +416,7 @@ Learning must automatically fall back to OBSERVE/FROZEN if its own overhead exce
 - RFL append/replay;
 - JNI menu state;
 - exported Frida observation/predict ABI;
-- OFF/OBSERVE/LEARN_SHADOW/PREDICT_SHADOW/FROZEN;
+- OFF/OBSERVE/LEARN_SHADOW/PREDICT_SHADOW/VALIDATE_SHADOW/FROZEN;
 - metrics and receipts.
 
 ### Phase 2 — memory/retention
