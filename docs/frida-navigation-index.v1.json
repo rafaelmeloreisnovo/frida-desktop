@@ -240,6 +240,12 @@
       "path": "docs/federation/frida-desktop-federated-receipt.json",
       "kind": "cross-repository custody",
       "state": "historical/partial"
+    },
+    {
+      "id": "DOCUMENTATION_NAVIGATION_POSTMERGE_RECEIPT_V1_20261003",
+      "path": "docs/evidence/DOCUMENTATION_NAVIGATION_POSTMERGE_RECEIPT_V1_20261003.md",
+      "kind": "post-merge provenance",
+      "state": "current"
     }
   ],
   "reconstruction": [
