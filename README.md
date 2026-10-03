@@ -36,6 +36,7 @@ gated unless a receipt closes the corresponding gap.
 
 Start here for the fork-specific state:
 
+- [Documentation navigator for humans and AI](docs/START_HERE.md)
 - [Current implementation summary](IMPLEMENTATION_SUMMARY.md)
 - [Android one-screen operator](android/app/ONE_SCREEN_OPERATOR_V1.md)
 - [Learning architecture](android/app/LEARNING_ARCHITECTURE_V1.md)
