@@ -3,6 +3,8 @@
 Status: \`ROUTER_READY / DOCUMENTATION_ONLY\`  
 Repository: \`rafaelmeloreisnovo/frida-desktop\`  
 Base source observed: \`main@a4205b0166c7c222912e8fbd85d7d0173ee4e358\`  
+Published route: \`main@099e346bdccc3fb36b3ba5234f22d3ce43b2f543\` (PR #76 merge)  
+Route history: \`docs/frictionless-navigation-v1-20261003\`  
 Global claim gate: \`claim_allowed=false\`
 
 This is the canonical navigation layer for humans and AI agents. It routes to
@@ -104,6 +106,8 @@ Use the receipt that matches the claim boundary:
   custody boundaries;
 - this navigation change is recorded by
   [the navigation receipt](evidence/DOCUMENTATION_NAVIGATION_RECEIPT_V1_20261003.md).
+- [post-merge provenance receipt](evidence/DOCUMENTATION_NAVIGATION_POSTMERGE_RECEIPT_V1_20261003.md)
+  records the merge-to-main custody update.
 
 Every new receipt should identify: stable ID, source/ref, parent or superseded
 record, kind, delta, routes, evidence, gap, next step and rollback.
