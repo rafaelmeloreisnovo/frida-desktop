@@ -1,5 +1,7 @@
 # RAFAELIA Frida — Current Implementation Summary
 
+**Navigation:** Start at [docs/START_HERE.md](docs/START_HERE.md); the machine-readable route is [docs/frida-navigation-index.v1.json](docs/frida-navigation-index.v1.json).  
+
 **Snapshot date:** 2026-09-28  
 **Source authority:** `rafaelmeloreisnovo/frida-desktop`  
 **Base observed before this documentation refactor:** `main@a941926b7e8ee3eb67d14dde3e1e9215e1b2bef4`  
