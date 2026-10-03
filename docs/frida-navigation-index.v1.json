@@ -7,9 +7,13 @@
   "snapshot": {
     "base_ref": "main",
     "base_commit": "a4205b0166c7c222912e8fbd85d7d0173ee4e358",
-    "route_branch": "docs/frictionless-navigation-v1-20261003",
+    "route_branch": "main",
     "scope": "DOCUMENTATION_ONLY",
-    "claim_allowed": false
+    "claim_allowed": false,
+    "published_ref": "main",
+    "published_commit": "099e346bdccc3fb36b3ba5234f22d3ce43b2f543",
+    "published_pr": 76,
+    "route_branch_history": "docs/frictionless-navigation-v1-20261003"
   },
   "authority_order": [
     "exact source at the ref under test",
