@@ -103,7 +103,7 @@
       ],
       "expands": [
         ".github/workflows/",
-        " .github/scripts/rafaelia/"
+        ".github/scripts/rafaelia/"
       ]
     },
     {
