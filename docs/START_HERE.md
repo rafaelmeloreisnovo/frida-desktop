@@ -106,6 +106,8 @@ Use the receipt that matches the claim boundary:
   custody boundaries;
 - this navigation change is recorded by
   [the navigation receipt](evidence/DOCUMENTATION_NAVIGATION_RECEIPT_V1_20261003.md).
+- [post-merge provenance receipt](evidence/DOCUMENTATION_NAVIGATION_POSTMERGE_RECEIPT_V1_20261003.md)
+  records the merge-to-main custody update.
 
 Every new receipt should identify: stable ID, source/ref, parent or superseded
 record, kind, delta, routes, evidence, gap, next step and rollback.
