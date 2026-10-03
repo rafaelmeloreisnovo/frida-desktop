@@ -1,0 +1,259 @@
+{
+  "schema": "rafaelia.frida.documentation_navigation.v1",
+  "schema_version": "1.0",
+  "repository": "rafaelmeloreisnovo/frida-desktop",
+  "entrypoint": "docs/START_HERE.md",
+  "machine_index": "docs/frida-navigation-index.v1.json",
+  "snapshot": {
+    "base_ref": "main",
+    "base_commit": "a4205b0166c7c222912e8fbd85d7d0173ee4e358",
+    "route_branch": "docs/frictionless-navigation-v1-20261003",
+    "scope": "DOCUMENTATION_ONLY",
+    "claim_allowed": false
+  },
+  "authority_order": [
+    "exact source at the ref under test",
+    "exact-head CI evidence for that ref",
+    "physical receipt for physical claims",
+    "documentation as derived routing"
+  ],
+  "invariants": [
+    "SOURCE != ARTIFACT != EXECUTION != EVIDENCE != CLAIM",
+    "TOKEN_VAZIO != 0 != FAIL != PASS",
+    "IMPLEMENTED_UNTESTED != PASS",
+    "HOSTED_CI_PASS != PHYSICAL_DEVICE_PASS",
+    "AUTOMATIC_ACTIVE_PROMOTION=DISABLED",
+    "CLAIM_ALLOWED=false"
+  ],
+  "states": [
+    "PASS",
+    "PASS_SCOPED",
+    "PARTIAL",
+    "IMPLEMENTED_UNTESTED",
+    "NOT_RUN",
+    "DISABLED",
+    "TOKEN_VAZIO",
+    "BLOCKED"
+  ],
+  "routes": [
+    {
+      "id": "CURRENT_STATE",
+      "intent": "understand current implementation",
+      "read": [
+        "IMPLEMENTATION_SUMMARY.md"
+      ],
+      "expands": [
+        "source at exact ref",
+        "docs/assurance/FRIDA_LAB_ASSURANCE_MATRIX_V1.md"
+      ]
+    },
+    {
+      "id": "ANDROID_BUILD",
+      "intent": "build or distinguish Android paths",
+      "read": [
+        "android/BUILD_GUIDE.md",
+        "docs/android-apk-elf-dex-lab.md"
+      ],
+      "expands": [
+        "android/app/build.gradle",
+        ".github/workflows/android17-apk-elf-dex.yml"
+      ]
+    },
+    {
+      "id": "DEVICE_RECEIPT",
+      "intent": "run or interpret device evidence",
+      "read": [
+        "android/app/ONE_SCREEN_OPERATOR_V1.md",
+        "docs/evidence/physical/"
+      ],
+      "expands": [
+        "android/app/on-device-smoke.sh"
+      ]
+    },
+    {
+      "id": "LEARNING",
+      "intent": "understand RFL and safety modes",
+      "read": [
+        "android/app/LEARNING_ARCHITECTURE_V1.md",
+        "docs/runtime-uncertainty-family-v1.md"
+      ],
+      "expands": [
+        "android/app/native/",
+        "modules/runtime-learning-engine/"
+      ]
+    },
+    {
+      "id": "ARCHITECTURE",
+      "intent": "reconstruct runtime topology",
+      "read": [
+        "docs/architecture/FRIDA_LAB_ANDROID_RUNTIME_V1_1.md",
+        "docs/frida-implantation-dependency-map.v1.json"
+      ],
+      "expands": [
+        "android/app/src/",
+        "android/app/native/",
+        "bridge/frida"
+      ]
+    },
+    {
+      "id": "CI",
+      "intent": "reproduce gates",
+      "read": [
+        "docs/WORKFLOW_ORCHESTRATION_V1.md"
+      ],
+      "expands": [
+        ".github/workflows/",
+        " .github/scripts/rafaelia/"
+      ]
+    },
+    {
+      "id": "PROVENANCE",
+      "intent": "classify upstream, fork and origin",
+      "read": [
+        "docs/rafaelia-provenance-gate.md",
+        "docs/rafaelia-provenance-non-regression.md",
+        "THIRD_PARTY_PROVENANCE.md"
+      ],
+      "expands": [
+        "profiles/rafaelia-provenance-scope.v1.json"
+      ]
+    },
+    {
+      "id": "ASSURANCE",
+      "intent": "map concerns and audits",
+      "read": [
+        "docs/assurance/FRIDA_LAB_ASSURANCE_MATRIX_V1.md",
+        "docs/audits/"
+      ],
+      "expands": [
+        "docs/evidence/"
+      ]
+    },
+    {
+      "id": "FEDERATION",
+      "intent": "reconstruct cross-repository custody",
+      "read": [
+        "docs/contracts/frida_atlas_mission_execution_consumer.v1.json",
+        "docs/federation/"
+      ],
+      "expands": [
+        "external authority receipts"
+      ]
+    },
+    {
+      "id": "AGENTS",
+      "intent": "operate passive observers",
+      "read": [
+        "agents/android-crash-observer.js",
+        "agents/android-runtime-stability-dump.js"
+      ],
+      "expands": [
+        "docs/android-crash-observability.md",
+        "docs/android-runtime-stability-dump.md"
+      ]
+    }
+  ],
+  "gates": [
+    {
+      "id": "P0-ARTIFACT_SOURCE_BINDING",
+      "state": "TOKEN_VAZIO",
+      "basis": [
+        "IMPLEMENTATION_SUMMARY.md",
+        "android/app/ONE_SCREEN_OPERATOR_V1.md"
+      ],
+      "closure": "bind APK, probe ELF and Gadget ELF SHA-256 values to one exact source ref in one physical receipt"
+    },
+    {
+      "id": "P0-ACTIVE_PROMOTION",
+      "state": "DISABLED",
+      "basis": [
+        "IMPLEMENTATION_SUMMARY.md",
+        "android/app/LEARNING_ARCHITECTURE_V1.md"
+      ],
+      "closure": "keep disabled until separate governed evidence closes the promotion gate"
+    },
+    {
+      "id": "P1-RESTART_REATTACH_RESTORE",
+      "state": "TOKEN_VAZIO",
+      "basis": [
+        "IMPLEMENTATION_SUMMARY.md"
+      ],
+      "closure": "run a bounded physical scenario and append its receipt"
+    },
+    {
+      "id": "P1-VALIDATION_PERSISTENCE",
+      "state": "TOKEN_VAZIO",
+      "basis": [
+        "IMPLEMENTATION_SUMMARY.md"
+      ],
+      "closure": "implement and test persistence as a separate gate"
+    },
+    {
+      "id": "P2-GPU_TOTAL_COST",
+      "state": "TOKEN_VAZIO",
+      "basis": [
+        "IMPLEMENTATION_SUMMARY.md"
+      ],
+      "closure": "implement a bounded backend and measure total cost"
+    },
+    {
+      "id": "P0-CAUSAL_CLAIMS",
+      "state": "BLOCKED",
+      "basis": [
+        "IMPLEMENTATION_SUMMARY.md",
+        "docs/runtime-stability-falsifiability.md"
+      ],
+      "closure": "retain observation/association boundaries until causal evidence exists"
+    }
+  ],
+  "receipts": [
+    {
+      "id": "DOCUMENTATION_CODE_SYNC_V1_20260928",
+      "path": "docs/evidence/DOCUMENTATION_CODE_SYNC_V1_20260928.md",
+      "kind": "documentation/source alignment",
+      "state": "historical-derived"
+    },
+    {
+      "id": "DOCUMENTATION_NAVIGATION_RECEIPT_V1_20261003",
+      "path": "docs/evidence/DOCUMENTATION_NAVIGATION_RECEIPT_V1_20261003.md",
+      "kind": "documentation/navigation",
+      "state": "this change"
+    },
+    {
+      "id": "PHYSICAL_EVIDENCE_TREE",
+      "path": "docs/evidence/physical/",
+      "kind": "physical execution evidence",
+      "state": "conditional"
+    },
+    {
+      "id": "ASSURANCE_MATRIX_V1",
+      "path": "docs/assurance/FRIDA_LAB_ASSURANCE_MATRIX_V1.md",
+      "kind": "gate crosswalk",
+      "state": "scoped"
+    },
+    {
+      "id": "FEDERATED_RECEIPT",
+      "path": "docs/federation/frida-desktop-federated-receipt.json",
+      "kind": "cross-repository custody",
+      "state": "historical/partial"
+    }
+  ],
+  "reconstruction": [
+    "INTENT",
+    "CURRENT_STATE",
+    "μREAD",
+    "SOURCE_MIN",
+    "AUTHORITY",
+    "ACT",
+    "EVIDENCE",
+    "μWRITE",
+    "CLAIM"
+  ],
+  "expansion_rules": [
+    "missing_source",
+    "contradiction",
+    "unresolved_authority",
+    "missing_evidence",
+    "explicit_request"
+  ]
+}
