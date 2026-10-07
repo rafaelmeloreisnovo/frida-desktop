@@ -1,10 +1,10 @@
 # Frida refactor — authorial freestanding L0
 
-Status: `IMPLEMENTED_UNTESTED_CI` until exact-head CI closes the gate.  
-Code head recorded by this document: `d3cca63c3267e60638cda9632881d8a76be4d910`.  
-Scope: RAFAELIA local delta only.  
-Whole-Frida freestanding: `TOKEN_VAZIO`.  
-Whole-repository authorship claim: `false`.  
+Status: `IMPLEMENTED_UNTESTED_CI` until exact-head CI closes the gate.
+Code head recorded by this document: `d3cca63c3267e60638cda9632881d8a76be4d910`.
+Scope: RAFAELIA local delta only.
+Whole-Frida freestanding: `TOKEN_VAZIO`.
+Whole-repository authorship claim: `false`.
 Global claim gate: `claim_allowed=false`.
 
 ## What changed
