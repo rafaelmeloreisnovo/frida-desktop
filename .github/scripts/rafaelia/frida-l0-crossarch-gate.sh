@@ -62,7 +62,7 @@ build_one() {
     exit 10
   fi
 
-  "$CLANG" --target="$target" -fuse-ld=lld -march="$march" "${extra[@]}" "${COMMON[@]}"     -nostdlib -nodefaultlibs -nostartfiles     -Wl,-static -Wl,-e,rafaelia_l0_entry -Wl,--build-id=none     "$obj" -o "$core"
+  "$CLANG" --target="$target" -fuse-ld=lld -march="$march" "${extra[@]}" "${COMMON[@]}"     -nostdlib -nodefaultlibs     -Wl,-static -Wl,-e,rafaelia_l0_entry -Wl,--build-id=none     "$obj" -o "$core"
 
   readelf -h "$core" > "$EVIDENCE/$name-core-header.txt"
   readelf -l "$core" > "$EVIDENCE/$name-core-program.txt"
@@ -83,7 +83,7 @@ build_one() {
     exit 11
   fi
 
-  "$CLANG" --target="$target" -fuse-ld=lld -march="$march" "${extra[@]}" "${COMMON[@]}"     -nostdlib -nodefaultlibs -nostartfiles     -Wl,-static -Wl,-e,_start -Wl,--build-id=none     "$obj" "$adapter_obj" -o "$probe"
+  "$CLANG" --target="$target" -fuse-ld=lld -march="$march" "${extra[@]}" "${COMMON[@]}"     -nostdlib -nodefaultlibs     -Wl,-static -Wl,-e,_start -Wl,--build-id=none     "$obj" "$adapter_obj" -o "$probe"
 
   readelf -h "$probe" > "$EVIDENCE/$name-probe-header.txt"
   readelf -l "$probe" > "$EVIDENCE/$name-probe-program.txt"
