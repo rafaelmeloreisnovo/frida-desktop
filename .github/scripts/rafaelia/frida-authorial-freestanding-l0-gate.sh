@@ -33,5 +33,5 @@ cc -std=c11 -O2 -Wall -Wextra -Werror -pedantic -fno-builtin -I android/app/nati
 "$BUILD_DIR/l0-selftest"
 
 sha256sum "$SRC_H" "$SRC_C" "$TEST_C" "$BUILD_DIR/l0.o" "$BUILD_DIR/l0.elf" "$BUILD_DIR/l0-selftest" > "$EVIDENCE_DIR/SHA256SUMS.txt"
-printf '{"schema":"rafaelia.frida.authorial-freestanding-l0.receipt.v1","source_sha":"%s","elf_interpreter":"NONE","elf_needed":"NONE","undefined_symbols":"NONE","semantic_selftest":"PASS","whole_frida_repository_freestanding":"TOKEN_VAZIO","claim_allowed":false}\n' "${GITHUB_SHA:-LOCAL}" | tee "$EVIDENCE_DIR/receipt.json"
+printf '{"schema":"rafaelia.frida.authorial-freestanding-l0.receipt.v1","source_sha":"%s","elf_interpreter":"NONE","elf_needed":"NONE","undefined_symbols":"NONE","semantic_selftest":"PASS","whole_frida_repository_freestanding":"TOKEN_VAZIO","claim_allowed":false}\n' "${RAFAELIA_SOURCE_SHA:-${GITHUB_SHA:-LOCAL}}" | tee "$EVIDENCE_DIR/receipt.json"
 echo 'FRIDA_AUTHORIAL_FREESTANDING_L0_OK object=PASS elf=PASS selftest=PASS whole_repo=TOKEN_VAZIO'
