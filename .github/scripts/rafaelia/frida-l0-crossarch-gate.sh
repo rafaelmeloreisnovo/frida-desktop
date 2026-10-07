@@ -158,7 +158,7 @@ A64_PROBE_SHA="$(sha256sum "$OUT/aarch64/l0-device-probe.elf")"; A64_PROBE_SHA="
 cat > "$EVIDENCE/receipt.json" <<EOF
 {
   "schema": "rafaelia.frida.l0.crossarch.receipt.v1",
-  "source_sha": "${GITHUB_SHA:-LOCAL}",
+  "source_sha": "${RAFAELIA_SOURCE_SHA:-${GITHUB_SHA:-LOCAL}}",
   "linker": "$(basename "$LLD_BIN")",
   "linker_resolution": "PREINSTALLED_ONLY_NO_PACKAGE_INSTALL",
   "architectures": {
