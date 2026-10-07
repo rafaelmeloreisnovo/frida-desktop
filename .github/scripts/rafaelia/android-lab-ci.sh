@@ -235,6 +235,7 @@ build_native() {
     -std=c11 -O2 -fPIC -fvisibility=hidden -shared
     -Wall -Wextra -Werror
     -Wl,-soname,librafaelia-probe.so
+    -Wl,--no-undefined
     -Wl,--build-id=sha1
   )
 
@@ -287,6 +288,16 @@ PY
 
   readelf -Ws "$NATIVE_DIR/armeabi-v7a/librafaelia-probe.so" | grep -q 'rafaelia_elf_probe_identity'
   readelf -Ws "$NATIVE_DIR/arm64-v8a/librafaelia-probe.so" | grep -q 'rafaelia_elf_probe_identity'
+
+  # The JNI ELF may import Android system symbols, but never unresolved
+  # authorial L0 functions. Protect both packaged ABIs at artifact inspection.
+  for abi in armeabi-v7a arm64-v8a; do
+    path="$NATIVE_DIR/$abi/librafaelia-probe.so"
+    readelf -Ws "$path" > "$EVIDENCE_DIR/${abi}-librafaelia-probe.symbols.txt"
+    if grep -Eq '[[:space:]]UND[[:space:]]+rafaelia_l0_' "$EVIDENCE_DIR/${abi}-librafaelia-probe.symbols.txt"; then
+      rafaelia_die "unresolved authorial L0 symbol in $path"
+    fi
+  done
 
   # Assert the source-built probe alignment contract independently from the
   # logical NEON4096 page contract. Official Gadget assets are inspected but
