@@ -27,5 +27,21 @@ jobs:
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2, Node 24
         with:
           persist-credentials: false
-      - name: Prove no-runtime L0 structure and semantics
+      - name: Prove host no-runtime L0 structure and semantics
         run: bash .github/scripts/rafaelia/frida-authorial-freestanding-l0-gate.sh
+      - name: Prove ARMv7 + AArch64 no-runtime ELF contracts
+        run: bash .github/scripts/rafaelia/frida-l0-crossarch-gate.sh
+      - name: Upload exact-byte ARM device probes and cross-arch evidence
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1, Node 24
+        with:
+          name: frida-l0-crossarch-${{ github.run_id }}
+          path: |
+            build/frida-l0-crossarch/armv7/l0-core.elf
+            build/frida-l0-crossarch/armv7/l0-device-probe.elf
+            build/frida-l0-crossarch/aarch64/l0-core.elf
+            build/frida-l0-crossarch/aarch64/l0-device-probe.elf
+            evidence/frida-l0-crossarch/
+            tools/frida-l0-on-device-receipt.sh
+          if-no-files-found: error
+          retention-days: 14
+          compression-level: 0

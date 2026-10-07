@@ -13,6 +13,7 @@ _Static_assert(sizeof(RafaeliaL0U32) == 4, "RafaeliaL0U32 must be 32-bit");
 _Static_assert(sizeof(RafaeliaL0U64) == 8, "RafaeliaL0U64 must be 64-bit");
 
 #define RAFAELIA_L0_U32_MAX ((RafaeliaL0U32)~(RafaeliaL0U32)0u)
+#define RAFAELIA_L0_U64_MAX ((RafaeliaL0U64)~(RafaeliaL0U64)0ull)
 
 typedef struct RafaeliaL0SpinLock {
     volatile RafaeliaL0U8 value;

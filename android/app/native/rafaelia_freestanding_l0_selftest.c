@@ -13,10 +13,14 @@ int main(void) {
     if (rafaelia_l0_saturating_inc_u32(41u) != 42u) return 3;
     if (rafaelia_l0_saturating_inc_u32(RAFAELIA_L0_U32_MAX) != RAFAELIA_L0_U32_MAX) return 4;
     if (rafaelia_l0_ratio_ppm(1u, 4u) != 250000u) return 5;
-    if (rafaelia_l0_ratio_q16(1u, 1u) != 65535u) return 6;
+    if (rafaelia_l0_ratio_ppm(1u, 3u) != 333333u) return 6;
+    if (rafaelia_l0_ratio_q16(2u, 3u) != 43690u) return 7;
+    if (rafaelia_l0_ratio_q16(1u, 1u) != 65535u) return 8;
+    if (rafaelia_l0_ratio_ppm(RAFAELIA_L0_U64_MAX - 1u,
+                              RAFAELIA_L0_U64_MAX) != 999999u) return 9;
     rafaelia_l0_lock(&lock);
-    if (lock.value == 0u) return 7;
+    if (lock.value == 0u) return 10;
     rafaelia_l0_unlock(&lock);
-    if (lock.value != 0u) return 8;
+    if (lock.value != 0u) return 11;
     return 0;
 }
