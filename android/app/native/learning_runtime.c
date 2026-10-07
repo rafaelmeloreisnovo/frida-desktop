@@ -1,8 +1,5 @@
 #include "learning_runtime.h"
-
-#include <limits.h>
-#include <stdatomic.h>
-#include <string.h>
+#include "rafaelia_freestanding_l0.h"
 
 typedef struct ValidationEntry {
     uint64_t context_hash;
@@ -30,15 +27,14 @@ typedef struct RuntimeState {
 } RuntimeState;
 
 static RuntimeState g_runtime;
-static atomic_flag g_runtime_lock = ATOMIC_FLAG_INIT;
+static RafaeliaL0SpinLock g_runtime_lock = RAFAELIA_L0_SPINLOCK_INIT;
 
 static void runtime_lock(void) {
-    while (atomic_flag_test_and_set_explicit(&g_runtime_lock, memory_order_acquire)) {
-    }
+    rafaelia_l0_lock(&g_runtime_lock);
 }
 
 static void runtime_unlock(void) {
-    atomic_flag_clear_explicit(&g_runtime_lock, memory_order_release);
+    rafaelia_l0_unlock(&g_runtime_lock);
 }
 
 static uint32_t validation_set_index(uint64_t context_hash) {
