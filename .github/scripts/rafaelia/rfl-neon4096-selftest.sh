@@ -33,6 +33,7 @@ compile_all() {
   cc "${COMMON_FLAGS[@]}" \
     android/app/native/learning_store.c \
     android/app/native/neon4096_core.c \
+    android/app/native/rafaelia_freestanding_l0.c \
     android/app/native/learning_runtime.c \
     android/app/native/learning_runtime_selftest.c \
     -o "$BUILD_DIR/neon4096-runtime-selftest"
@@ -62,6 +63,8 @@ write_evidence() {
     android/app/native/learning_store_selftest.c \
     android/app/native/neon4096_core.h \
     android/app/native/neon4096_core.c \
+    android/app/native/rafaelia_freestanding_l0.h \
+    android/app/native/rafaelia_freestanding_l0.c \
     android/app/native/learning_runtime.h \
     android/app/native/learning_runtime.c \
     android/app/native/learning_runtime_selftest.c \

@@ -44,6 +44,7 @@ evidence or contradiction is missing.
 |---|---|---|---|
 | Current state | [IMPLEMENTATION_SUMMARY](../IMPLEMENTATION_SUMMARY.md) | source at the exact ref | summary is derived |
 | Android build | [BUILD_GUIDE](../android/BUILD_GUIDE.md) | [APK/ELF/DEX lab](android-apk-elf-dex-lab.md) | hosted Gradle and standalone lab are separate |
+| Freestanding refactor | [authorial L0](frida-authorial-freestanding-l0.md) | [freestanding profile](freestanding-profile.md) | local L0 PASS never promotes inherited Frida as freestanding |
 | Device receipt | [one-screen operator](../android/app/ONE_SCREEN_OPERATOR_V1.md) | [physical evidence](evidence/physical/) | receipt must bind the execution boundary |
 | Learning semantics | [learning architecture](../android/app/LEARNING_ARCHITECTURE_V1.md) | [uncertainty contract](runtime-uncertainty-family-v1.md) | shadow/validation is not ACTIVE |
 | Runtime topology | [Android runtime architecture](architecture/FRIDA_LAB_ANDROID_RUNTIME_V1_1.md) | [dependency map](frida-implantation-dependency-map.v1.json) | map is not execution proof |
