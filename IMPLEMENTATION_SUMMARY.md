@@ -90,6 +90,21 @@ A zero observation/prediction count does not prove zero error or zero overhead.
 The operator/evidence projection reports undefined zero-denominator metrics as
 `TOKEN_VAZIO / NO_SAMPLES`.
 
+### Authorial freestanding L0 refactor
+
+A local L0 boundary is materialized in
+`android/app/native/rafaelia_freestanding_l0.{h,c}`. The source contract removes
+system-header/libc/heap/OS/Frida-Gum runtime dependencies from this bounded
+slice, and `learning_runtime.c` now consumes L0 for zeroing, lock operations,
+saturating counters, and validation ratios.
+
+Current exact code head for this refactor is `d3cca63c3267e60638cda9632881d8a76be4d910`. State remains
+`IMPLEMENTED_UNTESTED_CI` until the exact-head gate is observed. This does not
+change inherited Frida provenance and does not imply the whole repository is
+freestanding.
+
+See `docs/frida-authorial-freestanding-l0.md`.
+
 ### NEON4096/3
 
 The current hosted page contract is:
