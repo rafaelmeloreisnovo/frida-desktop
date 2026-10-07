@@ -182,6 +182,11 @@ RAFAELIA_FRIDA_LAB_RECEIPT_V1 underneath, the Android ABI/PID, a capture
 epoch-millisecond timestamp, ten scoped tests, three SHA-256 capture outputs
 and a digest of the preceding evidence text (bundle_sha256, hex lowercase).
 
+For the separate V4 physical package, the screen reports the isolated Gadget
+endpoint 127.0.0.1:27043 instead of the primary package's 127.0.0.1:27042.
+Both values come from the package identity and existing build contract; neither
+port is used to infer successful remote attach.
+
 **Boundary:** T08..T10 PASS establishes only that hashes were computed for
 the installed files. It does not prove identity with an expected GitHub CI
 artifact. Thus apk_to_ci_exact_byte_bind=TOKEN_VAZIO, signer binding
