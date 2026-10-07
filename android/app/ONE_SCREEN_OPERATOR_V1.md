@@ -158,3 +158,54 @@ core only after a read-only detailed snapshot proves the existing runtime is
 readable. This state is receipted as
 `learning_init_disposition=REUSED_EXISTING_CORE`; it is not treated as a new
 initialization and does not weaken the native fail-closed lifecycle.
+
+
+## In-app proofs and tests — V1 candidate (branch-only until exact-head CI)
+
+This optional UI workflow extends the existing one-screen Android Lab without
+installing a new library, permission, agent, or background service.
+
+1. Tap **Exibir comprovantes + testes** to capture the current read-only
+   native RFL/NEON4096 snapshot, load statuses, and SHA-256 of the installed
+   APK, librafaelia-probe.so, and libfrida-gadget.so.
+2. Inspect T01 through T10 as separately typed
+   PASS | FAIL | NOT_RUN | OBSERVED_UNPROMOTED | TOKEN_VAZIO.
+3. Tap **Copiar comprovantes + testes** for a portable textual receipt.
+4. Tap **Salvar comprovante privado** for an explicitly requested new file
+   under the app's private files/receipts/ directory. Each save creates a
+   new file and does not replace its predecessor.
+5. Tap **Compartilhar comprovantes** to launch the Android share chooser.
+   Sharing is never automatic.
+
+The resulting RAFAELIA_FRIDA_INAPP_EVIDENCE_V1 includes the complete
+RAFAELIA_FRIDA_LAB_RECEIPT_V1 underneath, the Android ABI/PID, a capture
+epoch-millisecond timestamp, ten scoped tests, three SHA-256 capture outputs
+and a digest of the preceding evidence text (bundle_sha256, hex lowercase).
+
+For the separate V4 physical package, the screen reports the isolated Gadget
+endpoint 127.0.0.1:27043 instead of the primary package's 127.0.0.1:27042.
+Both values come from the package identity and existing build contract; neither
+port is used to infer successful remote attach.
+
+**Boundary:** T08..T10 PASS establishes only that hashes were computed for
+the installed files. It does not prove identity with an expected GitHub CI
+artifact. Thus apk_to_ci_exact_byte_bind=TOKEN_VAZIO, signer binding
+TOKEN_VAZIO, claim_allowed=false, and physical AArch64 (unless separately
+tested) stay unpromoted. The independent V3 sidecar verifier remains the
+authority for exact-byte comparison to the V4 CI manifest; this new
+in-app surface must not bypass it.
+
+These buttons do not call learningObserve, nativeLearningFlush,
+nativeLearningResetVolatile, or nativeLearningSetMode; they do not create
+training samples and do not authorize ACTIVE. The normal advanced controls
+retain their existing, separately opted-in behavior. File hashing can take
+perceptible time on older ARMv7 hardware and runs only on explicit action.
+
+**New-feature gates:** source review; Android javac -> D8 -> APK packaging,
+signature and ABI inventories at the exact commit; independent APK install and
+in-app UI/clipboard/private-file/share smoke. Until each is observed, its state
+is IMPLEMENTED_UNTESTED or TOKEN_VAZIO, not PASS.
+
+**Rollback:** revert the isolated feature commit(s); previous diagnosis,
+snapshot, clipboard, activity lifecycle, and the sidecar exact-byte verifier
+are not removed or replaced.
