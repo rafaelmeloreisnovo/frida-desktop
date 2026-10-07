@@ -445,7 +445,8 @@ public final class MainActivity extends Activity {
         lastOperatorReceipt = buildOperatorReceipt(snapshot, state);
 
         ApplicationInfo app = getApplicationInfo();
-        String installedApk = installedFileSha256(new File(app.sourceDir));
+        String installedApk = installedFileSha256(
+                app.sourceDir == null ? null : new File(app.sourceDir));
         File nativeDir = app.nativeLibraryDir == null ? null : new File(app.nativeLibraryDir);
         String installedProbe = installedFileSha256(
                 nativeDir == null ? null : new File(nativeDir, "librafaelia-probe.so"));
@@ -476,9 +477,12 @@ public final class MainActivity extends Activity {
         out.append("T04_simd_fold_selftest=").append(observedTest(
                 snapshot, "SIMD fold selftest: PASS", "SIMD fold selftest: FAIL"))
                 .append('\n');
-        out.append("T05_page_4096_match=").append(observedTest(
-                snapshot, "observed OS page: 4096 B (MATCH_4096)",
-                "observed OS page: 4096 B (MISMATCH)")).append('\n');
+        out.append("T05_page_4096_match=").append(
+                snapshot != null
+                        && snapshot.contains("observed OS page: 4096 B (MATCH_4096)")
+                        ? "PASS" : snapshot != null
+                        && snapshot.contains("observed OS page:")
+                        ? "FAIL" : "TOKEN_VAZIO").append('\n');
         out.append("T06_learning_evidence=").append(
                 readable ? learningEvidenceState(snapshot) : "NOT_RUN").append('\n');
         out.append("T07_shadow_validation=").append(
@@ -548,7 +552,7 @@ public final class MainActivity extends Activity {
             }
             return "SALVO EM ARMAZENAMENTO PRIVADO: " + target.getAbsolutePath()
                     + "\nNovo arquivo, sem substituir recibos anteriores.\n\n" + evidence;
-        } catch (IOException e) {
+        } catch (IOException | SecurityException e) {
             if (target != null && !target.delete()) {
                 Log.w(TAG, "Incomplete private evidence file retained: " + target.getName());
             }
