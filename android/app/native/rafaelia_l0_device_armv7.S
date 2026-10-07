@@ -1,4 +1,5 @@
 .syntax unified
+.arm
 .text
 .align 2
 .global _start
