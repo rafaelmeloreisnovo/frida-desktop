@@ -98,10 +98,20 @@ system-header/libc/heap/OS/Frida-Gum runtime dependencies from this bounded
 slice, and `learning_runtime.c` now consumes L0 for zeroing, lock operations,
 saturating counters, and validation ratios.
 
-Current exact code head for this refactor is `d3cca63c3267e60638cda9632881d8a76be4d910`. State remains
-`IMPLEMENTED_UNTESTED_CI` until the exact-head gate is observed. This does not
-change inherited Frida provenance and does not imply the whole repository is
-freestanding.
+Exact tested source head: `e08d2fe055946faf8ac20d80418ea4e837e1fcaf`.
+It was merged by PR #78 into main commit
+`83859641ea55ff449b2127ddf7f59bf02ddfc137`.
+
+Bounded state: `PASS_BOUNDED_L0` for the local L0 structural/runtime-dependency
+scope. Exact-head evidence includes the dedicated no-runtime ELF gate,
+RFL+NEON4096 regression, APK/ELF/DEX lab, workflow contract, provenance gate and
+OMEGA fail-closed verdict, all `PASS`.
+
+The inherited Frida tree is still third-party and whole-repository freestanding
+status remains `TOKEN_VAZIO`. The upstream-style matrix `CI` failure on the
+same head is classified separately as `PROVIDER_FAILURE`: setup failed while
+loading AWS credentials, before toolchain roll; it is not source evidence
+against the bounded L0 PASS.
 
 See `docs/frida-authorial-freestanding-l0.md`.
 

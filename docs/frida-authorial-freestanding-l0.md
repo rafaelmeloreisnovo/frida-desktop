@@ -1,11 +1,13 @@
 # Frida refactor — authorial freestanding L0
 
-Status: `IMPLEMENTED_UNTESTED_CI` until exact-head CI closes the gate.
-Code head recorded by this document: `d3cca63c3267e60638cda9632881d8a76be4d910`.
-Scope: RAFAELIA local delta only.
+Status: `PASS_BOUNDED_L0`.
+Exact tested source head: `e08d2fe055946faf8ac20d80418ea4e837e1fcaf`.
+Merged by PR #78 into main: `83859641ea55ff449b2127ddf7f59bf02ddfc137`.
+Scope: RAFAELIA local L0 delta only.
 Whole-Frida freestanding: `TOKEN_VAZIO`.
 Whole-repository authorship claim: `false`.
-Global claim gate: `claim_allowed=false`.
+claim_allowed(L0 structural/runtime-dependency scope): `true`.
+claim_allowed(whole Frida): `false`.
 
 ## What changed
 
@@ -48,13 +50,17 @@ IMPLEMENTED_UNTESTED_CI != PASS
 TOKEN_VAZIO != 0
 ```
 
-## Next gate
+## Closed gates and remaining boundary
 
-Exact-head CI must prove:
+The exact tested head `e08d2fe055946faf8ac20d80418ea4e837e1fcaf`
+closed:
 
-1. L0 structural ELF gate;
-2. RFL + NEON4096 regression selftest with L0 linked;
-3. existing OMEGA core path remains green.
+1. L0 structural ELF gate: `PASS`;
+2. RFL + NEON4096 regression selftest with L0 linked: `PASS`;
+3. Android APK + ELF/DEX lab: `PASS`;
+4. workflow architecture + provenance non-regression: `PASS`;
+5. OMEGA fail-closed final verdict: `PASS`.
 
-Only then may this exact slice move from `IMPLEMENTED_UNTESTED_CI` to
-`PASS`. The whole repository remains `TOKEN_VAZIO` for freestanding status.
+The generic L0 cross-architecture no-runtime proof and physical-device
+execution remain `TOKEN_VAZIO`. The whole repository remains
+`TOKEN_VAZIO` for freestanding status.
