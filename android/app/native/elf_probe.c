@@ -13,6 +13,8 @@
  */
 #include "learning_store.c"
 #include "neon4096_core.c"
+/* learning_runtime.c consumes the authorial L0 definitions at dlopen time. */
+#include "rafaelia_freestanding_l0.c"
 #include "learning_runtime.c"
 
 __attribute__((visibility("default")))
