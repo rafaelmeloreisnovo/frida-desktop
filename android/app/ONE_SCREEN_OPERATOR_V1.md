@@ -46,42 +46,54 @@ A missing commit binding, dirty tracked tree, missing Gadget/Frida bridge, faile
 
 ### Exact-byte V3 custody mode
 
-Legacy V2 remains available for runtime-only observation. The successor V3
-mode consumes the build-produced
-`receipt.android17-apk-lab.v4.json` and compares it against the bytes already
-running on the device:
+Legacy V2 remains available for runtime-only observation. The successor V4
+build receipt now defines a **side-by-side physical target** rather than asking
+the new debug build to replace the existing lab package.
+
+For every CI run, the build creates one universal physical APK with:
+
+- a run-scoped package such as `io.rafaelia.fridalab.physical.r<run-id>`;
+- the same `io.rafaelia.fridalab.MainActivity` DEX class;
+- the same ABI-specific source-built probe and pinned Frida Gadget bytes;
+- an isolated Gadget endpoint at `127.0.0.1:27043`;
+- its own app sandbox, so the existing `io.rafaelia.fridalab` RFL state is not
+  replaced or cleared.
+
+After the **exact V4 sidecar APK has been installed by an authorized human
+action**, run from a clean checkout whose head or Git tree matches the V4
+receipt:
 
 ```sh
 RAFAELIA_FRIDA_EXPECTED_RECEIPT=dist/android17-lab/receipt.android17-apk-lab.v4.json \
   bash android/app/on-device-smoke.sh
 ```
 
-The V3 verifier hashes, from inside the Android process:
+No package name or port must be copied manually: V3 reads both from the V4
+`physical_target` and fails if an environment override disagrees.
 
-- the installed APK at `ApplicationInfo.sourceDir`;
+The V3 verifier hashes, from inside that Android process:
+
+- the installed sidecar APK at `ApplicationInfo.sourceDir`;
 - the installed `librafaelia-probe.so`;
 - the installed `libfrida-gadget.so`;
 - the package signing certificate.
 
-It then compares those values to the exact ABI entry in the V4 build receipt
-and also requires the verifier checkout to match either the build receipt's
-exact source head or its exact Git tree SHA. This permits a merge commit only
-when it is byte-tree equivalent to the tested source. A mismatch is `FAIL`,
-not an inferred upgrade path.
+It compares them with the exact ABI entry in V4 and proves source identity by
+either exact source-head equality or exact Git-tree equality. A mismatch is
+`FAIL`, never an inferred promotion.
 
 **The verifier does not install, uninstall, clear, or replace the package.**
 It does not invoke `adb install`, `pm install`, `pm uninstall`, or
-`pm clear`. This lets the V3 command be used safely as a preflight against an
-existing installation without destroying RFL state.
+`pm clear`. Installation is deliberately outside the evidence verifier.
 
-If the existing package does not match the expected signer or bytes, stop.
-Installation/replacement is a separate human-authorized action and must not be
-performed merely to obtain a green receipt. An ephemeral debug signer is not
-assumed compatible with an existing package.
+Because the physical package ID is unique per build run, its ephemeral debug
+signer does not need to replace the signer of the existing primary lab app.
+The primary package and its RFL data remain untouched.
 
-Only a physical V3 run in which all exact-byte gates pass may set
-`APK_TO_SOURCE_EXACT_BIND=PASS` for that measured device/artifact execution.
-Until such a receipt exists, `APK_TO_SOURCE_EXACT_BIND=TOKEN_VAZIO`.
+Only a physical V3 run in which all runtime and exact-byte gates pass may set
+`APK_TO_SOURCE_EXACT_BIND=PASS` for that measured sidecar/device execution.
+Until such a physical receipt exists,
+`APK_TO_SOURCE_EXACT_BIND=TOKEN_VAZIO`.
 
 Default receipt directory:
 
