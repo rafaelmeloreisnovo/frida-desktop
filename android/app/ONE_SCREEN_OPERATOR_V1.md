@@ -44,11 +44,42 @@ The v2 receipt is append-only and binds:
 
 A missing commit binding, dirty tracked tree, missing Gadget/Frida bridge, failed runtime gate, missing snapshot invariant, or zero-sample evidence projected as measured zero makes the receipt `FAIL`. A physical receipt never changes `claim_allowed=false` by itself.
 
-Current custody boundary: `source_commit` binds the verifier checkout, not the
-installed application bytes by itself. The current v2 receipt does not yet bind
-the installed APK, `librafaelia-probe.so`, and `libfrida-gadget.so` SHA-256
-values to that same source commit. Until those byte identities are present in
-one physical receipt, `APK_TO_SOURCE_EXACT_BIND=TOKEN_VAZIO`.
+### Exact-byte V3 custody mode
+
+Legacy V2 remains available for runtime-only observation. The successor V3
+mode consumes the build-produced
+`receipt.android17-apk-lab.v4.json` and compares it against the bytes already
+running on the device:
+
+```sh
+RAFAELIA_FRIDA_EXPECTED_RECEIPT=dist/android17-lab/receipt.android17-apk-lab.v4.json \
+  bash android/app/on-device-smoke.sh
+```
+
+The V3 verifier hashes, from inside the Android process:
+
+- the installed APK at `ApplicationInfo.sourceDir`;
+- the installed `librafaelia-probe.so`;
+- the installed `libfrida-gadget.so`;
+- the package signing certificate.
+
+It then compares those values to the exact ABI entry in the V4 build receipt
+and also requires the verifier checkout commit to equal the build receipt's
+exact source head. A mismatch is `FAIL`, not an inferred upgrade path.
+
+**The verifier does not install, uninstall, clear, or replace the package.**
+It does not invoke `adb install`, `pm install`, `pm uninstall`, or
+`pm clear`. This lets the V3 command be used safely as a preflight against an
+existing installation without destroying RFL state.
+
+If the existing package does not match the expected signer or bytes, stop.
+Installation/replacement is a separate human-authorized action and must not be
+performed merely to obtain a green receipt. An ephemeral debug signer is not
+assumed compatible with an existing package.
+
+Only a physical V3 run in which all exact-byte gates pass may set
+`APK_TO_SOURCE_EXACT_BIND=PASS` for that measured device/artifact execution.
+Until such a receipt exists, `APK_TO_SOURCE_EXACT_BIND=TOKEN_VAZIO`.
 
 Default receipt directory:
 
