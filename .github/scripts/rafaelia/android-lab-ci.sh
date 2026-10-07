@@ -507,6 +507,7 @@ write_receipt() {
     "$DIST_DIR/frida-lab-armv7-debug.apk"
     "$DIST_DIR/frida-lab-arm64-debug.apk"
     "$DIST_DIR/frida-lab-universal-debug.apk"
+    "$DIST_DIR/frida-lab-physical-universal-debug.apk"
     "$NATIVE_DIR/armeabi-v7a/libfrida-gadget.so"
     "$NATIVE_DIR/armeabi-v7a/librafaelia-probe.so"
     "$NATIVE_DIR/arm64-v8a/libfrida-gadget.so"
