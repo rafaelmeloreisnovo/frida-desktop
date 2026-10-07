@@ -23,39 +23,32 @@ static RafaeliaL0U32 rafaelia_l0_ratio_scaled(RafaeliaL0U64 numerator,
     if (denominator == 0u || numerator == 0u || scale == 0u) return 0u;
     if (numerator >= denominator) return scale;
 
-    remainder = numerator;
+    remainder = 0u;
     while (bit != 0u && (scale & bit) == 0u) bit >>= 1u;
 
     while (bit != 0u) {
-        RafaeliaL0U32 carry = 0u;
-
-        if (quotient > (RAFAELIA_L0_U32_MAX >> 1u)) {
-            quotient = RAFAELIA_L0_U32_MAX;
-        } else {
-            quotient <<= 1u;
-        }
+        quotient <<= 1u;
 
         if (remainder >= denominator - remainder) {
             remainder = remainder - (denominator - remainder);
-            carry = 1u;
+            quotient += 1u;
         } else {
             remainder += remainder;
         }
 
-        if (carry != 0u && quotient != RAFAELIA_L0_U32_MAX) quotient += 1u;
-
-        bit >>= 1u;
-        if (bit != 0u && (scale & bit) != 0u) {
+        if ((scale & bit) != 0u) {
             if (remainder >= denominator - numerator) {
                 remainder = remainder - (denominator - numerator);
-                if (quotient != RAFAELIA_L0_U32_MAX) quotient += 1u;
+                quotient += 1u;
             } else {
                 remainder += numerator;
             }
         }
+
+        bit >>= 1u;
     }
 
-    return quotient > scale ? scale : quotient;
+    return quotient;
 }
 
 RafaeliaL0U32 rafaelia_l0_ratio_ppm(RafaeliaL0U64 numerator, RafaeliaL0U64 denominator) {
