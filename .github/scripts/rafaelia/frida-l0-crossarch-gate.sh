@@ -6,12 +6,57 @@ ROOT="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
 cd "$ROOT"
 
 : "${CLANG:=clang}"
-for cmd in "$CLANG" ld.lld readelf nm sha256sum file; do
+for cmd in "$CLANG" readelf nm sha256sum file; do
   command -v "$cmd" >/dev/null 2>&1 || {
     echo "FRIDA_L0_CROSSARCH_FAIL missing_tool=$cmd" >&2
     exit 2
   }
 done
+
+resolve_lld() {
+  local candidate
+  candidate="$("$CLANG" -print-prog-name=ld.lld 2>/dev/null || true)"
+  if [ -n "$candidate" ] && [ "$candidate" != "ld.lld" ] && [ -x "$candidate" ]; then
+    printf '%s\n' "$candidate"
+    return 0
+  fi
+
+  if command -v ld.lld >/dev/null 2>&1; then
+    command -v ld.lld
+    return 0
+  fi
+
+  for candidate in /usr/bin/ld.lld-* /usr/local/bin/ld.lld-*; do
+    if [ -x "$candidate" ]; then
+      printf '%s\n' "$candidate"
+      return 0
+    fi
+  done
+
+  if command -v rustc >/dev/null 2>&1; then
+    local rust_sysroot rust_host
+    rust_sysroot="$(rustc --print sysroot)"
+    rust_host="$(rustc -vV | sed -n 's/^host: //p')"
+    candidate="$rust_sysroot/lib/rustlib/$rust_host/bin/rust-lld"
+    if [ -x "$candidate" ]; then
+      printf '%s\n' "$candidate"
+      return 0
+    fi
+  fi
+
+  return 1
+}
+
+LLD_BIN="$(resolve_lld || true)"
+if [ -z "$LLD_BIN" ]; then
+  echo "FRIDA_L0_CROSSARCH_FAIL missing_tool=lld-compatible-linker" >&2
+  exit 3
+fi
+
+LLD_ARGS=()
+case "$(basename "$LLD_BIN")" in
+  rust-lld) LLD_ARGS=(-flavor gnu) ;;
+esac
 
 SRC_H="android/app/native/rafaelia_freestanding_l0.h"
 SRC_C="android/app/native/rafaelia_freestanding_l0.c"
@@ -62,7 +107,7 @@ build_one() {
     exit 10
   fi
 
-  "$CLANG" --target="$target" -fuse-ld=lld -march="$march" "${extra[@]}" "${COMMON[@]}"     -nostdlib -nodefaultlibs     -Wl,-static -Wl,-e,rafaelia_l0_entry -Wl,--build-id=none     "$obj" -o "$core"
+  "$LLD_BIN" "${LLD_ARGS[@]}" -static -e rafaelia_l0_entry --build-id=none "$obj" -o "$core"
 
   readelf -h "$core" > "$EVIDENCE/$name-core-header.txt"
   readelf -l "$core" > "$EVIDENCE/$name-core-program.txt"
@@ -83,7 +128,7 @@ build_one() {
     exit 11
   fi
 
-  "$CLANG" --target="$target" -fuse-ld=lld -march="$march" "${extra[@]}" "${COMMON[@]}"     -nostdlib -nodefaultlibs     -Wl,-static -Wl,-e,_start -Wl,--build-id=none     "$obj" "$adapter_obj" -o "$probe"
+  "$LLD_BIN" "${LLD_ARGS[@]}" -static -e _start --build-id=none "$obj" "$adapter_obj" -o "$probe"
 
   readelf -h "$probe" > "$EVIDENCE/$name-probe-header.txt"
   readelf -l "$probe" > "$EVIDENCE/$name-probe-program.txt"
@@ -114,6 +159,8 @@ cat > "$EVIDENCE/receipt.json" <<EOF
 {
   "schema": "rafaelia.frida.l0.crossarch.receipt.v1",
   "source_sha": "${GITHUB_SHA:-LOCAL}",
+  "linker": "$(basename "$LLD_BIN")",
+  "linker_resolution": "PREINSTALLED_ONLY_NO_PACKAGE_INSTALL",
   "architectures": {
     "armv7": {
       "target": "armv7a-none-eabi",
