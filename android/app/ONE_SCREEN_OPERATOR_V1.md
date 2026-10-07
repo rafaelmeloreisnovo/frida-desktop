@@ -64,8 +64,10 @@ The V3 verifier hashes, from inside the Android process:
 - the package signing certificate.
 
 It then compares those values to the exact ABI entry in the V4 build receipt
-and also requires the verifier checkout commit to equal the build receipt's
-exact source head. A mismatch is `FAIL`, not an inferred upgrade path.
+and also requires the verifier checkout to match either the build receipt's
+exact source head or its exact Git tree SHA. This permits a merge commit only
+when it is byte-tree equivalent to the tested source. A mismatch is `FAIL`,
+not an inferred upgrade path.
 
 **The verifier does not install, uninstall, clear, or replace the package.**
 It does not invoke `adb install`, `pm install`, `pm uninstall`, or
