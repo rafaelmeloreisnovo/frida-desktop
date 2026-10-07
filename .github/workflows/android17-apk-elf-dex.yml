@@ -43,16 +43,18 @@ jobs:
       MIN_SDK: "21"
       NDK_VERSION: "29.0.14206865"
       FRIDA_VERSION: "17.9.11"
+      RAFAELIA_SOURCE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
 
     steps:
       # External actions are bounded catalysts only. Build, validation and
       # evidence semantics live in .github/scripts/rafaelia/.
-      - name: Check out repository
+      - name: Check out exact source
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2, Node 24
         with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
           persist-credentials: false
 
-      - name: Validate on-device receipt verifier contract
+      - name: Validate legacy + exact-byte on-device receipt contract
         run: bash .github/scripts/rafaelia/on-device-receipt-verifier-gate.sh
 
       - name: Set up Java 17

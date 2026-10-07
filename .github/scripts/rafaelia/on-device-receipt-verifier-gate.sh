@@ -36,11 +36,28 @@ require_token() {
 
 # Verifier identity / locality / append-only custody.
 require_token "$VERIFIER" 'rafaelia.frida.on_device_smoke.v2'
+require_token "$VERIFIER" 'rafaelia.frida.on_device_smoke.v3'
+require_token "$VERIFIER" 'RAFAELIA_FRIDA_EXPECTED_RECEIPT'
+require_token "$VERIFIER" 'rafaelia.frida.android-apk-lab.receipt.v4'
+require_token "$VERIFIER" 'EXACT_BYTE_V3'
+require_token "$VERIFIER" 'installed_apk_sha256'
+require_token "$VERIFIER" 'librafaelia_probe_sha256'
+require_token "$VERIFIER" 'libfrida_gadget_sha256'
+require_token "$VERIFIER" 'signer_certificate_sha256'
+require_token "$VERIFIER" 'apk_to_source_exact_bind'
+require_token "$VERIFIER" 'verifier_source_matches_expected_head'
+require_token "$VERIFIER" 'claim_allowed_physical_exact_scope'
+require_token "$VERIFIER" 'target_package_match'
+require_token "$VERIFIER" 'target_endpoint_match'
+require_token "$VERIFIER" 'physical_target'
 require_token "$VERIFIER" 'ON_DEVICE_TERMUX_LOCALHOST'
 require_token "$VERIFIER" '127.0.0.1:*|localhost:*'
 require_token "$VERIFIER" "'[::1]':*"
 require_token "$VERIFIER" 'reason=non_local_endpoint'
 require_token "$VERIFIER" 'source_commit_bound'
+require_token "$VERIFIER" 'source_tree_sha_bound'
+require_token "$VERIFIER" 'verifier_source_matches_expected_tree'
+require_token "$VERIFIER" 'verifier_source_matches_expected_identity'
 require_token "$VERIFIER" 'source_tree_clean'
 require_token "$VERIFIER" 'script_sha256_bound'
 require_token "$VERIFIER" 'os.O_EXCL'
@@ -79,25 +96,40 @@ if grep -Fq -- 'learningObserve(' "$VERIFIER"; then
   fail "write_side_learning_bridge_present"
 fi
 
+# Exact-byte verification is observation-only. Installation, package removal,
+# data clearing or privilege escalation must stay outside this verifier.
+for forbidden in 'adb install' 'pm install' 'pm uninstall' 'pm clear' 'su -c' 'mount -o rw'; do
+  if grep -Fq -- "$forbidden" "$VERIFIER"; then
+    fail "forbidden_device_mutation:$forbidden"
+  fi
+done
+
 # Operator docs must keep the verifier subordinate to the one-screen UI and
 # make the physical boundary explicit.
 require_token "$DOC" 'bash android/app/on-device-smoke.sh'
 require_token "$DOC" 'evidence verifier, not a second UI or an autonomous control loop'
 require_token "$DOC" 'claim_allowed=false'
+require_token "$DOC" 'RAFAELIA_FRIDA_EXPECTED_RECEIPT'
+require_token "$DOC" 'APK_TO_SOURCE_EXACT_BIND'
+require_token "$DOC" 'does not install, uninstall, clear, or replace the package'
 
 mkdir -p "$EVIDENCE_DIR"
 verifier_sha256="$(sha256sum "$VERIFIER" | awk '{print $1}')"
 activity_sha256="$(sha256sum "$ACTIVITY" | awk '{print $1}')"
 jni_sha256="$(sha256sum "$JNI" | awk '{print $1}')"
 {
-  printf 'schema=rafaelia.frida.on_device_verifier_contract.v1\n'
+  printf 'schema=rafaelia.frida.on_device_verifier_contract.v2\n'
   printf 'status=PASS\n'
   printf 'verifier=%s\n' "$VERIFIER"
   printf 'verifier_sha256=%s\n' "$verifier_sha256"
   printf 'activity_sha256=%s\n' "$activity_sha256"
   printf 'jni_sha256=%s\n' "$jni_sha256"
+  printf 'legacy_v2_contract=PASS\n'
+  printf 'exact_byte_v3_contract=PASS\n'
+  printf 'expected_artifact_schema=rafaelia.frida.android-apk-lab.receipt.v4\n'
   printf 'execution_proven=false\n'
   printf 'physical_device_smoke=TOKEN_VAZIO\n'
+  printf 'apk_to_source_exact_bind=TOKEN_VAZIO\n'
   printf 'claim_allowed=false\n'
 } > "$EVIDENCE_FILE"
 

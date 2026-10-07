@@ -394,9 +394,44 @@ package_apks() {
 }
 JSON
 
+  local physical_package="io.rafaelia.fridalab.physical.r${GITHUB_RUN_ID:-0}"
+  local physical_manifest="build/android17/AndroidManifest.physical.xml"
+  local physical_gadget_config="build/android17/gadget-config-physical.json"
+  PHYSICAL_PACKAGE="$physical_package" python3 - <<'PY'
+import os
+from pathlib import Path
+
+src = Path("android/app/AndroidManifest.xml").read_text(encoding="utf-8")
+package = os.environ["PHYSICAL_PACKAGE"]
+old_package = 'package="io.rafaelia.fridalab"'
+old_activity = 'android:name=".MainActivity"'
+if src.count(old_package) != 1 or src.count(old_activity) != 1:
+    raise SystemExit("physical manifest source contract changed")
+src = src.replace(old_package, f'package="{package}"')
+src = src.replace(old_activity, 'android:name="io.rafaelia.fridalab.MainActivity"')
+src = src.replace('android:label="Frida ELF/DEX Lab"', 'android:label="Frida ELF/DEX Lab Physical"')
+Path("build/android17/AndroidManifest.physical.xml").write_text(src, encoding="utf-8")
+PY
+  cat > "$physical_gadget_config" <<'JSON'
+{
+  "interaction": {
+    "type": "listen",
+    "address": "127.0.0.1",
+    "port": 27043,
+    "on_port_conflict": "fail",
+    "on_load": "resume"
+  },
+  "teardown": "minimal",
+  "runtime": "default"
+}
+JSON
+  printf '%s\n' "$physical_package" > "$DIST_DIR/frida-lab-physical.package.txt"
+
   build_one_apk() {
     local flavor="$1"
-    shift
+    local manifest="$2"
+    local config="$3"
+    shift 3
     local work="$APK_WORK_DIR/$flavor"
     rm -rf "$work"
     mkdir -p "$work/stage"
@@ -404,7 +439,7 @@ JSON
     "$BT_DIR/aapt2" link \
       -o "$work/base.apk" \
       -I "$ANDROID_JAR" \
-      --manifest android/app/AndroidManifest.xml \
+      --manifest "$manifest" \
       --min-sdk-version "$MIN_SDK" \
       --target-sdk-version "$TARGET_SDK" \
       --version-code 1 \
@@ -421,7 +456,7 @@ JSON
       mkdir -p "$work/stage/lib/$abi"
       cp "$NATIVE_DIR/$abi/libfrida-gadget.so" "$work/stage/lib/$abi/libfrida-gadget.so"
       cp "$NATIVE_DIR/$abi/librafaelia-probe.so" "$work/stage/lib/$abi/librafaelia-probe.so"
-      cp "$gadget_config" "$work/stage/lib/$abi/libfrida-gadget.config.so"
+      cp "$config" "$work/stage/lib/$abi/libfrida-gadget.config.so"
     done
     (
       cd "$work/stage"
@@ -455,9 +490,10 @@ JSON
     done
   }
 
-  build_one_apk armv7 armeabi-v7a
-  build_one_apk arm64 arm64-v8a
-  build_one_apk universal armeabi-v7a arm64-v8a
+  build_one_apk armv7 android/app/AndroidManifest.xml "$gadget_config" armeabi-v7a
+  build_one_apk arm64 android/app/AndroidManifest.xml "$gadget_config" arm64-v8a
+  build_one_apk universal android/app/AndroidManifest.xml "$gadget_config" armeabi-v7a arm64-v8a
+  build_one_apk physical-universal "$physical_manifest" "$physical_gadget_config" armeabi-v7a arm64-v8a
 
   cp android/app/adb-smoke.sh "$DIST_DIR/adb-smoke.sh"
 }
@@ -471,6 +507,7 @@ write_receipt() {
     "$DIST_DIR/frida-lab-armv7-debug.apk"
     "$DIST_DIR/frida-lab-arm64-debug.apk"
     "$DIST_DIR/frida-lab-universal-debug.apk"
+    "$DIST_DIR/frida-lab-physical-universal-debug.apk"
     "$NATIVE_DIR/armeabi-v7a/libfrida-gadget.so"
     "$NATIVE_DIR/armeabi-v7a/librafaelia-probe.so"
     "$NATIVE_DIR/arm64-v8a/libfrida-gadget.so"
@@ -478,9 +515,14 @@ write_receipt() {
   )
   rafaelia_write_sha256_manifest "$DIST_DIR/SHA256SUMS.txt" "${manifest_paths[@]}"
 
+  local source_tree_sha
+  source_tree_sha="$(git rev-parse HEAD^{tree} 2>/dev/null || printf TOKEN_VAZIO)"
+
   GITHUB_REPOSITORY="${GITHUB_REPOSITORY:-LOCAL}" \
   GITHUB_RUN_ID="${GITHUB_RUN_ID:-0}" \
   GITHUB_SHA="${GITHUB_SHA:-LOCAL}" \
+  RAFAELIA_SOURCE_SHA="${RAFAELIA_SOURCE_SHA:-${GITHUB_SHA:-LOCAL}}" \
+  SOURCE_TREE_SHA="$source_tree_sha" \
   RESOLVED_BUILD_TOOLS="$RESOLVED_BUILD_TOOLS" \
   RESOLVED_PLATFORM_PACKAGE="$RESOLVED_PLATFORM_PACKAGE" \
   DIST_DIR="$DIST_DIR" \
@@ -504,6 +546,16 @@ def info(path: Path) -> dict:
     return {"bytes": path.stat().st_size, "sha256": sha256(path)}
 
 
+def signer_digest(path: Path) -> str:
+    prefix = "V3.0 Signer: certificate SHA-256 digest:"
+    for line in path.read_text(encoding="utf-8").splitlines():
+        if line.startswith(prefix):
+            digest = line[len(prefix):].strip().lower()
+            if len(digest) == 64 and all(c in "0123456789abcdef" for c in digest):
+                return digest
+    raise SystemExit(f"missing signer SHA-256 in {path}")
+
+
 dist = Path(os.environ["DIST_DIR"])
 native_root = Path(os.environ["NATIVE_DIR"])
 apk = {p.name: info(p) for p in sorted(dist.glob("*.apk"))}
@@ -513,6 +565,19 @@ for abi in ("armeabi-v7a", "arm64-v8a"):
         "frida_gadget": info(native_root / abi / "libfrida-gadget.so"),
         "source_built_probe": info(native_root / abi / "librafaelia-probe.so"),
     }
+
+signers = {
+    "armeabi-v7a": signer_digest(dist / "frida-lab-armv7.signature.txt"),
+    "arm64-v8a": signer_digest(dist / "frida-lab-arm64.signature.txt"),
+    "physical": signer_digest(dist / "frida-lab-physical-universal.signature.txt"),
+}
+if len(set(signers.values())) != 1:
+    raise SystemExit(f"APK signer mismatch across artifacts: {signers}")
+common_signer = next(iter(signers.values()))
+physical_package = (dist / "frida-lab-physical.package.txt").read_text(encoding="utf-8").strip()
+if not physical_package.startswith("io.rafaelia.fridalab.physical.r"):
+    raise SystemExit(f"invalid physical package: {physical_package!r}")
+physical_apk = apk["frida-lab-physical-universal-debug.apk"]
 
 receipt = {
     "schema": "rafaelia.frida.android-apk-lab.receipt.v3",
@@ -551,7 +616,63 @@ receipt = {
 
 out = dist / "receipt.android17-apk-lab.v3.json"
 out.write_text(json.dumps(receipt, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+receipt_v4 = {
+    "schema": "rafaelia.frida.android-apk-lab.receipt.v4",
+    "predecessor": out.name,
+    "github_repository": os.environ["GITHUB_REPOSITORY"],
+    "github_workflow_run_id": int(os.environ["GITHUB_RUN_ID"]),
+    "source": {
+        "head_sha": os.environ["RAFAELIA_SOURCE_SHA"],
+        "checked_out_tree_sha": os.environ["SOURCE_TREE_SHA"],
+        "github_event_sha": os.environ["GITHUB_SHA"],
+    },
+    "apk_signing": {
+        "mode": "ephemeral-debug-key",
+        "certificate_sha256": common_signer,
+    },
+    "physical_target": {
+        "mode": "SIDE_BY_SIDE_EPHEMERAL_PACKAGE",
+        "package": physical_package,
+        "activity_class": "io.rafaelia.fridalab.MainActivity",
+        "gadget_endpoint": "127.0.0.1:27043",
+        "apk_sha256": physical_apk["sha256"],
+        "signer_certificate_sha256": signers["physical"],
+        "preserves_primary_package": True,
+    },
+    "expected_physical": {
+        "armeabi-v7a": {
+            "package": physical_package,
+            "gadget_endpoint": "127.0.0.1:27043",
+            "apk_sha256": physical_apk["sha256"],
+            "source_built_probe_sha256": native["armeabi-v7a"]["source_built_probe"]["sha256"],
+            "frida_gadget_sha256": native["armeabi-v7a"]["frida_gadget"]["sha256"],
+            "signer_certificate_sha256": signers["physical"],
+        },
+        "arm64-v8a": {
+            "package": physical_package,
+            "gadget_endpoint": "127.0.0.1:27043",
+            "apk_sha256": physical_apk["sha256"],
+            "source_built_probe_sha256": native["arm64-v8a"]["source_built_probe"]["sha256"],
+            "frida_gadget_sha256": native["arm64-v8a"]["frida_gadget"]["sha256"],
+            "signer_certificate_sha256": signers["physical"],
+        },
+    },
+    "physical_device_smoke": "TOKEN_VAZIO",
+    "apk_to_source_exact_bind": "TOKEN_VAZIO",
+    "whole_frida_freestanding": "TOKEN_VAZIO",
+    "claim_allowed_physical": False,
+}
+out_v4 = dist / "receipt.android17-apk-lab.v4.json"
+out_v4.write_text(json.dumps(receipt_v4, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+digest_v4 = sha256(out_v4)
+(dist / "receipt.android17-apk-lab.v4.json.sha256").write_text(
+    f"{digest_v4}  {out_v4.name}\n", encoding="ascii"
+)
+
 print(out.read_text(encoding="utf-8"))
+print(out_v4.read_text(encoding="utf-8"))
+print(f"receipt_v4_sha256={digest_v4}")
 PY
 }
 
