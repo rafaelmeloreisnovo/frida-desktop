@@ -394,9 +394,44 @@ package_apks() {
 }
 JSON
 
+  local physical_package="io.rafaelia.fridalab.physical.r${GITHUB_RUN_ID:-0}"
+  local physical_manifest="build/android17/AndroidManifest.physical.xml"
+  local physical_gadget_config="build/android17/gadget-config-physical.json"
+  PHYSICAL_PACKAGE="$physical_package" python3 - <<'PY'
+import os
+from pathlib import Path
+
+src = Path("android/app/AndroidManifest.xml").read_text(encoding="utf-8")
+package = os.environ["PHYSICAL_PACKAGE"]
+old_package = 'package="io.rafaelia.fridalab"'
+old_activity = 'android:name=".MainActivity"'
+if src.count(old_package) != 1 or src.count(old_activity) != 1:
+    raise SystemExit("physical manifest source contract changed")
+src = src.replace(old_package, f'package="{package}"')
+src = src.replace(old_activity, 'android:name="io.rafaelia.fridalab.MainActivity"')
+src = src.replace('android:label="Frida ELF/DEX Lab"', 'android:label="Frida ELF/DEX Lab Physical"')
+Path("build/android17/AndroidManifest.physical.xml").write_text(src, encoding="utf-8")
+PY
+  cat > "$physical_gadget_config" <<'JSON'
+{
+  "interaction": {
+    "type": "listen",
+    "address": "127.0.0.1",
+    "port": 27043,
+    "on_port_conflict": "fail",
+    "on_load": "resume"
+  },
+  "teardown": "minimal",
+  "runtime": "default"
+}
+JSON
+  printf '%s\n' "$physical_package" > "$DIST_DIR/frida-lab-physical.package.txt"
+
   build_one_apk() {
     local flavor="$1"
-    shift
+    local manifest="$2"
+    local config="$3"
+    shift 3
     local work="$APK_WORK_DIR/$flavor"
     rm -rf "$work"
     mkdir -p "$work/stage"
@@ -404,7 +439,7 @@ JSON
     "$BT_DIR/aapt2" link \
       -o "$work/base.apk" \
       -I "$ANDROID_JAR" \
-      --manifest android/app/AndroidManifest.xml \
+      --manifest "$manifest" \
       --min-sdk-version "$MIN_SDK" \
       --target-sdk-version "$TARGET_SDK" \
       --version-code 1 \
@@ -421,7 +456,7 @@ JSON
       mkdir -p "$work/stage/lib/$abi"
       cp "$NATIVE_DIR/$abi/libfrida-gadget.so" "$work/stage/lib/$abi/libfrida-gadget.so"
       cp "$NATIVE_DIR/$abi/librafaelia-probe.so" "$work/stage/lib/$abi/librafaelia-probe.so"
-      cp "$gadget_config" "$work/stage/lib/$abi/libfrida-gadget.config.so"
+      cp "$config" "$work/stage/lib/$abi/libfrida-gadget.config.so"
     done
     (
       cd "$work/stage"
@@ -455,9 +490,10 @@ JSON
     done
   }
 
-  build_one_apk armv7 armeabi-v7a
-  build_one_apk arm64 arm64-v8a
-  build_one_apk universal armeabi-v7a arm64-v8a
+  build_one_apk armv7 android/app/AndroidManifest.xml "$gadget_config" armeabi-v7a
+  build_one_apk arm64 android/app/AndroidManifest.xml "$gadget_config" arm64-v8a
+  build_one_apk universal android/app/AndroidManifest.xml "$gadget_config" armeabi-v7a arm64-v8a
+  build_one_apk physical-universal "$physical_manifest" "$physical_gadget_config" armeabi-v7a arm64-v8a
 
   cp android/app/adb-smoke.sh "$DIST_DIR/adb-smoke.sh"
 }
@@ -532,10 +568,15 @@ for abi in ("armeabi-v7a", "arm64-v8a"):
 signers = {
     "armeabi-v7a": signer_digest(dist / "frida-lab-armv7.signature.txt"),
     "arm64-v8a": signer_digest(dist / "frida-lab-arm64.signature.txt"),
+    "physical": signer_digest(dist / "frida-lab-physical-universal.signature.txt"),
 }
 if len(set(signers.values())) != 1:
-    raise SystemExit(f"APK signer mismatch across ABI artifacts: {signers}")
+    raise SystemExit(f"APK signer mismatch across artifacts: {signers}")
 common_signer = next(iter(signers.values()))
+physical_package = (dist / "frida-lab-physical.package.txt").read_text(encoding="utf-8").strip()
+if not physical_package.startswith("io.rafaelia.fridalab.physical.r"):
+    raise SystemExit(f"invalid physical package: {physical_package!r}")
+physical_apk = apk["frida-lab-physical-universal-debug.apk"]
 
 receipt = {
     "schema": "rafaelia.frida.android-apk-lab.receipt.v3",
@@ -589,18 +630,31 @@ receipt_v4 = {
         "mode": "ephemeral-debug-key",
         "certificate_sha256": common_signer,
     },
+    "physical_target": {
+        "mode": "SIDE_BY_SIDE_EPHEMERAL_PACKAGE",
+        "package": physical_package,
+        "activity_class": "io.rafaelia.fridalab.MainActivity",
+        "gadget_endpoint": "127.0.0.1:27043",
+        "apk_sha256": physical_apk["sha256"],
+        "signer_certificate_sha256": signers["physical"],
+        "preserves_primary_package": True,
+    },
     "expected_physical": {
         "armeabi-v7a": {
-            "apk_sha256": apk["frida-lab-armv7-debug.apk"]["sha256"],
+            "package": physical_package,
+            "gadget_endpoint": "127.0.0.1:27043",
+            "apk_sha256": physical_apk["sha256"],
             "source_built_probe_sha256": native["armeabi-v7a"]["source_built_probe"]["sha256"],
             "frida_gadget_sha256": native["armeabi-v7a"]["frida_gadget"]["sha256"],
-            "signer_certificate_sha256": signers["armeabi-v7a"],
+            "signer_certificate_sha256": signers["physical"],
         },
         "arm64-v8a": {
-            "apk_sha256": apk["frida-lab-arm64-debug.apk"]["sha256"],
+            "package": physical_package,
+            "gadget_endpoint": "127.0.0.1:27043",
+            "apk_sha256": physical_apk["sha256"],
             "source_built_probe_sha256": native["arm64-v8a"]["source_built_probe"]["sha256"],
             "frida_gadget_sha256": native["arm64-v8a"]["frida_gadget"]["sha256"],
-            "signer_certificate_sha256": signers["arm64-v8a"],
+            "signer_certificate_sha256": signers["physical"],
         },
     },
     "physical_device_smoke": "TOKEN_VAZIO",
