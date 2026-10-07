@@ -13,16 +13,57 @@ RafaeliaL0U32 rafaelia_l0_saturating_inc_u32(RafaeliaL0U32 value) {
     return value == RAFAELIA_L0_U32_MAX ? value : value + 1u;
 }
 
+static RafaeliaL0U32 rafaelia_l0_ratio_scaled(RafaeliaL0U64 numerator,
+                                             RafaeliaL0U64 denominator,
+                                             RafaeliaL0U32 scale) {
+    RafaeliaL0U64 remainder;
+    RafaeliaL0U32 quotient = 0u;
+    RafaeliaL0U32 bit = 1u << 31;
+
+    if (denominator == 0u || numerator == 0u || scale == 0u) return 0u;
+    if (numerator >= denominator) return scale;
+
+    remainder = numerator;
+    while (bit != 0u && (scale & bit) == 0u) bit >>= 1u;
+
+    while (bit != 0u) {
+        RafaeliaL0U32 carry = 0u;
+
+        if (quotient > (RAFAELIA_L0_U32_MAX >> 1u)) {
+            quotient = RAFAELIA_L0_U32_MAX;
+        } else {
+            quotient <<= 1u;
+        }
+
+        if (remainder >= denominator - remainder) {
+            remainder = remainder - (denominator - remainder);
+            carry = 1u;
+        } else {
+            remainder += remainder;
+        }
+
+        if (carry != 0u && quotient != RAFAELIA_L0_U32_MAX) quotient += 1u;
+
+        bit >>= 1u;
+        if (bit != 0u && (scale & bit) != 0u) {
+            if (remainder >= denominator - numerator) {
+                remainder = remainder - (denominator - numerator);
+                if (quotient != RAFAELIA_L0_U32_MAX) quotient += 1u;
+            } else {
+                remainder += numerator;
+            }
+        }
+    }
+
+    return quotient > scale ? scale : quotient;
+}
+
 RafaeliaL0U32 rafaelia_l0_ratio_ppm(RafaeliaL0U64 numerator, RafaeliaL0U64 denominator) {
-    if (denominator == 0u) return 0u;
-    if (numerator >= denominator) return 1000000u;
-    return (RafaeliaL0U32)((numerator * 1000000ull) / denominator);
+    return rafaelia_l0_ratio_scaled(numerator, denominator, 1000000u);
 }
 
 RafaeliaL0U16 rafaelia_l0_ratio_q16(RafaeliaL0U64 numerator, RafaeliaL0U64 denominator) {
-    if (denominator == 0u) return 0u;
-    if (numerator >= denominator) return 65535u;
-    return (RafaeliaL0U16)((numerator * 65535ull) / denominator);
+    return (RafaeliaL0U16)rafaelia_l0_ratio_scaled(numerator, denominator, 65535u);
 }
 
 RafaeliaL0U32 rafaelia_l0_crc32c(const void *src, RafaeliaL0Size size) {
