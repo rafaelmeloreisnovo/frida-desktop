@@ -48,9 +48,11 @@ command -v frida-ps >/dev/null 2>&1 || {
 }
 
 SOURCE_COMMIT="TOKEN_VAZIO"
+SOURCE_TREE_SHA="TOKEN_VAZIO"
 SOURCE_TREE_CLEAN="TOKEN_VAZIO"
 if command -v git >/dev/null 2>&1 && git -C "${REPO_ROOT}" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
   SOURCE_COMMIT="$(git -C "${REPO_ROOT}" rev-parse HEAD 2>/dev/null || printf TOKEN_VAZIO)"
+  SOURCE_TREE_SHA="$(git -C "${REPO_ROOT}" rev-parse HEAD^{tree} 2>/dev/null || printf TOKEN_VAZIO)"
   if [[ -z "$(git -C "${REPO_ROOT}" status --porcelain --untracked-files=no 2>/dev/null || printf '?')" ]]; then
     SOURCE_TREE_CLEAN="true"
   else
@@ -89,6 +91,7 @@ RECEIPT_DIR="${RECEIPT_DIR}" \
 PACKAGE="${PACKAGE}" \
 SCRIPT_PATH="${SCRIPT_PATH}" \
 SOURCE_COMMIT="${SOURCE_COMMIT}" \
+SOURCE_TREE_SHA="${SOURCE_TREE_SHA}" \
 SOURCE_TREE_CLEAN="${SOURCE_TREE_CLEAN}" \
 EXPECTED_RECEIPT="${EXPECTED_RECEIPT}" \
 EXACT_MODE="${EXACT_MODE}" \
@@ -109,6 +112,7 @@ receipt_dir = pathlib.Path(os.environ["RECEIPT_DIR"])
 package = os.environ["PACKAGE"]
 script_path = pathlib.Path(os.environ["SCRIPT_PATH"]).resolve()
 source_commit = os.environ.get("SOURCE_COMMIT", "TOKEN_VAZIO") or "TOKEN_VAZIO"
+source_tree_sha = os.environ.get("SOURCE_TREE_SHA", "TOKEN_VAZIO") or "TOKEN_VAZIO"
 source_tree_clean_raw = os.environ.get("SOURCE_TREE_CLEAN", "TOKEN_VAZIO")
 source_tree_clean = (
     True if source_tree_clean_raw == "true"
@@ -170,6 +174,7 @@ receipt = {
     "source": {
         "repository": "rafaelmeloreisnovo/frida-desktop",
         "commit": source_commit,
+        "tree_sha": source_tree_sha,
         "tracked_tree_clean": source_tree_clean,
         "script_path": str(script_path),
         "script_sha256": script_sha256,
@@ -186,6 +191,7 @@ receipt = {
     },
     "checks": {
         "source_commit_bound": gate(source_commit != "TOKEN_VAZIO"),
+        "source_tree_sha_bound": gate(source_tree_sha != "TOKEN_VAZIO"),
         "source_tree_clean": gate(source_tree_clean is True),
         "script_sha256_bound": gate(script_sha256 != "TOKEN_VAZIO"),
     },
@@ -475,6 +481,12 @@ try:
         receipt["checks"]["verifier_source_matches_expected_head"] = gate(
             source_commit == expected_source_head
         )
+        receipt["checks"]["verifier_source_matches_expected_tree"] = gate(
+            source_tree_sha == expected_source_tree
+        )
+        receipt["checks"]["verifier_source_matches_expected_identity"] = gate(
+            source_commit == expected_source_head or source_tree_sha == expected_source_tree
+        )
         receipt["checks"]["expected_abi_present"] = gate(bool(expected))
         receipt["checks"]["installed_apk_sha256_match"] = gate(
             bool(expected)
@@ -520,6 +532,7 @@ finally:
 
 required = [
     "source_commit_bound",
+    "source_tree_sha_bound",
     "source_tree_clean",
     "script_sha256_bound",
     "gadget_enumerated",
@@ -541,7 +554,7 @@ if exact_mode:
         "exact_receipt_sha256_bound",
         "expected_source_head_bound",
         "expected_source_tree_bound",
-        "verifier_source_matches_expected_head",
+        "verifier_source_matches_expected_identity",
         "expected_abi_present",
         "installed_apk_sha256_match",
         "source_built_probe_sha256_match",
@@ -585,6 +598,7 @@ with os.fdopen(fd, "wb") as handle:
 print(f"RAFAELIA_FRIDA_ON_DEVICE_{receipt['overall']}")
 print(f"endpoint={endpoint}")
 print(f"source_commit={source_commit}")
+print(f"source_tree_sha={source_tree_sha}")
 print(f"source_tree_clean={source_tree_clean}")
 print(f"script_sha256={script_sha256}")
 print(f"exact_mode={exact_mode}")
