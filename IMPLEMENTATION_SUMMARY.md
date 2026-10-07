@@ -115,6 +115,14 @@ against the bounded L0 PASS.
 
 See `docs/frida-authorial-freestanding-l0.md`.
 
+Cross-architecture successor PR #79 closed the generic structural gate at
+exact head `2102f01fd21cabafe22de62dd382401fa26f660b`, merged as
+`786f22f5e7a520222f5aac044fa664efb91290cd`. ARMv7 and AArch64 L0 core
+ELFs both have no PT_INTERP, no DT_NEEDED and zero undefined symbols. Exact
+device-probe bytes are published by OMEGA run `37684304254`; physical device
+execution remains `TOKEN_VAZIO`.
+
+
 ### NEON4096/3
 
 The current hosted page contract is:
