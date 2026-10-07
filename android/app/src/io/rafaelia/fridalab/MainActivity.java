@@ -223,6 +223,12 @@ public final class MainActivity extends Activity {
         }
     }
 
+    /** V4 physical sidecar uses an isolated loopback Gadget endpoint. */
+    private String gadgetEndpoint() {
+        return getPackageName().startsWith("io.rafaelia.fridalab.physical.r")
+                ? "127.0.0.1:27043" : ENDPOINT;
+    }
+
     private String primaryAbi() {
         if (Build.VERSION.SDK_INT >= 21 && Build.SUPPORTED_ABIS.length > 0) {
             return Build.SUPPORTED_ABIS[0];
@@ -321,7 +327,7 @@ public final class MainActivity extends Activity {
         out.append("android=").append(Build.VERSION.RELEASE).append('\n');
         out.append("abi=").append(primaryAbi()).append('\n');
         out.append("debuggable=").append(isDebuggable()).append('\n');
-        out.append("gadget_endpoint=").append(ENDPOINT).append('\n');
+        out.append("gadget_endpoint=").append(gadgetEndpoint()).append('\n');
         out.append("probe=").append(oneLine(probeStatus)).append('\n');
         out.append("gadget=").append(oneLine(gadgetStatus)).append('\n');
         out.append("learning_mode=").append(modeName(learningMode)).append('\n');
@@ -733,7 +739,7 @@ public final class MainActivity extends Activity {
                 .append(" / SDK ").append(Build.VERSION.SDK_INT).append("\n");
         status.append("ABI: ").append(primaryAbi()).append("\n");
         status.append("Debuggable APK: ").append(isDebuggable()).append("\n");
-        status.append("Gadget local: ").append(ENDPOINT).append("\n");
+        status.append("Gadget local: ").append(gadgetEndpoint()).append("\n");
         status.append("Learning: ").append(modeName(learningMode)).append("\n");
         status.append("ACTIVE automático: DISABLED\n");
 
