@@ -35,11 +35,29 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p evidence/provenance-attestation
-          mapfile -t apks < <(find inbound/android17 -type f -name '*.apk' -print | sort)
-          ((${#apks[@]} == 3)) || {
-            printf 'EXPECTED_3_APKS observed=%s\n' "${#apks[@]}" >&2
+          expected=(
+            frida-lab-armv7-debug.apk
+            frida-lab-arm64-debug.apk
+            frida-lab-universal-debug.apk
+            frida-lab-physical-universal-debug.apk
+          )
+          mapfile -t observed < <(find inbound/android17 -type f -name '*.apk' -print | sort)
+          ((${#observed[@]} == ${#expected[@]})) || {
+            printf 'EXPECTED_4_EXACT_APKS observed=%s\n' "${#observed[@]}" >&2
+            printf '%s\n' "${observed[@]}" >&2
             exit 1
           }
+
+          apks=()
+          for name in "${expected[@]}"; do
+            mapfile -t matches < <(find inbound/android17 -type f -name "$name" -print)
+            ((${#matches[@]} == 1)) || {
+              printf 'EXPECTED_EXACT_APK name=%s observed=%s\n' "$name" "${#matches[@]}" >&2
+              exit 1
+            }
+            apks+=("${matches[0]}")
+          done
+
           sha256sum "${apks[@]}" | tee evidence/provenance-attestation/SHA256SUMS.txt
 
       - name: Attest APK build provenance
@@ -57,12 +75,13 @@ jobs:
           python3 - <<'PY'
           import json, os, pathlib
           out = {
-              "schema": "rafaelia.0005.provenance-attestation.v1",
+              "schema": "rafaelia.0005.provenance-attestation.v2",
               "source_sha": os.environ.get("GITHUB_SHA", "TOKEN_VAZIO"),
               "run_id": os.environ.get("GITHUB_RUN_ID", "TOKEN_VAZIO"),
               "attestation_id": os.environ.get("ATTESTATION_ID", "TOKEN_VAZIO"),
               "attestation_url": os.environ.get("ATTESTATION_URL", "TOKEN_VAZIO"),
-              "subjects": 3,
+              "subjects": 4,
+              "artifact_surface": "3 primary variants + 1 isolated physical sidecar",
               "status": "PASS",
               "claim_allowed": False,
           }
