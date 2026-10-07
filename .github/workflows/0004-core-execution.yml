@@ -17,3 +17,15 @@ jobs:
     uses: ./.github/workflows/01.yml
     permissions:
       contents: read
+
+  authorial-freestanding-l0:
+    name: Authorial freestanding L0
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2, Node 24
+        with:
+          persist-credentials: false
+      - name: Prove no-runtime L0 structure and semantics
+        run: bash .github/scripts/rafaelia/frida-authorial-freestanding-l0-gate.sh

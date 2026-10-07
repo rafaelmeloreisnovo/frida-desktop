@@ -47,7 +47,7 @@ static uint32_t validation_set_index(uint64_t context_hash) {
 }
 
 static void reset_validation_locked(void) {
-    memset(g_runtime.validation, 0, sizeof(g_runtime.validation));
+    rafaelia_l0_zero(g_runtime.validation, sizeof(g_runtime.validation));
     g_runtime.validation_contexts_used = 0u;
     g_runtime.validation_observations = 0u;
     g_runtime.validation_predictions = 0u;
@@ -76,7 +76,7 @@ static ValidationEntry *validation_entry_locked(uint64_t context_hash) {
     ValidationEntry *dst = unused ? unused : victim;
     if (!dst) return NULL;
     if (!dst->used) g_runtime.validation_contexts_used += 1u;
-    memset(dst, 0, sizeof(*dst));
+    rafaelia_l0_zero(dst, sizeof(*dst));
     dst->used = 1u;
     dst->context_hash = context_hash;
     return dst;
@@ -85,8 +85,8 @@ static ValidationEntry *validation_entry_locked(uint64_t context_hash) {
 static uint32_t count_validation_candidates_locked(
         const RafaeliaLearningSnapshotV1 *store_snapshot) {
     int resources_ok =
-        store_snapshot->overhead_p99_ns <= UINT64_C(250000) &&
-        store_snapshot->memory_high_water_bytes <= UINT64_C(4) * 1024u * 1024u;
+        store_snapshot->overhead_p99_ns <= 250000ull &&
+        store_snapshot->memory_high_water_bytes <= 4ull * 1024u * 1024u;
     if (!resources_ok) return 0u;
 
     uint32_t eligible = 0u;
@@ -94,10 +94,8 @@ static uint32_t count_validation_candidates_locked(
         const ValidationEntry *entry = &g_runtime.validation[i];
         if (!entry->used || entry->predictions < RAFAELIA_LEARNING_DEFAULT_MIN_SUPPORT)
             continue;
-        uint64_t error_ppm = (uint64_t)entry->incorrect * UINT64_C(1000000) /
-                             entry->predictions;
-        uint64_t confidence_q16 = (uint64_t)entry->correct * UINT64_C(65535) /
-                                  entry->predictions;
+        uint32_t error_ppm = rafaelia_l0_ratio_ppm(entry->incorrect, entry->predictions);
+        uint16_t confidence_q16 = rafaelia_l0_ratio_q16(entry->correct, entry->predictions);
         if (error_ppm <= RAFAELIA_LEARNING_DEFAULT_MAX_ERROR_PPM &&
             confidence_q16 >= RAFAELIA_LEARNING_DEFAULT_CONFIDENCE_Q16)
             eligible += 1u;
@@ -113,7 +111,7 @@ int rafaelia_learning_runtime_init(const char *store_path) {
         return RAFAELIA_LEARNING_STATUS_ERR_STATE;
     }
 
-    memset(&g_runtime, 0, sizeof(g_runtime));
+    rafaelia_l0_zero(&g_runtime, sizeof(g_runtime));
     int rc = rafaelia_learning_init(store_path, NULL);
     if (rc != RAFAELIA_LEARNING_STATUS_OK) {
         runtime_unlock();
@@ -222,13 +220,13 @@ int rafaelia_learning_runtime_observe(uint64_t context_hash,
     }
 
     entry->last_observation = g_runtime.validation_observations;
-    if (entry->predictions != UINT32_MAX) entry->predictions += 1u;
+    if (entry->predictions != RAFAELIA_L0_U32_MAX) entry->predictions = rafaelia_l0_saturating_inc_u32(entry->predictions);
     g_runtime.validation_predictions += 1u;
     if (predicted == candidate_id) {
-        if (entry->correct != UINT32_MAX) entry->correct += 1u;
+        if (entry->correct != RAFAELIA_L0_U32_MAX) entry->correct = rafaelia_l0_saturating_inc_u32(entry->correct);
         g_runtime.validation_correct += 1u;
     } else {
-        if (entry->incorrect != UINT32_MAX) entry->incorrect += 1u;
+        if (entry->incorrect != RAFAELIA_L0_U32_MAX) entry->incorrect = rafaelia_l0_saturating_inc_u32(entry->incorrect);
         g_runtime.validation_incorrect += 1u;
     }
 
@@ -244,7 +242,7 @@ int rafaelia_learning_runtime_snapshot(RafaeliaLearningRuntimeSnapshotV1 *snapsh
         return RAFAELIA_LEARNING_STATUS_ERR_STATE;
     }
 
-    memset(snapshot_out, 0, sizeof(*snapshot_out));
+    rafaelia_l0_zero(snapshot_out, sizeof(*snapshot_out));
     snapshot_out->abi_version = 1u;
     snapshot_out->logical_mode = g_runtime.logical_mode;
     int rc = rafaelia_learning_snapshot(&snapshot_out->store);
@@ -263,14 +261,10 @@ int rafaelia_learning_runtime_snapshot(RafaeliaLearningRuntimeSnapshotV1 *snapsh
         count_validation_candidates_locked(&snapshot_out->store);
 
     if (g_runtime.validation_predictions != 0u) {
-        uint64_t error_ppm = g_runtime.validation_incorrect * UINT64_C(1000000) /
-                             g_runtime.validation_predictions;
-        uint64_t confidence_q16 = g_runtime.validation_correct * UINT64_C(65535) /
-                                  g_runtime.validation_predictions;
         snapshot_out->validation_error_ppm =
-            error_ppm > UINT32_MAX ? UINT32_MAX : (uint32_t)error_ppm;
+            rafaelia_l0_ratio_ppm(g_runtime.validation_incorrect, g_runtime.validation_predictions);
         snapshot_out->validation_confidence_q16 =
-            (uint16_t)(confidence_q16 > 65535u ? 65535u : confidence_q16);
+            rafaelia_l0_ratio_q16(g_runtime.validation_correct, g_runtime.validation_predictions);
     }
 
     snapshot_out->flags = RAFAELIA_RUNTIME_FLAG_ACTIVE_POLICY_DISABLED |
@@ -314,7 +308,7 @@ int rafaelia_learning_runtime_close(void) {
         return RAFAELIA_LEARNING_STATUS_ERR_STATE;
     }
     int rc = rafaelia_learning_close();
-    memset(&g_runtime, 0, sizeof(g_runtime));
+    rafaelia_l0_zero(&g_runtime, sizeof(g_runtime));
     runtime_unlock();
     return rc;
 }
