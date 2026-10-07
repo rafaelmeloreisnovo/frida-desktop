@@ -4,6 +4,7 @@ import android.app.Activity;
 import android.content.ClipData;
 import android.content.ClipboardManager;
 import android.content.Context;
+import android.content.Intent;
 import android.content.SharedPreferences;
 import android.content.pm.ApplicationInfo;
 import android.os.Build;
@@ -25,6 +26,11 @@ import android.widget.TextView;
 import android.widget.Toast;
 
 import java.io.File;
+import java.io.FileInputStream;
+import java.io.FileOutputStream;
+import java.io.IOException;
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
 
 /**
  * RAFAELIA Frida Android Lab — one-screen operator console.
@@ -110,6 +116,7 @@ public final class MainActivity extends Activity {
     private String probeStatus;
     private String gadgetStatus;
     private String lastOperatorReceipt = "TOKEN_VAZIO";
+    private String lastEvidenceBundle = "TOKEN_VAZIO";
 
     private TextView statusView;
     private TextView learningStatusView;
@@ -369,6 +376,186 @@ public final class MainActivity extends Activity {
         return "MÉTRICAS COPIADAS: " + state + "\n" + gateText();
     }
 
+
+    /**
+     * Explicit, on-device, read-only proof capture.
+     *
+     * SHA-256 of installed bytes is an observation, NOT a match against a CI
+     * manifest. The latter needs external independently verified expected hashes.
+     * Never promote learning, validation, signer or release claims from this UI.
+     */
+    private static String sha256Hex(byte[] bytes) {
+        try {
+            MessageDigest digest = MessageDigest.getInstance("SHA-256");
+            byte[] hash = digest.digest(bytes);
+            final char[] alphabet = "0123456789abcdef".toCharArray();
+            char[] output = new char[hash.length * 2];
+            for (int i = 0; i < hash.length; i++) {
+                int b = hash[i] & 0xff;
+                output[i * 2] = alphabet[b >>> 4];
+                output[i * 2 + 1] = alphabet[b & 15];
+            }
+            return new String(output);
+        } catch (Exception e) {
+            Log.e(TAG, "SHA-256 algorithm unavailable", e);
+            return "TOKEN_VAZIO";
+        }
+    }
+
+    private static String installedFileSha256(File file) {
+        if (file == null || !file.isFile() || !file.canRead()) {
+            return "TOKEN_VAZIO";
+        }
+        try (FileInputStream stream = new FileInputStream(file)) {
+            MessageDigest digest = MessageDigest.getInstance("SHA-256");
+            byte[] chunk = new byte[32768];
+            int count;
+            while ((count = stream.read(chunk)) != -1) {
+                if (count > 0) digest.update(chunk, 0, count);
+            }
+            final char[] alphabet = "0123456789abcdef".toCharArray();
+            byte[] hash = digest.digest();
+            char[] output = new char[hash.length * 2];
+            for (int i = 0; i < hash.length; i++) {
+                int b = hash[i] & 0xff;
+                output[i * 2] = alphabet[b >>> 4];
+                output[i * 2 + 1] = alphabet[b & 15];
+            }
+            return new String(output);
+        } catch (Exception e) {
+            Log.e(TAG, "Cannot hash installed artifact: " + file.getName(), e);
+            return "TOKEN_VAZIO";
+        }
+    }
+
+    private static String captureGate(String hash) {
+        return hash != null && hash.length() == 64 ? "PASS" : "TOKEN_VAZIO";
+    }
+
+    private static String observedTest(String snapshot, String passMarker,
+                                       String failMarker) {
+        if (snapshot != null && snapshot.contains(passMarker)) return "PASS";
+        if (snapshot != null && snapshot.contains(failMarker)) return "FAIL";
+        return "TOKEN_VAZIO";
+    }
+
+    private String generateEvidenceBundle() {
+        String snapshot = safeLearningSnapshot(true);
+        String state = diagnosticState(snapshot);
+        lastOperatorReceipt = buildOperatorReceipt(snapshot, state);
+
+        ApplicationInfo app = getApplicationInfo();
+        String installedApk = installedFileSha256(new File(app.sourceDir));
+        File nativeDir = app.nativeLibraryDir == null ? null : new File(app.nativeLibraryDir);
+        String installedProbe = installedFileSha256(
+                nativeDir == null ? null : new File(nativeDir, "librafaelia-probe.so"));
+        String installedGadget = installedFileSha256(
+                nativeDir == null ? null : new File(nativeDir, "libfrida-gadget.so"));
+
+        boolean readable = learningInitialized && snapshot != null
+                && !snapshot.startsWith("Learning core: NOT_INITIALIZED")
+                && !snapshot.startsWith("Learning core: FAILED")
+                && !snapshot.startsWith("Learning runtime: ERROR");
+
+        StringBuilder out = new StringBuilder();
+        out.append("RAFAELIA_FRIDA_INAPP_EVIDENCE_V1\n");
+        out.append("schema=1.0\n");
+        out.append("capture_epoch_ms=").append(System.currentTimeMillis()).append('\n');
+        out.append("scope=INSTALLED_APP_LOCAL_READ_ONLY\n");
+        out.append("package=").append(getPackageName()).append('\n');
+        out.append("pid=").append(Process.myPid()).append('\n');
+        out.append("abi=").append(primaryAbi()).append('\n');
+        out.append("T01_source_built_probe_load=")
+                .append(probeStatus != null && probeStatus.endsWith(": LOADED")
+                        ? "PASS" : "FAIL").append('\n');
+        out.append("T02_frida_gadget_load=")
+                .append(gadgetStatus != null && gadgetStatus.endsWith(": LOADED")
+                        ? "PASS" : "FAIL").append('\n');
+        out.append("T03_rfl_snapshot_readable=")
+                .append(readable ? "PASS" : "FAIL").append('\n');
+        out.append("T04_simd_fold_selftest=").append(observedTest(
+                snapshot, "SIMD fold selftest: PASS", "SIMD fold selftest: FAIL"))
+                .append('\n');
+        out.append("T05_page_4096_match=").append(observedTest(
+                snapshot, "observed OS page: 4096 B (MATCH_4096)",
+                "observed OS page: 4096 B (MISMATCH)")).append('\n');
+        out.append("T06_learning_evidence=").append(
+                readable ? learningEvidenceState(snapshot) : "NOT_RUN").append('\n');
+        out.append("T07_shadow_validation=").append(
+                readable ? validationEvidenceState(snapshot) : "NOT_RUN").append('\n');
+        out.append("T08_installed_apk_hash_capture=").append(captureGate(installedApk))
+                .append('\n');
+        out.append("T09_installed_probe_hash_capture=").append(captureGate(installedProbe))
+                .append('\n');
+        out.append("T10_installed_gadget_hash_capture=").append(captureGate(installedGadget))
+                .append('\n');
+        out.append("installed_apk_sha256=").append(installedApk).append('\n');
+        out.append("installed_probe_sha256=").append(installedProbe).append('\n');
+        out.append("installed_gadget_sha256=").append(installedGadget).append('\n');
+        out.append("apk_to_ci_exact_byte_bind=TOKEN_VAZIO\n");
+        out.append("installed_signer_to_ci_bind=TOKEN_VAZIO\n");
+        out.append("gpu_compute=TOKEN_VAZIO\n");
+        out.append("automatic_active=DISABLED\n");
+        out.append("claim_allowed=false\n");
+        out.append("source_receipt_boundary=IN_APP_OBSERVATION_ONLY\n");
+        out.append("--- OPERATOR RECEIPT ---\n");
+        out.append(lastOperatorReceipt);
+        String text = out.toString();
+        lastEvidenceBundle = text + "bundle_sha256="
+                + sha256Hex(text.getBytes(StandardCharsets.UTF_8)) + '\n';
+        return lastEvidenceBundle;
+    }
+
+    private String copyEvidenceBundle() {
+        String evidence = generateEvidenceBundle();
+        ClipboardManager clipboard =
+                (ClipboardManager) getSystemService(Context.CLIPBOARD_SERVICE);
+        if (clipboard == null) return "COPIAR COMPROVANTE: FAIL — clipboard indisponível";
+        clipboard.setPrimaryClip(ClipData.newPlainText(
+                "RAFAELIA Frida physical evidence", evidence));
+        Toast.makeText(this, "Comprovantes e testes copiados", Toast.LENGTH_SHORT).show();
+        return evidence;
+    }
+
+    private String shareEvidenceBundle() {
+        String evidence = "TOKEN_VAZIO".equals(lastEvidenceBundle)
+                ? generateEvidenceBundle() : lastEvidenceBundle;
+        Intent share = new Intent(Intent.ACTION_SEND);
+        share.setType("text/plain");
+        share.putExtra(Intent.EXTRA_SUBJECT, "RAFAELIA Frida Lab — testes e comprovantes");
+        share.putExtra(Intent.EXTRA_TEXT, evidence);
+        try {
+            startActivity(Intent.createChooser(share, "Compartilhar comprovantes"));
+            return evidence;
+        } catch (Exception e) {
+            return "COMPARTILHAR: FAIL — " + formatError(e) + "\n" + evidence;
+        }
+    }
+
+    private String saveEvidenceBundle() {
+        String evidence = "TOKEN_VAZIO".equals(lastEvidenceBundle)
+                ? generateEvidenceBundle() : lastEvidenceBundle;
+        File dir = new File(getFilesDir(), "receipts");
+        if (!dir.isDirectory() && !dir.mkdirs()) {
+            return "SALVAR: FAIL — diretório privado indisponível\n" + evidence;
+        }
+        File target = null;
+        try {
+            target = File.createTempFile("frida-evidence-", ".txt", dir);
+            try (FileOutputStream stream = new FileOutputStream(target, false)) {
+                stream.write(evidence.getBytes(StandardCharsets.UTF_8));
+                stream.getFD().sync();
+            }
+            return "SALVO EM ARMAZENAMENTO PRIVADO: " + target.getAbsolutePath()
+                    + "\nNovo arquivo, sem substituir recibos anteriores.\n\n" + evidence;
+        } catch (IOException e) {
+            if (target != null && !target.delete()) {
+                Log.w(TAG, "Incomplete private evidence file retained: " + target.getName());
+            }
+            return "SALVAR: FAIL — " + formatError(e) + "\n" + evidence;
+        }
+    }
+
     private String recordRealObservation(String contextHashRaw,
                                          String candidateIdRaw,
                                          String eventTypeRaw,
@@ -433,6 +620,42 @@ public final class MainActivity extends Activity {
         panel.addView(button("Copiar métricas", new View.OnClickListener() {
             @Override public void onClick(View v) {
                 operatorResultView.setText(copyMetrics());
+            }
+        }));
+
+        TextView evidenceTitle = new TextView(this);
+        evidenceTitle.setText("Comprovantes + testes físicos — somente leitura");
+        evidenceTitle.setTextSize(16.0f);
+        panel.addView(evidenceTitle);
+
+        TextView evidenceHelp = new TextView(this);
+        evidenceHelp.setText("Captura hashes SHA-256 do APK e dos ELFs instalados, "
+                + "mostra os testes executados e preserva NOT_RUN/TOKEN_VAZIO. "
+                + "Hash local não comprova identidade com CI. "
+                + "Salvar ou compartilhar somente por ação explícita.");
+        panel.addView(evidenceHelp);
+
+        panel.addView(button("Exibir comprovantes + testes", new View.OnClickListener() {
+            @Override public void onClick(View v) {
+                operatorResultView.setText(generateEvidenceBundle());
+            }
+        }));
+
+        panel.addView(button("Copiar comprovantes + testes", new View.OnClickListener() {
+            @Override public void onClick(View v) {
+                operatorResultView.setText(copyEvidenceBundle());
+            }
+        }));
+
+        panel.addView(button("Salvar comprovante privado", new View.OnClickListener() {
+            @Override public void onClick(View v) {
+                operatorResultView.setText(saveEvidenceBundle());
+            }
+        }));
+
+        panel.addView(button("Compartilhar comprovantes", new View.OnClickListener() {
+            @Override public void onClick(View v) {
+                operatorResultView.setText(shareEvidenceBundle());
             }
         }));
 
