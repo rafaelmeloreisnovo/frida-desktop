@@ -139,30 +139,3 @@ jobs:
             evidence/android17-lab/
             android/app/on-device-smoke.sh
             android/app/ONE_SCREEN_OPERATOR_V1.md
-
-      # Separate hosted-shell proof: never confuse Gradle APK with the
-      # explicit NDK/DEX/Gadget lab artifacts above.
-      - name: Resolve pinned Gradle 8.4
-        uses: gradle/actions/setup-gradle@ed408507eac070d1f99cc633dbcf757c94c7933a # v4 resolved 2026-10-23
-        with:
-          gradle-version: "8.4"
-          cache-disabled: true
-
-      - name: Build hosted Gradle one-screen shell (separate contract)
-        run: |
-          sdkmanager --channel=0 "platforms;android-34" "build-tools;34.0.0"
-          (cd android && gradle --no-daemon --max-workers=1 :app:assembleDebug)
-          python3 android/app/validate-lite-profile.py \
-            --artifact-root android/app/build/outputs/apk/debug \
-            --receipt evidence/android17-lab/hosted-gradle-shell-footprint.v1.json
-
-      - name: Upload hosted Gradle shell separately
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1, Node 24
-        with:
-          name: frida-android-hosted-gradle-${{ github.run_id }}
-          if-no-files-found: error
-          retention-days: 14
-          compression-level: 0
-          path: |
-            android/app/build/outputs/apk/debug/
-            evidence/android17-lab/hosted-gradle-shell-footprint.v1.json
