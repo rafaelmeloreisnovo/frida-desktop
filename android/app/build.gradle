@@ -38,7 +38,13 @@ android {
         main {
             manifest.srcFile 'AndroidManifest.xml'
             java.srcDirs = ['src']
-            res.srcDirs = ['res']
+            // Default operator compiles MainActivity only. Historical research
+            // panel/bridge sources remain present but are not a runtime dependency.
+            java.exclude 'io/rafaelia/fridalab/learning/**'
+            java.exclude 'io/rafaelia/fridalab/ui/**'
+            // MainActivity is programmatic and uses android.R only.
+            // Keep historical research_mode_panel.xml in Git, not in Lite APK.
+            res.srcDirs = []
             assets.srcDirs = ['assets']
             jniLibs.srcDirs = ['libs']
         }
@@ -48,18 +54,9 @@ android {
 }
 
 dependencies {
-    // Android Framework
-    implementation 'androidx.appcompat:appcompat:1.6.1'
-    implementation 'androidx.constraintlayout:constraintlayout:2.1.4'
-
-    // Material Design
-    implementation 'com.google.android.material:material:1.10.0'
-
-    // JSON
-    implementation 'com.google.code.gson:gson:2.10.1'
-
-    // HTTP Client
-    implementation 'com.squareup.okhttp3:okhttp:4.11.0'
+    // Production: Android framework + platform org.json only.
+    // No AppCompat, Material, ConstraintLayout, Gson, or OkHttp are needed by
+    // the active one-screen operator. Test dependencies are build-only.
 
     // Testing
     testImplementation 'junit:junit:4.13.2'

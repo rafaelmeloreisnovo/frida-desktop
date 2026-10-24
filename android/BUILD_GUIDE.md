@@ -35,7 +35,7 @@ The module also declares:
 
 ```text
 java.srcDirs    = ['src']
-res.srcDirs     = ['res']
+res.srcDirs     = []            # Lite only; archived research XML retained in Git
 assets.srcDirs  = ['assets']
 jniLibs.srcDirs = ['libs']
 ```
@@ -53,10 +53,16 @@ when those artifacts are present.
 
 ### Hosted dependencies
 
-The Gradle application is explicitly hosted and currently depends on AndroidX,
-Material, Gson and OkHttp, plus Android/JUnit/Espresso test dependencies.
+The **Android Lite candidate in PR #84** no longer declares AppCompat,
+ConstraintLayout, Material, Gson or OkHttp as production Maven dependencies.
+The active screen uses platform APIs; historical Java `learning/` and `ui/`
+and XML research panel sources are retained in Git but excluded from the
+hosted Lite compile/package graph. JUnit / AndroidX testing dependencies
+remain test-only. The standalone Android17 lab does not consume this
+dependency graph, so unchanged lab APK bytes do **not** establish a Gradle
+size improvement.
 
-That surface is **not** the freestanding RAFAELIA core proof.
+That hosted surface is **not** a freestanding Frida core proof.
 
 ## 2. SDK configuration drift
 
@@ -196,6 +202,24 @@ android/app/build/outputs/apk/debug/
 Again, this package build alone does not prove the native C source was rebuilt
 because the current module uses `jniLibs` rather than an
 `externalNativeBuild` declaration.
+
+### Hosted Lite evidence gate in PR #84
+
+The existing Android17 CI workflow is extended after its standalone artifact
+upload with a separate `bash .github/scripts/rafaelia/hosted-gradle-lite.sh`
+build. It downloads Gradle 8.4 only from the official distribution route and
+checks the published distribution SHA-256 before executing Gradle. No new
+third-party GitHub Action is introduced and the workflow catalyst allowlist
+is not extended. Java 17 and Android SDK 34 are explicitly required.
+
+The gate executes `:app:assembleDebug`, inventories only the hosted Gradle
+APK and records `hosted-gradle-shell-footprint.v1.json` with byte size and
+SHA-256. The resulting hosted APK is uploaded separately from the Android17
+standalone build. Neither a hosted build nor its artifact bytes prove that
+the JNI/Frida Gadget were rebuilt or loaded on an actual handset.
+
+Gate state until an exact-head Actions result is read:
+`GRADLE_HOSTED_LITE=TOKEN_VAZIO_EXECUTION_NOT_VERIFIED`.
 
 ## 7. Building the evidence lab
 
