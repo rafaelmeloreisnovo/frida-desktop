@@ -158,17 +158,3 @@ jobs:
             android/app/build/outputs/apk/debug/
             evidence/android17-lab/hosted-gradle-shell-footprint.v1.json
             evidence/android17-lab/hosted-gradle-apk-contents.v1.json
-
-      - name: Run pinned hosted Gradle Lite shell (separate hosted contract)
-        run: bash .github/scripts/rafaelia/android-gradle-lite-ci.sh
-
-      - name: Upload hosted Gradle shell APK + evidence separately
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        with:
-          name: frida-hosted-gradle-lite-${{ github.run_id }}
-          if-no-files-found: error
-          retention-days: 14
-          compression-level: 0
-          path: |
-            android/app/build/outputs/apk/debug/
-            evidence/android17-lab/hosted-gradle-shell-footprint.v1.json
