@@ -155,6 +155,7 @@ jobs:
           path: |
             android/app/build/outputs/apk/debug/
             evidence/android17-lab/hosted-gradle-shell-footprint.v1.json
+            evidence/android17-lab/hosted-gradle-apk-contents.v1.json
 
       - name: Run pinned hosted Gradle Lite shell (separate hosted contract)
         run: bash .github/scripts/rafaelia/android-gradle-lite-ci.sh
