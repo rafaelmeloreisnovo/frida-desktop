@@ -59,6 +59,7 @@ def validate():
     activity = ACTIVE.read_text(encoding="utf-8")
     checks = {
         "legacy_sources_excluded": all(item in build for item in EXCLUDES),
+        "legacy_research_xml_excluded": "res.srcDirs = []" in build,
         "no_declared_external_runtime_libraries": RUNTIME_DEP.search(build) is None,
         "active_screen_has_only_platform_imports": all(
             name.startswith(ALLOWED_IMPORTS) for name in IMPORT.findall(activity)
