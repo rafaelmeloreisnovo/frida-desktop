@@ -1,0 +1,37 @@
+{
+  "schema": "rafaelia.frida.android17.apk_baseline.v1",
+  "reference": "HISTORICAL_PR83_CI_RUN",
+  "provenance": {
+    "repository": "rafaelmeloreisnovo/frida-desktop",
+    "source_commit": "5d899981feb5e9f822313869d8eeb01abb24eefb",
+    "pull_request": 83,
+    "workflow_run_id": 37695601911,
+    "job_id": 113046712984,
+    "evidence_kind": "historical GitHub Actions receipt log, APK bytes and SHA-256",
+    "evidence_url": "https://github.com/rafaelmeloreisnovo/frida-desktop/actions/runs/37695601911"
+  },
+  "route": "android17-apk-elf-dex",
+  "gadget_pin": "17.9.11",
+  "comparison_boundary": "HISTORICAL_CI_RUN_NOT_CONTROLLED_SAME_ENVIRONMENT_AB",
+  "artifact_role": "PACKAGED_APKS_ONLY_NOT_INSTALLED_STORAGE_OR_PSS",
+  "source_code_effect": "Source baseline only; no installed device behavior inferred",
+  "claim_allowed": false,
+  "files": {
+    "frida-lab-armv7-debug.apk": {
+      "bytes": 8024812,
+      "sha256": "ddfe154ec9502fe67d4b6a726de12becb566df1982c8e752e12a17a28052985d"
+    },
+    "frida-lab-arm64-debug.apk": {
+      "bytes": 10158822,
+      "sha256": "848d86344f4a6905436fa9d2138e72c26035427c520bad5595abfe0cf3ea5b7d"
+    },
+    "frida-lab-universal-debug.apk": {
+      "bytes": 18158631,
+      "sha256": "6ad018e43e92c515a10bf6bd96b0e832d74c3801bef8c60f7d8a4a0fbfb096db"
+    },
+    "frida-lab-physical-universal-debug.apk": {
+      "bytes": 18158631,
+      "sha256": "6f1c0a88710a2822f81bcdf2028a5cfe2be3f919603c8402df9fd1d94826dcf6"
+    }
+  }
+}
