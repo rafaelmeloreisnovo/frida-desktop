@@ -5,7 +5,6 @@ An APK ZIP byte delta is not a RAM, install, runtime, or Gradle-size delta.
 Dependencies: Python standard library only. Receipts are append-only.
 """
 import argparse
-import hashlib
 import json
 from pathlib import Path
 import re
@@ -20,6 +19,7 @@ EXPECTED = frozenset((
     "frida-lab-physical-universal-debug.apk",
 ))
 HASH = re.compile(r"[0-9a-f]{64}\Z")
+GIT_SHA = re.compile(r"[0-9a-f]{40}\Z")
 
 
 def checked_artifact(record):
@@ -43,7 +43,7 @@ def compare(baseline, candidate, source_sha, frida_version):
         raise ValueError("baseline build route unknown")
     if baseline.get("gadget_pin") != frida_version:
         raise ValueError("Frida Gadget version mismatch")
-    if not isinstance(source_sha, str) or not HASH.fullmatch(source_sha):
+    if not isinstance(source_sha, str) or not GIT_SHA.fullmatch(source_sha):
         raise ValueError("candidate source commit not bound to full SHA")
     if candidate.get("source_ref") != source_sha:
         raise ValueError("candidate receipt source does not match head")
