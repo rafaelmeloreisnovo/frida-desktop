@@ -99,6 +99,27 @@ The sum of four APK archive files is NOT installed storage, and the separate
 native ELF inventory must not be added to APK sizes to claim deployed
 memory usage.
 
+## Hosted Gradle actual build (CI scoped)
+
+GitHub Actions Android17 run 40062110021, head
+`806e98d188e0143ce81de3f77102e585da9cb786`, executed
+`:app:assembleDebug` and uploaded a separate hosted Gradle APK
+(SUCCESS). The observed `app-debug.apk` is **42,137 bytes** with
+SHA-256 `14c1096bb6a8bf98c31568eb2e218911a2a78ad24532dffe9f9acffdae6a160e`.
+The Gradle task `mergeDebugNativeLibs` was `NO-SOURCE`, so this is
+a Java/DEX host shell, **not a Frida Gadget + JNI ready APK**. That
+size is not comparable to the standalone Android17 native-bearing
+APK sizes (8–18 MB). A tiny empty-native package does not prove
+runtime footprint optimization.
+
+The subsequent source gate `inspect-apk-contents.py` classifies
+packaged JNI libraries by reading ZIP entries without installing,
+injecting, executing or altering the APK. It emits a receipt with
+`HOSTED_ANDROID_SHELL_NO_NATIVE_RUNTIME` or
+`NATIVE_LIBS_PRESENT_RUNTIME_UNVERIFIED`. Even JNI library
+presence is not sufficient to prove Frida attach or successful
+native method binding.
+
 ## Cross-version interoperability
 
 The repository workflow currently pins a particular Frida Gadget build.
