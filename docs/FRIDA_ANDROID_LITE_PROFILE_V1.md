@@ -1,9 +1,9 @@
 # RAFAELIA Frida — Android Lite Boundary and Footprint V1
 
-State: IMPLEMENTED_SOURCE / CI_PENDING / PHYSICAL_DEVICE_TOKEN_VAZIO  
-Producer: rafaelmeloreisnovo/frida-desktop  
-Parent main: 6747df6b7dfac1b4685a247be940c283d017b27a  
-Scope: hosted Android build dependencies and byte-size evidence only  
+State: IMPLEMENTED_SOURCE / CI_PENDING / PHYSICAL_DEVICE_TOKEN_VAZIO
+Producer: rafaelmeloreisnovo/frida-desktop
+Parent main: 6747df6b7dfac1b4685a247be940c283d017b27a
+Scope: hosted Android build dependencies and byte-size evidence only
 Global claim_allowed: false
 
 ## Purpose
@@ -84,6 +84,6 @@ licenses, old receipts, or prior documents.
 
 ## R3
 
-F_ok = isolated lite source profile and bounded byte-inventory gate created.  
-F_gap = Gradle build, CI exact-head output, and physical resource/compatibility A/B are not established by source edits alone.  
+F_ok = isolated lite source profile and bounded byte-inventory gate created.
+F_gap = Gradle build, CI exact-head output, and physical resource/compatibility A/B are not established by source edits alone.
 F_next = verify CI on exact head; build Gradle profile; collect APK/RSS/latency/crash receipts on ARM32 and ARM64; compare with the prechange baseline.
