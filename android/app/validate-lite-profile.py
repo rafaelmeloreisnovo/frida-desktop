@@ -66,7 +66,6 @@ def validate():
         "active_screen_does_not_reference_legacy_ui": not re.search(
             r"\b(?:ResearchModePanel|MetricsPoller|RFLBridge)\b", activity
         ),
-        "native_gadget_and_probe_unmodified_by_this_gate": True,
     }
     # The last check refers only to this read-only validator's own behavior.
     return checks
