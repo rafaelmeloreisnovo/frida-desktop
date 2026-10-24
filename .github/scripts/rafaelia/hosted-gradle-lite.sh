@@ -48,5 +48,7 @@ test -s "$APK" || { echo "FAIL: Gradle hosted APK not produced" >&2; exit 5; }
 python3 "$ROOT/android/app/validate-lite-profile.py" \
   --artifact-root "$ROOT/android/app/build/outputs/apk/debug" \
   --receipt "$ROOT/evidence/android17-lab/hosted-gradle-shell-footprint.v1.json"
+python3 "$ROOT/android/app/inspect-apk-contents.py" "$APK" \
+  --receipt "$ROOT/evidence/android17-lab/hosted-gradle-apk-contents.v1.json"
 sha256sum "$APK"
 echo "PASS_SCOPED: hosted Gradle shell assembled; runtime/gadget/physical gates remain TOKEN_VAZIO"
