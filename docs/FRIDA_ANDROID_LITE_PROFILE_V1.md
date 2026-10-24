@@ -58,12 +58,12 @@ toolchain; it is NOT an Android Gradle dependency-resolution test.
 ## Historical APK comparison (not a controlled hardware A/B)
 
 The read-only baseline file
-\`docs/evidence/FRIDA_ANDROID17_APK_BASELINE_PR83_20261007.json\`
+`docs/evidence/FRIDA_ANDROID17_APK_BASELINE_PR83_20261007.json`
 preserves recorded APK byte sizes and SHA-256 digests from GitHub Actions
 Android17 run 37695601911 / job 113046712984, source
-\`5d899981feb5e9f822313869d8eeb01abb24eefb\` (PR #83).
+`5d899981feb5e9f822313869d8eeb01abb24eefb` (PR #83).
 The first PR #84 Android17 run 40049594579 / job 120739174933, source
-\`dc2880d1d591792422fac70004f56f87fbae1de5\`, passed build,
+`dc2880d1d591792422fac70004f56f87fbae1de5`, passed build,
 artifact manifest creation and provenance gates.
 
 At those heads the four APK archive sizes were exactly equal:
@@ -79,7 +79,7 @@ A comparable toolchain/build contract is desirable for a controlled A/B
 experiment; these are two historical CI runs with separately recorded
 provenance.
 
-\`android/app/compare-apk-footprint.py\` performs a strict comparison of
+`android/app/compare-apk-footprint.py` performs a strict comparison of
 the new inventory receipt against that source baseline. It validates the
 source commit (40-hex Git SHA), APK digests (64-hex SHA-256), expected
 package names, Frida Gadget pin, duplicate/missing artifacts and signed
