@@ -22,6 +22,12 @@ The target is the existing one-screen operator, not a second application.
   default Android Gradle production source set. These classes were not imported
   by MainActivity, and the old research panel had unresolved integration
   issues. Reactivating that historical panel is a separate compatibility task.
+- The legacy `android/app/res/layout/research_mode_panel.xml` is also retained
+  in Git, but the source-only Lite Activity uses `android.R` and excludes the
+  research XML resource directory from Gradle packaging (`res.srcDirs = []`).
+  The first attempted hosted Gradle build failed on ConstraintLayout XML
+  attributes; this surgical fix addresses the observed unresolved resource
+  boundary but still requires a new Gradle execution before claiming PASS.
 - JUnit/AndroidX test dependencies remain build/test-only, not production
   runtime dependencies.
 - Frida Gadget, upstream submodules, JNI exports, ABI filters, storage, learning
@@ -106,7 +112,7 @@ Never claim the upstream Frida tree is freestanding.
 | Gate | This change | Evidence needed |
 |---|---|---|
 | Runtime dependency declaration | Source updated | static gate run |
-| Historical UI not bundled by default | Configured | Gradle assemble and DEX inventory |
+| Historical Java/XML research UI excluded by default | Configured | independent Gradle assemble and DEX/resources inspection |
 | Gradle dependency graph reduced | Expected | dependency graph before/after |
 | APK byte reduction | 0 B in first historical comparison; new gate pending CI | controlled matched-toolchain A/B and artifact digests |
 | RSS / CPU / thermal reduction | TOKEN_VAZIO | physical A/B, repeated measures |
@@ -123,5 +129,5 @@ licenses, old receipts, or prior documents.
 ## R3
 
 F_ok = isolated lite source profile and bounded byte-inventory gate created.
-F_gap = Gradle build, latest exact-head comparator run, and physical resource/compatibility A/B remain unproven.
+F_gap = Gradle build after legacy-XML exclusion, latest exact-head comparator run, and physical resource/compatibility A/B remain unproven.
 F_next = run exact-head APK baseline gate; verify hosted Gradle profile separately; collect RSS/latency/restart receipts on ARM32 and ARM64.
