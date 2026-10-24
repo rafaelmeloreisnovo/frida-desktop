@@ -1,6 +1,6 @@
 # RAFAELIA Frida — Android Lite Boundary and Footprint V1
 
-State: IMPLEMENTED_SOURCE / CI_PENDING / PHYSICAL_DEVICE_TOKEN_VAZIO
+State: SOURCE_CHANGED / FIRST_HEAD_CI_PASS / NEW_COMPARATOR_CI_PENDING / PHYSICAL_DEVICE_TOKEN_VAZIO
 Producer: rafaelmeloreisnovo/frida-desktop
 Parent main: 6747df6b7dfac1b4685a247be940c283d017b27a
 Scope: hosted Android build dependencies and byte-size evidence only
@@ -55,6 +55,44 @@ The existing android17-apk-elf-dex CI performs both checks around its existing
 APK, JNI ELF, and DEX build graph. This CI uses its own explicit source-build
 toolchain; it is NOT an Android Gradle dependency-resolution test.
 
+## Historical APK comparison (not a controlled hardware A/B)
+
+The read-only baseline file
+\`docs/evidence/FRIDA_ANDROID17_APK_BASELINE_PR83_20261007.json\`
+preserves recorded APK byte sizes and SHA-256 digests from GitHub Actions
+Android17 run 37695601911 / job 113046712984, source
+\`5d899981feb5e9f822313869d8eeb01abb24eefb\` (PR #83).
+The first PR #84 Android17 run 40049594579 / job 120739174933, source
+\`dc2880d1d591792422fac70004f56f87fbae1de5\`, passed build,
+artifact manifest creation and provenance gates.
+
+At those heads the four APK archive sizes were exactly equal:
+
+- ARMv7: 8,024,812 bytes (delta 0).
+- AArch64: 10,158,822 bytes (delta 0).
+- Universal and physical universal: 18,158,631 bytes each (delta 0).
+
+Their historical and candidate SHA-256 values are different. Thus this
+does NOT establish byte-identical APKs, reproducible signing, a Gradle
+footprint benefit, runtime stability, or a physical memory reduction.
+A comparable toolchain/build contract is desirable for a controlled A/B
+experiment; these are two historical CI runs with separately recorded
+provenance.
+
+\`android/app/compare-apk-footprint.py\` performs a strict comparison of
+the new inventory receipt against that source baseline. It validates the
+source commit (40-hex Git SHA), APK digests (64-hex SHA-256), expected
+package names, Frida Gadget pin, duplicate/missing artifacts and signed
+archive-size deltas. It fails on any size increase in this narrowly scoped
+branch, emits an exclusive-create receipt, and preserves the physical gates
+as unverified. The companion stdlib unit tests cover incomplete/malformed
+inputs and negative regressions.
+
+This is a *size-nonregression guard*, not a blanket functional guarantee.
+The sum of four APK archive files is NOT installed storage, and the separate
+native ELF inventory must not be added to APK sizes to claim deployed
+memory usage.
+
 ## Cross-version interoperability
 
 The repository workflow currently pins a particular Frida Gadget build.
@@ -70,7 +108,7 @@ Never claim the upstream Frida tree is freestanding.
 | Runtime dependency declaration | Source updated | static gate run |
 | Historical UI not bundled by default | Configured | Gradle assemble and DEX inventory |
 | Gradle dependency graph reduced | Expected | dependency graph before/after |
-| APK byte reduction | TOKEN_VAZIO | comparable clean baseline and candidate APK |
+| APK byte reduction | 0 B in first historical comparison; new gate pending CI | controlled matched-toolchain A/B and artifact digests |
 | RSS / CPU / thermal reduction | TOKEN_VAZIO | physical A/B, repeated measures |
 | ARMv7 / AArch64 JNI and Gadget | UNCHANGED_SOURCE | exact-head CI and physical receipts |
 | Frida reattach + restart | TOKEN_VAZIO | bounded physical device sequence |
@@ -85,5 +123,5 @@ licenses, old receipts, or prior documents.
 ## R3
 
 F_ok = isolated lite source profile and bounded byte-inventory gate created.
-F_gap = Gradle build, CI exact-head output, and physical resource/compatibility A/B are not established by source edits alone.
-F_next = verify CI on exact head; build Gradle profile; collect APK/RSS/latency/crash receipts on ARM32 and ARM64; compare with the prechange baseline.
+F_gap = Gradle build, latest exact-head comparator run, and physical resource/compatibility A/B remain unproven.
+F_next = run exact-head APK baseline gate; verify hosted Gradle profile separately; collect RSS/latency/restart receipts on ARM32 and ARM64.
