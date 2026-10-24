@@ -54,6 +54,9 @@ jobs:
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
           persist-credentials: false
 
+      - name: Validate lite Android runtime dependency boundary (static only)
+        run: python3 android/app/validate-lite-profile.py
+
       - name: Validate legacy + exact-byte on-device receipt contract
         run: bash .github/scripts/rafaelia/on-device-receipt-verifier-gate.sh
 
@@ -95,6 +98,15 @@ jobs:
 
       - name: Build + align + sign + inspect APKs
         run: bash .github/scripts/rafaelia/android-lab-ci.sh package-apks
+
+      - name: Inventory APK, DEX and native byte footprint
+        env:
+          RAFAELIA_SOURCE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: |
+          python3 android/app/validate-lite-profile.py \
+            --artifact-root dist/android17-lab \
+            --artifact-root build/android17/native \
+            --receipt evidence/android17-lab/lite-footprint.v1.json
 
       - name: Emit checksum-bound receipt
         run: bash .github/scripts/rafaelia/android-lab-ci.sh receipt
