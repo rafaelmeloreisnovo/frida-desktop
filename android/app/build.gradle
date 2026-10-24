@@ -42,7 +42,9 @@ android {
             // panel/bridge sources remain present but are not a runtime dependency.
             java.exclude 'io/rafaelia/fridalab/learning/**'
             java.exclude 'io/rafaelia/fridalab/ui/**'
-            res.srcDirs = ['res']
+            // MainActivity is programmatic and uses android.R only.
+            // Keep historical research_mode_panel.xml in Git, not in Lite APK.
+            res.srcDirs = []
             assets.srcDirs = ['assets']
             jniLibs.srcDirs = ['libs']
         }
