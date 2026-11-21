@@ -17,7 +17,9 @@ EVIDENCE="$ROOT/evidence/custody-anchor-v1"
 test ! -e "$EVIDENCE" || { echo "BLOCKED: previous custody receipt exists" >&2; exit 2; }
 mkdir -p "$EVIDENCE"
 HEAD="$(git rev-parse HEAD)"
+PRODUCER_HEAD="$(printf '%s' "$RAFAELIA_PRODUCER_HEAD")"
 [[ "$HEAD" =~ ^[0-9a-f]{40}$ ]] || { echo "BLOCKED: checkout SHA unavailable" >&2; exit 2; }
+[[ "$PRODUCER_HEAD" =~ ^[0-9a-f]{40}$ ]] || { echo "BLOCKED: event producer SHA unavailable" >&2; exit 2; }
 printf '{"kind":"PUBLIC_SYNTHETIC","zero":0,"empty":""}\n' > "$EVIDENCE/input.json"
 printf '{"kind":"PUBLIC_SYNTHETIC","op":"XOR32","output":319}\n' > "$EVIDENCE/output.json"
 python3 tools/rafaelia/custody_anchor_v1.py build \
@@ -33,7 +35,7 @@ openssl ts -query -in "$EVIDENCE/request.tsq" -text > "$EVIDENCE/request-inspect
   cd "$EVIDENCE"
   sha256sum input.json output.json manifest.json request.tsq > SHA256SUMS.txt
 )
-EVIDENCE="$EVIDENCE" TESTED_CHECKOUT="$HEAD" python3 - <<'PY'
+EVIDENCE="$EVIDENCE" TESTED_CHECKOUT="$HEAD" PRODUCER_HEAD="$PRODUCER_HEAD" python3 - <<'PY'
 import hashlib,json,os
 from pathlib import Path
 p=Path(os.environ['EVIDENCE'])
@@ -42,6 +44,9 @@ m=json.loads((p/'manifest.json').read_bytes())
 r={
   'schema':'rafaelia.frida.anchor-host-ci-receipt/v1',
   'tested_checkout_sha':os.environ['TESTED_CHECKOUT'],
+  'producer_event_head_sha':os.environ['PRODUCER_HEAD'],
+  'checkout_is_producer_head':os.environ['TESTED_CHECKOUT']==os.environ['PRODUCER_HEAD'],
+  'run_event_binding':'PR_MERGE_COMMIT_DISTINCT_FROM_HEAD' if os.environ['TESTED_CHECKOUT']!=os.environ['PRODUCER_HEAD'] else 'DIRECT_HEAD',
   'manifest_sha256':sha((p/'manifest.json').read_bytes()),
   'rfc3161_request_sha256':sha((p/'request.tsq').read_bytes()),
   'merkle_root_sha256':m['merkle_root_sha256'],
