@@ -291,8 +291,14 @@ def verify_timestamp(manifest_path,query_path,response_path,ca_path,untrusted_pa
     imprint,nonce=parse_tsq(tsq)
     if imprint != sha(manifest):raise ValueError('TSQ_MANIFEST_MISMATCH')
     if len(response)>4*1024*1024:raise ValueError('TSR_TOO_LARGE')
+    response_hash,_=hash_file(response_path)
+    if response_hash != sha(response).hex():raise ValueError('TSR_SOURCE_CHANGED')
     # Trust anchor is supplied explicitly, never fetched or silently trusted.
     ca_hash,ca_len=hash_file(ca_path)
+    try:
+        untrusted_hash=hash_file(untrusted_path)[0] if untrusted_path else None
+    except OSError as exc:
+        raise ValueError('CHAIN_FILE_UNAVAILABLE') from exc
     if ca_len == 0:raise ValueError('EMPTY_TRUST_ANCHOR')
     args=[openssl,'ts','-verify','-queryfile',str(query_path),'-in',str(response_path),'-CAfile',str(ca_path)]
     if untrusted_path:args.extend(['-untrusted',str(untrusted_path)])
@@ -302,9 +308,15 @@ def verify_timestamp(manifest_path,query_path,response_path,ca_path,untrusted_pa
         raise ValueError('VERIFIER_UNAVAILABLE_OR_TIMEOUT') from exc
     if cmd.returncode != 0 or 'Verification: OK' not in cmd.stdout:
         raise ValueError('RFC3161_SIGNATURE_CHAIN_OR_IMPRINT_INVALID')
+    if (hash_file(query_path)[0] != sha(tsq).hex() or
+        hash_file(response_path)[0] != response_hash or
+        hash_file(ca_path)[0] != ca_hash or
+        (untrusted_path and hash_file(untrusted_path)[0] != untrusted_hash)):
+        raise ValueError('SOURCE_MUTATED_DURING_EXTERNAL_VERIFICATION')
     return {'schema':'rafaelia.frida.timestamp-verification/v1',
             'manifest_sha256':sha(manifest).hex(),'query_sha256':sha(tsq).hex(),
-            'response_sha256':sha(response).hex(), 'ca_bundle_sha256':ca_hash,
+            'response_sha256':response_hash, 'ca_bundle_sha256':ca_hash,
+            'untrusted_chain_sha256':untrusted_hash,
             'merkle_root_sha256':m['merkle_root_sha256'],
             'parent_receipt_sha256':m['parent_receipt_sha256'],
             'request_nonce':str(nonce),
