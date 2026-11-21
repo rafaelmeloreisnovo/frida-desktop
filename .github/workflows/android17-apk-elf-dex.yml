@@ -132,7 +132,11 @@ jobs:
             --artifact-root build/android17/native \
             --receipt evidence/android17-lab/lite-footprint.v1.json
 
+      # Record a feature-size regression without suppressing the generated APKs.
+      # The workflow still FAILS at the terminal gate below; no silent PASS.
       - name: Compare against historical APK baseline (archive bytes only)
+        id: size_comparison
+        continue-on-error: true
         run: |
           python3 android/app/compare-apk-footprint.py \
             --baseline docs/evidence/FRIDA_ANDROID17_APK_BASELINE_PR83_20261007.json \
@@ -177,3 +181,9 @@ jobs:
             android/app/build/outputs/apk/debug/
             evidence/android17-lab/hosted-gradle-shell-footprint.v1.json
             evidence/android17-lab/hosted-gradle-apk-contents.v1.json
+
+      - name: Preserve strict APK-size non-regression verdict after evidence upload
+        if: ${{ always() && steps.size_comparison.outcome != 'success' }}
+        run: |
+          echo 'FAIL_SIZE_REGRESSION: feature APK bytes grew; evidence has been retained.' >&2
+          exit 1
