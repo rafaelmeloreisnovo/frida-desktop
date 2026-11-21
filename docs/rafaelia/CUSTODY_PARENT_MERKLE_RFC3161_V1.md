@@ -91,4 +91,3 @@ that the branch HEAD and merge commit are the same bytes or that the merge is
 an independent execution on physical Android. For claims of source-to-binary
 identity, pair exact checked-out tree SHA, per-file blob and byte SHA256,
 build-toolchain SHA and artifact SHA256; never collapse refs.
-
