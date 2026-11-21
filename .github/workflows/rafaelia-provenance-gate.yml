@@ -27,6 +27,9 @@ jobs:
       - name: Validate provenance, evidence, and negative falsifiers
         run: bash .github/scripts/rafaelia/provenance-ci.sh all
 
+      - name: Run exact-checkout synthetic Merkle and RFC3161 custody gate
+        run: bash .github/scripts/rafaelia/custody-anchor-v1-gate.sh
+
       - name: Upload deterministic provenance evidence
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
@@ -36,5 +39,6 @@ jobs:
             evidence/provenance/delta-inventory.v1.json
             evidence/provenance/commit-lineage.v1.json
             evidence/provenance/submodule-license-inventory.v1.json
+            evidence/custody-anchor-v1/
           if-no-files-found: error
           retention-days: 30
