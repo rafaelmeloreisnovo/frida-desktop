@@ -1,0 +1,31 @@
+{
+  "schema": "rafaelia.frida.custody-federation/v1",
+  "state": "BLOCKED_PENDING_REMOTE_GATES",
+  "source": {
+    "producer": "rafaelmeloreisnovo/frida-desktop",
+    "git_commit": "TOKEN_VAZIO_EXACT_FINAL_BRANCH_HEAD",
+    "git_blob_sha1": "TOKEN_VAZIO",
+    "input_drive_file_id": "TOKEN_VAZIO",
+    "input_bytes_sha256": "TOKEN_VAZIO"
+  },
+  "execution": {
+    "device_abi": "TOKEN_VAZIO",
+    "apk_sha256": "TOKEN_VAZIO",
+    "monotonic_elapsed_ns": "TOKEN_VAZIO",
+    "physical_cpu_cycles": "TOKEN_VAZIO",
+    "energy_joules": "TOKEN_VAZIO",
+    "ntp_authenticity": "TOKEN_VAZIO_UNAUTHENTICATED",
+    "raw_trace_sha256": "TOKEN_VAZIO",
+    "output_sha256": "TOKEN_VAZIO"
+  },
+  "gate_refs": {
+    "local_human_approval": "TOKEN_VAZIO_DEVICE_NOT_RUN",
+    "drive_receipt_ref": "TOKEN_VAZIO",
+    "drive_provider_readback": "TOKEN_VAZIO",
+    "supabase_event_ref": "TOKEN_VAZIO",
+    "supabase_provider_readback": "TOKEN_VAZIO",
+    "github_mutation_by_app": "NOT_RUN"
+  },
+  "claim_allowed": false,
+  "rollback": "APPEND_ONLY_CORRECTIVE_SUCCESSOR"
+}
