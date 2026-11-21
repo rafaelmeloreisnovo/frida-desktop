@@ -74,3 +74,21 @@ A bateria contempla árvores 1..64 folhas, reconstrução das provas, preservaç
 - Assinatura pericial e reconhecimento jurídico: requer profissional, cadeia íntegra e escopo especificado.
 
 **Rollback:** correção por sucessor, nunca alteração do receipt-pai; manter branch e PR em DRAFT/HOLD, não mesclar enquanto os gates pendentes forem essenciais.
+
+## GitHub PR checkout provenance — two distinct SHAs
+
+On a pull-request workflow, the checked-out ref can be a GitHub-generated merge
+commit. The event's pull_request.head.sha (producer branch HEAD) is a **different
+identifier**. CI receipts therefore contain:
+
+- tested_checkout_sha: actual SHA emitted by git rev-parse HEAD in the runner.
+- producer_event_head_sha: SHA from the pull request event at run dispatch.
+- checkout_is_producer_head: exact equality indicator, never inferred.
+- run_event_binding: PR_MERGE_COMMIT_DISTINCT_FROM_HEAD or DIRECT_HEAD.
+
+A PASS on a merge ref is PASS_SCOPED on that checked-out tree. It does not prove
+that the branch HEAD and merge commit are the same bytes or that the merge is
+an independent execution on physical Android. For claims of source-to-binary
+identity, pair exact checked-out tree SHA, per-file blob and byte SHA256,
+build-toolchain SHA and artifact SHA256; never collapse refs.
+
