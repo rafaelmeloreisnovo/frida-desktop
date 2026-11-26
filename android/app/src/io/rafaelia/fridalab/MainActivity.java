@@ -924,6 +924,11 @@ public final class MainActivity extends Activity {
         root.addView(statusView);
 
         root.addView(buildOperatorPanel());
+        root.addView(button("Custódia JSON (aprovação local)", new View.OnClickListener() {
+            @Override public void onClick(View v) {
+                startActivity(new Intent(MainActivity.this, CustodyApprovalActivity.class));
+            }
+        }));
 
         learningStatusView = new TextView(this);
         learningStatusView.setTextSize(14.0f);

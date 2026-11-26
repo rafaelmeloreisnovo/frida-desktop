@@ -331,11 +331,21 @@ build_dex() {
   rm -rf "$CLASSES_DIR" "$DEX_DIR"
   mkdir -p "$CLASSES_DIR" "$DEX_DIR"
 
+  # Explicit source allowlist prevents accidental packaging of archived panels.
+  # CustodyApprovalActivity and CycleMath are required by the operator route.
   javac \
     --release 8 \
     -classpath "$ANDROID_JAR" \
     -d "$CLASSES_DIR" \
-    android/app/src/io/rafaelia/fridalab/MainActivity.java
+    android/app/src/io/rafaelia/fridalab/MainActivity.java \
+    android/app/src/io/rafaelia/fridalab/CustodyApprovalActivity.java \
+    android/app/src/io/rafaelia/fridalab/CustodyJsonKeys.java \
+    android/app/src/io/rafaelia/fridalab/CycleMath.java
+
+  test -s "$CLASSES_DIR/io/rafaelia/fridalab/CustodyApprovalActivity.class" ||
+    rafaelia_die "custody Activity class missing from Java build"
+  test -s "$CLASSES_DIR/io/rafaelia/fridalab/CycleMath.class" ||
+    rafaelia_die "custody arithmetic class missing from Java build"
 
   mapfile -t classes < <(find "$CLASSES_DIR" -type f -name '*.class' -print | sort)
   ((${#classes[@]} > 0)) || rafaelia_die "javac produced no .class files"
@@ -363,6 +373,7 @@ package_apks() {
   rafaelia_need_cmd keytool
   rafaelia_need_cmd zip
   rafaelia_need_cmd unzip
+  rafaelia_need_cmd cmp
   rafaelia_need_file "$DEX_DIR/classes.dex"
   mkdir -p "$DIST_DIR" "$APK_WORK_DIR"
 
@@ -405,10 +416,15 @@ src = Path("android/app/AndroidManifest.xml").read_text(encoding="utf-8")
 package = os.environ["PHYSICAL_PACKAGE"]
 old_package = 'package="io.rafaelia.fridalab"'
 old_activity = 'android:name=".MainActivity"'
-if src.count(old_package) != 1 or src.count(old_activity) != 1:
+custody_activity = 'android:name=".CustodyApprovalActivity"'
+if (src.count(old_package) != 1 or src.count(old_activity) != 1 or
+        src.count(custody_activity) != 1):
     raise SystemExit("physical manifest source contract changed")
 src = src.replace(old_package, f'package="{package}"')
 src = src.replace(old_activity, 'android:name="io.rafaelia.fridalab.MainActivity"')
+src = src.replace(custody_activity, 'android:name="io.rafaelia.fridalab.CustodyApprovalActivity"')
+if 'android:name=".CustodyApprovalActivity"' in src:
+    raise SystemExit("physical manifest must use absolute custody Activity")
 src = src.replace('android:label="Frida ELF/DEX Lab"', 'android:label="Frida ELF/DEX Lab Physical"')
 Path("build/android17/AndroidManifest.physical.xml").write_text(src, encoding="utf-8")
 PY
@@ -448,7 +464,8 @@ JSON
     cp "$work/base.apk" "$work/unsigned.apk"
     (
       cd "$DEX_DIR"
-      zip -q "../apk/$flavor/unsigned.apk" classes.dex
+      # Lossless maximum DEFLATE; the existing strict APK-size gate remains authoritative.
+      zip -9 -q "../apk/$flavor/unsigned.apk" classes.dex
     )
 
     local abi
@@ -460,7 +477,7 @@ JSON
     done
     (
       cd "$work/stage"
-      zip -q -r "../unsigned.apk" lib
+      zip -9 -q -r "../unsigned.apk" lib
     )
 
     "$BT_DIR/zipalign" -p -f 4 "$work/unsigned.apk" "$work/aligned.apk"
@@ -483,7 +500,13 @@ JSON
     unzip -p "$DIST_DIR/frida-lab-${flavor}-debug.apk" classes.dex \
       | python3 -c 'import sys; d=sys.stdin.buffer.read(8); assert d.startswith(b"dex\n"), d; print("APK DEX PASS:", d)'
 
+    # Verify the signed archive preserves every staged executable and config byte.
+    unzip -p "$DIST_DIR/frida-lab-${flavor}-debug.apk" classes.dex | cmp - "$DEX_DIR/classes.dex"
+    local name
     for abi in "$@"; do
+      for name in libfrida-gadget.so librafaelia-probe.so libfrida-gadget.config.so; do
+        unzip -p "$DIST_DIR/frida-lab-${flavor}-debug.apk" "lib/$abi/$name" | cmp - "$work/stage/lib/$abi/$name"
+      done
       unzip -l "$DIST_DIR/frida-lab-${flavor}-debug.apk" | grep -q "lib/$abi/libfrida-gadget.so"
       unzip -l "$DIST_DIR/frida-lab-${flavor}-debug.apk" | grep -q "lib/$abi/libfrida-gadget.config.so"
       unzip -l "$DIST_DIR/frida-lab-${flavor}-debug.apk" | grep -q "lib/$abi/librafaelia-probe.so"

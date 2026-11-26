@@ -56,6 +56,16 @@ jobs:
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
           persist-credentials: false
 
+      - name: Test bounded JSON custody C and Python before Android toolchain
+        run: |
+          set -euo pipefail
+          python3 tools/rafaelia/test_custody_json_runner_v1.py
+          cc -O2 -std=c11 -ffreestanding -fno-builtin -Wall -Wextra -Werror \
+            android/app/native/rafaelia_custody_cycle_l0.c \
+            android/app/native/rafaelia_custody_cycle_l0_selftest.c \
+            -o "${RUNNER_TEMP}/rafaelia-custody-selftest"
+          "${RUNNER_TEMP}/rafaelia-custody-selftest"
+
       - name: Validate lite Android runtime dependency boundary (static only)
         run: python3 android/app/validate-lite-profile.py
 
@@ -71,6 +81,16 @@ jobs:
           distribution: temurin
           java-version: "17"
           check-latest: false
+
+      - name: Verify standalone Java custody math without Android dependencies
+        run: |
+          set -euo pipefail
+          mkdir -p "${RUNNER_TEMP}/rafaelia-custody-java"
+          javac -d "${RUNNER_TEMP}/rafaelia-custody-java" \
+            android/app/src/io/rafaelia/fridalab/CycleMath.java \
+            android/app/src/io/rafaelia/fridalab/CustodyJsonKeys.java \
+            tests/java/io/rafaelia/fridalab/CycleMathTest.java
+          java -cp "${RUNNER_TEMP}/rafaelia-custody-java" io.rafaelia.fridalab.CycleMathTest
 
       - name: Expose Android SDK command-line tools
         uses: android-actions/setup-android@40fd30fb8d7440372e1316f5d1809ec01dcd3699 # v4.0.1, Node 24
@@ -113,7 +133,11 @@ jobs:
             --artifact-root build/android17/native \
             --receipt evidence/android17-lab/lite-footprint.v1.json
 
+      # Record a feature-size regression without suppressing the generated APKs.
+      # The workflow still FAILS at the terminal gate below; no silent PASS.
       - name: Compare against historical APK baseline (archive bytes only)
+        id: size_comparison
+        continue-on-error: true
         run: |
           python3 android/app/compare-apk-footprint.py \
             --baseline docs/evidence/FRIDA_ANDROID17_APK_BASELINE_PR83_20261007.json \
@@ -158,3 +182,9 @@ jobs:
             android/app/build/outputs/apk/debug/
             evidence/android17-lab/hosted-gradle-shell-footprint.v1.json
             evidence/android17-lab/hosted-gradle-apk-contents.v1.json
+
+      - name: Preserve strict APK-size non-regression verdict after evidence upload
+        if: ${{ always() && steps.size_comparison.outcome != 'success' }}
+        run: |
+          echo 'FAIL_SIZE_REGRESSION: feature APK bytes grew; evidence has been retained.' >&2
+          exit 1

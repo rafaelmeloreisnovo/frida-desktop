@@ -1,0 +1,7 @@
+{
+  "schema": "rafaelia.frida.custody-plan/v1",
+  "run_id": "frida_custody_demo_001",
+  "source": {"producer_commit":"b9480167640f92c971758c50341a32732306213c", "privacy_class":"PUBLIC_SYNTHETIC"},
+  "input": {"word": 147, "xor_mask":15,"rotate_left":1,"addition":7,"expected_word":319,"max_operations":3},
+  "anchor_mesh": {"signatures":[6699,6699,6699,6699],"counters_before":[0,0,0,0],"counters_after":[1,1,1,1]}
+}
