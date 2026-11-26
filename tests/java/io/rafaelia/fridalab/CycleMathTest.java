@@ -21,6 +21,16 @@ final class CycleMathTest {
       try { CycleMath.checkedSignature(invalid); } catch(IllegalArgumentException e) { blocked=true; }
       if(!blocked) throw new AssertionError("signature alias accepted: "+invalid);
     }
+    String alias = "\\" + "u0065xpected_word";
+    String[] goodJson={"{\"expected_word\":319}","{\"input\":{\"word\":1},\"source\":{\"word\":2}}","{\"note\":\"\\\"expected_word\\\":0\",\"expected_word\":319}","{\"a\":[0,-1,1.5e+2,true,false,null,\"\\u0041\"]}"};
+    String[] badJson={"{\"expected_word\":0,\""+alias+"\":319}","{\""+alias+"\":319}","{\"a\":{\"word\":0,\"word\":1}}","{\"a\":1,\"a\":2}","{a:1}","{'a':1}","{\"a\":01}","{\"a\":1,}","{\"a\":1}{}","{\"a\":/*x*/1}","{\"a\":[1,]}","{\"a\":\"\\q\"}","{\"a\":1e}","{\"a\":1e+}","{\"a\":nullx}","{\"a\":[[[[[[[[[1]]]]]]]]]}","[]"};
+    for(String s:goodJson) CustodyJsonKeys.validate(s);
+    for(String s:badJson) {
+      boolean blocked=false;
+      try { CustodyJsonKeys.validate(s); } catch(IllegalArgumentException e) { blocked=true; }
+      if(!blocked) throw new AssertionError("invalid JSON accepted: "+s);
+    }
+    System.out.println("PASS: strict JSON key custody "+(goodJson.length+badJson.length)+" vectors");
     System.out.println("PASS: Java CycleMath 256 vectors + gate negatives + signature bounds");
   }
 }

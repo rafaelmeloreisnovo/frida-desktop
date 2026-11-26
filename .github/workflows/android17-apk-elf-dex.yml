@@ -88,6 +88,7 @@ jobs:
           mkdir -p "${RUNNER_TEMP}/rafaelia-custody-java"
           javac -d "${RUNNER_TEMP}/rafaelia-custody-java" \
             android/app/src/io/rafaelia/fridalab/CycleMath.java \
+            android/app/src/io/rafaelia/fridalab/CustodyJsonKeys.java \
             tests/java/io/rafaelia/fridalab/CycleMathTest.java
           java -cp "${RUNNER_TEMP}/rafaelia-custody-java" io.rafaelia.fridalab.CycleMathTest
 

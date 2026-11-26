@@ -64,17 +64,6 @@ public final class CustodyApprovalActivity extends Activity {
         while (keys.hasNext()) if (!allowed.contains(keys.next())) throw new IllegalArgumentException("UNKNOWN_JSON_KEY");
         for (String name : names) if (!obj.has(name)) throw new IllegalArgumentException("MISSING_JSON_KEY:" + name);
     }
-    private static void scanPlainKeysOnce(String raw) {
-        for (String key : new String[]{"schema","run_id","source","producer_commit","privacy_class",
-                "input","word","xor_mask","rotate_left","addition","expected_word","max_operations",
-                "anchor_mesh","signatures","counters_before","counters_after"}) {
-            String pattern = "\""+key+"\"";
-            java.util.regex.Matcher match = java.util.regex.Pattern.compile(pattern+"\\s*:").matcher(raw);
-            int count=0;
-            while(match.find()) count++;
-            if(count != 1) throw new IllegalArgumentException("NONCANONICAL_KEY:"+key);
-        }
-    }
     private static void validate(JSONObject p) throws Exception {
         requireKeys(p,"schema","run_id","source","input","anchor_mesh");
         if (!"rafaelia.frida.custody-plan/v1".equals(p.getString("schema"))) throw new IllegalArgumentException("SCHEMA");
@@ -145,7 +134,7 @@ public final class CustodyApprovalActivity extends Activity {
                 byte[] receipt=state.getByteArray("custody.receipt");
                 if (source != null && receipt != null && source.length<=65536 && receipt.length<=65536) {
                     String raw=new String(source,"UTF-8");
-                    scanPlainKeysOnce(raw);
+                    CustodyJsonKeys.validate(raw);
                     JSONObject restored=new JSONObject(raw);
                     validate(restored);
                     JSONObject rec=new JSONObject(new String(receipt,"UTF-8"));
@@ -183,7 +172,7 @@ public final class CustodyApprovalActivity extends Activity {
                     sourceBytes=readAtMost(in,65536);
                 }
                 String sourceText = new String(sourceBytes,"UTF-8");
-                scanPlainKeysOnce(sourceText);
+                CustodyJsonKeys.validate(sourceText);
                 JSONObject loaded = new JSONObject(sourceText);
                 validate(loaded);
                 plan=loaded;

@@ -339,6 +339,7 @@ build_dex() {
     -d "$CLASSES_DIR" \
     android/app/src/io/rafaelia/fridalab/MainActivity.java \
     android/app/src/io/rafaelia/fridalab/CustodyApprovalActivity.java \
+    android/app/src/io/rafaelia/fridalab/CustodyJsonKeys.java \
     android/app/src/io/rafaelia/fridalab/CycleMath.java
 
   test -s "$CLASSES_DIR/io/rafaelia/fridalab/CustodyApprovalActivity.class" ||
