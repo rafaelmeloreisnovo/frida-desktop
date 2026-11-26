@@ -92,7 +92,12 @@ public final class CustodyApprovalActivity extends Activity {
         for (String key : new String[]{"signatures","counters_before","counters_after"}) {
             JSONArray x=a.getJSONArray(key);
             if (x.length()!=4) throw new IllegalArgumentException("GATE_COUNT");
-            for(int i=0;i<4;i++) if(x.getLong(i)<0) throw new IllegalArgumentException("COUNTER");
+            for(int i=0;i<4;i++) {
+                Object v=x.get(i);
+                if ("signatures".equals(key)) CycleMath.checkedSignature(v);
+                else if (!(v instanceof Integer || v instanceof Long) || ((Number)v).longValue()<0)
+                    throw new IllegalArgumentException("COUNTER");
+            }
         }
     }
     @Override public void onCreate(Bundle state) {
@@ -134,6 +139,38 @@ public final class CustodyApprovalActivity extends Activity {
         });
         panel.addView(pick);panel.addView(approve);panel.addView(save);panel.addView(status);
         setContentView(sc);
+        if (state != null) {
+            try {
+                byte[] source=state.getByteArray("custody.source");
+                byte[] receipt=state.getByteArray("custody.receipt");
+                if (source != null && receipt != null && source.length<=65536 && receipt.length<=65536) {
+                    String raw=new String(source,"UTF-8");
+                    scanPlainKeysOnce(raw);
+                    JSONObject restored=new JSONObject(raw);
+                    validate(restored);
+                    JSONObject rec=new JSONObject(new String(receipt,"UTF-8"));
+                    if (!sha(source).equals(rec.getString("source_plan_sha256")) ||
+                        !restored.getString("run_id").equals(rec.getString("run_id")) ||
+                        !restored.getJSONObject("source").getString("producer_commit").equals(rec.getString("source_commit_ref")) ||
+                        !"rafaelia.frida.custody-receipt/v1".equals(rec.getString("schema")) ||
+                        !Boolean.TRUE.equals(rec.get("local_human_approved")) ||
+                        !Boolean.FALSE.equals(rec.get("claim_allowed")))
+                        throw new IllegalArgumentException("RESTORE_BINDING");
+                    sourceBytes=source; plan=restored; receiptBytes=receipt;
+                    status.setText("Receipt local restaurado. SHA256: "+sha(receiptBytes));
+                    save.setEnabled(true);
+                }
+            } catch(Exception e) {
+                status.setText("BLOCKED: receipt local não restaurado");
+            }
+        }
+    }
+    @Override protected void onSaveInstanceState(Bundle state) {
+        super.onSaveInstanceState(state);
+        if (sourceBytes != null && receiptBytes != null && sourceBytes.length<=65536 && receiptBytes.length<=65536) {
+            state.putByteArray("custody.source",sourceBytes);
+            state.putByteArray("custody.receipt",receiptBytes);
+        }
     }
     @Override protected void onActivityResult(int req,int code,Intent data) {
         super.onActivityResult(req,code,data);
@@ -152,7 +189,8 @@ public final class CustodyApprovalActivity extends Activity {
                 plan=loaded;
                 status.setText("PLANO VÁLIDO: " + plan.getString("run_id")+"\nSHA256(bytes): "+sha(sourceBytes)+"\nEstado: AGUARDA APROVAÇÃO LOCAL.\nGate externo: TOKEN_VAZIO.");
                 approve.setEnabled(true);
-            } else if(req==REQUEST_SAVE && receiptBytes!=null) {
+            } else if(req==REQUEST_SAVE) {
+                if(receiptBytes==null) throw new IllegalStateException("PENDING_RECEIPT_MISSING");
                 try(OutputStream out=getContentResolver().openOutputStream(data.getData(),"w")) {
                     if(out==null) throw new IllegalArgumentException("DEST_PROVIDER_NULL");
                     out.write(receiptBytes);out.flush();
@@ -173,11 +211,12 @@ public final class CustodyApprovalActivity extends Activity {
         }
     }
     private void runApproved() {
+        receiptBytes=null; save.setEnabled(false);
         try {
             JSONObject w=plan.getJSONObject("input");JSONObject anchor=plan.getJSONObject("anchor_mesh");
             int[] sig=new int[4]; long[] before=new long[4],after=new long[4];
             for(int i=0;i<4;i++) {
-                sig[i]=(int)anchor.getJSONArray("signatures").getLong(i);
+                sig[i]=CycleMath.checkedSignature(anchor.getJSONArray("signatures").get(i));
                 before[i]=anchor.getJSONArray("counters_before").getLong(i);
                 after[i]=anchor.getJSONArray("counters_after").getLong(i);
             }

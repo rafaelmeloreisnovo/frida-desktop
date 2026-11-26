@@ -4,6 +4,12 @@ package io.rafaelia.fridalab;
  */
 final class CycleMath {
     private CycleMath() { }
+    static int checkedSignature(Object value) {
+        if (!(value instanceof Integer || value instanceof Long)) throw new IllegalArgumentException("SIGNATURE_TYPE");
+        long n = ((Number)value).longValue();
+        if (n < 0 || n > 0xffffffffL) throw new IllegalArgumentException("SIGNATURE_U32_BOUND");
+        return (int)n;
+    }
     static int run(int value, int xorMask, int rotate, int add) {
         if (rotate < 0 || rotate > 31) throw new IllegalArgumentException("rotate");
         return Integer.rotateLeft(value ^ xorMask, rotate) + add;

@@ -15,6 +15,12 @@ final class CycleMathTest {
     boolean rejects=false;
     try {CycleMath.run(1,2,32,4);}catch(IllegalArgumentException e){rejects=true;}
     if(!rejects) throw new AssertionError("bad rotate accepted");
-    System.out.println("PASS: Java CycleMath 256 vectors + gate negatives");
+    if(CycleMath.checkedSignature(4294967295L)!=-1 || CycleMath.checkedSignature(6699)!=6699) throw new AssertionError("u32 boundary");
+    for(Object invalid : new Object[]{4294973995L,4294967296L,-1L,6699.0,"6699",true,null}) {
+      boolean blocked=false;
+      try { CycleMath.checkedSignature(invalid); } catch(IllegalArgumentException e) { blocked=true; }
+      if(!blocked) throw new AssertionError("signature alias accepted: "+invalid);
+    }
+    System.out.println("PASS: Java CycleMath 256 vectors + gate negatives + signature bounds");
   }
 }
