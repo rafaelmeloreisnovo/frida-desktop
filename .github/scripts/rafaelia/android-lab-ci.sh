@@ -372,6 +372,7 @@ package_apks() {
   rafaelia_need_cmd keytool
   rafaelia_need_cmd zip
   rafaelia_need_cmd unzip
+  rafaelia_need_cmd cmp
   rafaelia_need_file "$DEX_DIR/classes.dex"
   mkdir -p "$DIST_DIR" "$APK_WORK_DIR"
 
@@ -462,7 +463,8 @@ JSON
     cp "$work/base.apk" "$work/unsigned.apk"
     (
       cd "$DEX_DIR"
-      zip -q "../apk/$flavor/unsigned.apk" classes.dex
+      # Lossless maximum DEFLATE; the existing strict APK-size gate remains authoritative.
+      zip -9 -q "../apk/$flavor/unsigned.apk" classes.dex
     )
 
     local abi
@@ -474,7 +476,7 @@ JSON
     done
     (
       cd "$work/stage"
-      zip -q -r "../unsigned.apk" lib
+      zip -9 -q -r "../unsigned.apk" lib
     )
 
     "$BT_DIR/zipalign" -p -f 4 "$work/unsigned.apk" "$work/aligned.apk"
@@ -497,7 +499,13 @@ JSON
     unzip -p "$DIST_DIR/frida-lab-${flavor}-debug.apk" classes.dex \
       | python3 -c 'import sys; d=sys.stdin.buffer.read(8); assert d.startswith(b"dex\n"), d; print("APK DEX PASS:", d)'
 
+    # Verify the signed archive preserves every staged executable and config byte.
+    unzip -p "$DIST_DIR/frida-lab-${flavor}-debug.apk" classes.dex | cmp - "$DEX_DIR/classes.dex"
+    local name
     for abi in "$@"; do
+      for name in libfrida-gadget.so librafaelia-probe.so libfrida-gadget.config.so; do
+        unzip -p "$DIST_DIR/frida-lab-${flavor}-debug.apk" "lib/$abi/$name" | cmp - "$work/stage/lib/$abi/$name"
+      done
       unzip -l "$DIST_DIR/frida-lab-${flavor}-debug.apk" | grep -q "lib/$abi/libfrida-gadget.so"
       unzip -l "$DIST_DIR/frida-lab-${flavor}-debug.apk" | grep -q "lib/$abi/libfrida-gadget.config.so"
       unzip -l "$DIST_DIR/frida-lab-${flavor}-debug.apk" | grep -q "lib/$abi/librafaelia-probe.so"
